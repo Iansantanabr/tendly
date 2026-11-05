@@ -7,6 +7,7 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - Branch `ian`, criada a partir de `v0.1.113`. `origin` = github.com/Iansantanabr/tendly (fork), `upstream` = wnzzer/tendly. Enviar com `git push`.
 - `~/tendly-src/build.sh` faz `pnpm build:web` + `cargo build --release -p tendly-server`, troca o binário em `~/tendly-src/bin/tendly-server` com `mv` (sobrescrever no lugar faz o macOS matar o processo, exit 137) e reinicia o servidor.
 - Node 24 via nvm (`nvm use 24`); Rust via rustup (`source ~/.cargo/env`).
+- O servidor precisa do PATH completo (node e `claude` em `~/.nvm/versions/node/v22.23.3/bin`); iniciá-lo de um shell sem isso dá "Native chat could not initialize". Sempre iniciar pelo `build.sh` ou por um shell de login.
 - Rodar o fork: `tendly stop`, depois `~/tendly-src/bin/tendly-server` (mesmo `~/.tendly`). Não rodar `tendly update`.
 - O web embutido só vale se `~/.tendly/web` NÃO existir (o disco ganha do embutido).
 
