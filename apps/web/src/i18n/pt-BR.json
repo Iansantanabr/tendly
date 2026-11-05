@@ -2443,5 +2443,11 @@
  "New conversation": "Nova conversa",
  "New conversation with {client}": "Nova conversa com {client}",
  "Conversations without a project show up here. Start one above.": "Conversas sem projeto aparecem aqui. Comece uma acima.",
- "This host has several accounts and none is the default. Choose one in Settings → Preferences, then send again.": "Esta máquina tem várias contas e nenhuma é a padrão. Escolha uma em Configurações → Preferências e envie de novo."
+ "This host has several accounts and none is the default. Choose one in Settings → Preferences, then send again.": "Esta máquina tem várias contas e nenhuma é a padrão. Escolha uma em Configurações → Preferências e envie de novo.",
+ "Automations": "Automações",
+ "Integrations": "Integrações",
+ "Skills": "Habilidades",
+ "Back to automations": "Voltar às automações",
+ "Back to integrations": "Voltar às integrações",
+ "Back to skills": "Voltar às habilidades"
 }
