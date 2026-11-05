@@ -57,6 +57,9 @@ const emit = defineEmits<{
   usage: [];
   home: [];
   inbox: [];
+  automations: [];
+  integrations: [];
+  skills: [];
   /** A session the workspace groups do not list (archived, temporary): find it in the library page. */
   showInSessions: [id: string, archived: boolean];
   canvas: [];
@@ -178,6 +181,9 @@ defineExpose({ revealSession });
       <button :class="['nav-item', { current: currentPage === 'usage' }]" :aria-current="currentPage === 'usage' ? 'page' : undefined" @click="emit('usage')"><Icon name="chart" :size="16" /><span>{{ t('Usage') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'system' }]" :aria-current="currentPage === 'system' ? 'page' : undefined" @click="emit('system')"><Icon name="gauge" :size="16" /><span>{{ t('System') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'inbox' }]" :aria-current="currentPage === 'inbox' ? 'page' : undefined" @click="emit('inbox')"><Icon name="bell" :size="16" /><span>{{ t('Notifications') }}</span><small v-if="inboxUnread" class="count-badge unread-badge">{{ inboxUnread }}</small></button>
+      <button :class="['nav-item', { current: currentPage === 'automations' }]" :aria-current="currentPage === 'automations' ? 'page' : undefined" @click="emit('automations')"><Icon name="timer" :size="16" /><span>{{ t('Automations') }}</span></button>
+      <button :class="['nav-item', { current: currentPage === 'integrations' }]" :aria-current="currentPage === 'integrations' ? 'page' : undefined" @click="emit('integrations')"><Icon name="plug" :size="16" /><span>{{ t('Integrations') }}</span></button>
+      <button :class="['nav-item', { current: currentPage === 'skills' }]" :aria-current="currentPage === 'skills' ? 'page' : undefined" @click="emit('skills')"><Icon name="sparkles" :size="16" /><span>{{ t('Skills') }}</span></button>
     </nav>
     <div class="sidebar-view-switch" role="tablist" :aria-label="t('Sidebar view')">
       <button type="button" role="tab" :aria-selected="sidebarView === 'workspaces'" :class="{ current: sidebarView === 'workspaces' }" @click="setSidebarView('workspaces')"><Icon name="folder" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Workspaces') }}</span></button>

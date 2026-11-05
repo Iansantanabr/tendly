@@ -11,6 +11,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+mod automations;
+mod catalog;
 mod home;
 mod store;
 
@@ -33,15 +35,20 @@ pub fn open(database: &Path) -> Hub {
 /// Startup work: the folder for conversations without a project exists before
 /// the first browser asks for the workspace list.
 pub fn warm(state: AppState) {
+    let home_state = state.clone();
     tokio::spawn(async move {
-        if let Err(error) = home::ensure_conversations(&state).await {
+        if let Err(error) = home::ensure_conversations(&home_state).await {
             tracing::warn!(?error, "could not prepare the conversations folder");
         }
     });
+    automations::start_scheduler(state);
 }
 
 pub fn routes() -> Router<AppState> {
-    Router::new().merge(home::routes())
+    Router::new()
+        .merge(home::routes())
+        .merge(automations::routes())
+        .merge(catalog::routes())
 }
 
 /// Runs a blocking operation against the Hub database off the async runtime.
