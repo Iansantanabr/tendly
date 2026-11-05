@@ -26,7 +26,17 @@ export const inbox = reactive({
   activity: {} as Record<string, SessionActivity>,
   /** False until the backend answered once: an old backend has none of this. */
   available: false,
+  /** The hidden workspace that holds conversations without a project. */
+  conversationsWorkspaceId: "",
 });
+
+/** Conversations without a project live in this workspace; asked once. */
+export async function loadConversationsWorkspace() {
+  if (inbox.conversationsWorkspaceId) return inbox.conversationsWorkspaceId;
+  try { inbox.conversationsWorkspaceId = (await request<{ workspace_id: string }>("/hub/conversations")).workspace_id; }
+  catch { /* Older backend: there is no such folder. */ }
+  return inbox.conversationsWorkspaceId;
+}
 
 export async function refreshInbox() {
   try {
@@ -38,6 +48,7 @@ export async function refreshInbox() {
     inbox.unread = list.unread;
     inbox.activity = Object.fromEntries(activity.sessions.map(row => [row.session_id, row]));
     inbox.available = true;
+    void loadConversationsWorkspace();
   } catch {
     // An older backend, or offline: the views simply show nothing new.
   }

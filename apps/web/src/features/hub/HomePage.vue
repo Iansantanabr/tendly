@@ -8,7 +8,7 @@ import { providerLabel } from "../clients";
 import Icon from "../Icon.vue";
 import ProviderIcon from "../ProviderIcon.vue";
 import { useI18n } from "../../i18n";
-import { inbox, isUnread, shortAgo } from "./inbox";
+import { inbox, isUnread, loadConversationsWorkspace, shortAgo } from "./inbox";
 
 /**
  * Início: where a day starts. A box to ask for something new, what is running,
@@ -26,8 +26,10 @@ const workspaceId = ref<string | undefined>(saved.workspace ?? props.selectedWor
 const busy = ref(false), error = ref("");
 const recent = ref<{ workspace_id: string; workspace_name: string; path: string; modified_at: string }[]>([]);
 
-watch(() => props.workspaces, list => {
-  if (!list.some(w => w.id === workspaceId.value)) workspaceId.value = props.selectedWorkspaceId ?? list[0]?.id;
+/** "No project" first, then the projects. */
+const projects = computed(() => props.workspaces.filter(w => w.id !== inbox.conversationsWorkspaceId));
+watch([() => props.workspaces, () => inbox.conversationsWorkspaceId], ([list]) => {
+  if (!list.some(w => w.id === workspaceId.value)) workspaceId.value = inbox.conversationsWorkspaceId || props.selectedWorkspaceId || list[0]?.id;
 }, { immediate: true });
 watch([provider, workspaceId], () => { try { localStorage.setItem(STORAGE, JSON.stringify({ provider: provider.value, workspace: workspaceId.value })); } catch { /* Fine without it. */ } });
 
@@ -39,14 +41,14 @@ const live = (s: Session) => s.status === "running" || s.status === "starting" |
 const visible = computed(() => props.sessions.filter(s => !s.archived_at && s.provider !== "terminal"));
 const running = computed(() => visible.value.filter(live));
 const latest = computed(() => [...visible.value].sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")).slice(0, 6));
-const workspaceName = (id: string) => props.workspaces.find(w => w.id === id)?.name ?? "";
+const workspaceName = (id: string) => id === inbox.conversationsWorkspaceId ? t("No project") : props.workspaces.find(w => w.id === id)?.name ?? "";
 const subtitle = computed(() => running.value.length ? t("{count} agents working now.", { count: running.value.length }) : t("No agent working right now."));
 
 async function loadRecent() {
   try { recent.value = (await request<{ files: typeof recent.value }>("/hub/recent-files?limit=6")).files; }
   catch { recent.value = []; }
 }
-onMounted(loadRecent);
+onMounted(() => { void loadRecent(); void loadConversationsWorkspace(); });
 
 async function send() {
   const text = prompt.value.trim();
@@ -56,7 +58,8 @@ async function send() {
     // The same account and endpoint "New session" would use for this agent.
     await loadPreferences();
     const chosen = preferredProfileSelection(provider.value, props.profiles, undefined, preferenceFor(provider.value)?.endpoint_profile_id);
-    const endpoint = chosen && chosen !== PROFILE_CHOICE_REQUIRED ? chosen : null;
+    if (chosen === PROFILE_CHOICE_REQUIRED) { error.value = t("This host has several accounts and none is the default. Choose one in Settings → Preferences, then send again."); return; }
+    const endpoint = chosen || null;
     const result = await request<{ started: { id: string } }>("/hub/start", json("POST", { workspace_id: workspaceId.value, provider: provider.value, prompt: text, endpoint_id: endpoint }));
     prompt.value = "";
     emit("started", result.started.id);
@@ -92,13 +95,14 @@ const suggestions = computed(() => [
           </label>
           <label class="home-chip"><Icon name="folder" :size="14" />
             <select v-model="workspaceId" :aria-label="t('Workspace')">
-              <option v-for="w in workspaces" :key="w.id" :value="w.id">{{ w.name }}</option>
+              <option v-if="inbox.conversationsWorkspaceId" :value="inbox.conversationsWorkspaceId">{{ t('No project') }}</option>
+              <option v-for="w in projects" :key="w.id" :value="w.id">{{ w.name }}</option>
             </select>
           </label>
           <span class="flex-spacer" />
           <button class="home-send" type="submit" :disabled="busy || !prompt.trim() || !workspaceId" :aria-label="t('Send')"><Icon name="arrowUp" :size="16" /></button>
         </div>
-        <p v-if="!workspaces.length" class="inline-notice">{{ t('Add a workspace first: it is the folder the agent works in.') }}</p>
+        <p v-if="!workspaces.length && !inbox.conversationsWorkspaceId" class="inline-notice">{{ t('Add a workspace first: it is the folder the agent works in.') }}</p>
         <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
       </form>
 

@@ -26,6 +26,23 @@ pub fn routes() -> Router<AppState> {
         .route("/api/hub/sessions/{id}/seen", post(seen))
         .route("/api/hub/recent-files", get(recent_files))
         .route("/api/hub/start", post(start))
+        .route("/api/hub/conversations", get(conversations))
+}
+
+/// Conversations that belong to no project still need a folder to run in:
+/// one shared directory in Tendly's state, registered as a workspace the
+/// sidebar hides. Registering the same path twice returns the same workspace.
+async fn conversations(State(state): State<AppState>) -> Result<Json<Value>> {
+    let workspace = ensure_conversations(&state).await?;
+    Ok(Json(json!({ "workspace_id": workspace.id, "root_path": workspace.root_path })))
+}
+
+pub(super) async fn ensure_conversations(state: &AppState) -> Result<tendly_domain::Workspace> {
+    let dir = state.state_dir.join("conversations");
+    tokio::fs::create_dir_all(&dir).await.map_err(ApiError::internal)?;
+    let dir = dunce::canonicalize(&dir).map_err(ApiError::internal)?;
+    let root = dir.to_string_lossy().into_owned();
+    db(state, move |s| s.create_workspace("Conversations", &root)).await
 }
 
 #[derive(Deserialize)]

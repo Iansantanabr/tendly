@@ -2438,5 +2438,10 @@
  "Good morning": "Bom dia",
  "Good afternoon": "Boa tarde",
  "Good evening": "Boa noite",
- "Add open files as context": "Adicionar arquivos abertos como contexto"
+ "Add open files as context": "Adicionar arquivos abertos como contexto",
+ "No project": "Sem projeto",
+ "New conversation": "Nova conversa",
+ "New conversation with {client}": "Nova conversa com {client}",
+ "Conversations without a project show up here. Start one above.": "Conversas sem projeto aparecem aqui. Comece uma acima.",
+ "This host has several accounts and none is the default. Choose one in Settings → Preferences, then send again.": "Esta máquina tem várias contas e nenhuma é a padrão. Escolha uma em Configurações → Preferências e envie de novo."
 }

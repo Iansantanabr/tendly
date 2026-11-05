@@ -4,8 +4,8 @@ Fonte da verdade para retomar o trabalho (inclusive depois de compactar a conver
 Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklish-knuth.md`.
 
 ## Como construir e rodar
-- Branch `ian`, criada a partir de `v0.1.113` (origin = wnzzer/tendly; ainda não há fork no GitHub do Ian).
-- `~/tendly-src/build.sh` faz `pnpm build:web` + `cargo build --release -p tendly-server` e copia para `~/tendly-src/bin/tendly-server`.
+- Branch `ian`, criada a partir de `v0.1.113`. `origin` = github.com/Iansantanabr/tendly (fork), `upstream` = wnzzer/tendly. Enviar com `git push`.
+- `~/tendly-src/build.sh` faz `pnpm build:web` + `cargo build --release -p tendly-server`, troca o binário em `~/tendly-src/bin/tendly-server` com `mv` (sobrescrever no lugar faz o macOS matar o processo, exit 137) e reinicia o servidor.
 - Node 24 via nvm (`nvm use 24`); Rust via rustup (`source ~/.cargo/env`).
 - Rodar o fork: `tendly stop`, depois `~/tendly-src/bin/tendly-server` (mesmo `~/.tendly`). Não rodar `tendly update`.
 - O web embutido só vale se `~/.tendly/web` NÃO existir (o disco ganha do embutido).
@@ -24,12 +24,15 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - Ícones novos em `features/Icon.vue`: home, bell, chat, arrowUp, plug, sparkles, timer, apps.
 
 ## API nova (`/api/hub/...`)
+- `GET conversations` → workspace oculto de conversas sem projeto (`<state>/conversations`, criado também no start via `hub::warm`)
 - `GET inbox`, `POST inbox/read {ids|all}`, `GET activity`, `POST activity/seen-all`, `POST sessions/{id}/seen`
 - `GET recent-files?limit=`, `POST start {workspace_id, provider, prompt}` (usa `agent_sessions::start_in`)
 
 ## Status
 - [x] Fase 0: Rust, branch `ian`, build.sh, primeiro build ok
 - [x] Fase 1: Início, sino, não lidas, barra Conversas, chips de contexto no chat (testado no navegador; 790 testes web ok)
+- [x] Pendência da Fase 1 (pedido do Ian): a aba Conversas mostra só conversas SEM projeto e tem "Nova conversa". Implementação: workspace oculto em `~/.tendly/conversations` criado pelo servidor (`GET /api/hub/conversations`), filtrado da lista de Workspaces; Início com opção "Sem projeto".
+- Regra do Ian: depois de compilar, sempre reiniciar o servidor (`~/tendly-src/bin/tendly-server restart`) e conferir no navegador.
 - [ ] Fase 2: automações, integrações, habilidades
 - [ ] Fase 3: histórico e publicação de arquivos
 - [ ] Fase 4: apps personalizados

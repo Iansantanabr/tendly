@@ -17,6 +17,7 @@ import SidebarSessionRow from "./SidebarSessionRow.vue";
 import MenuFlyout from "./MenuFlyout.vue";
 import OtherMachines from "./OtherMachines.vue";
 import ConversationsBar from "./hub/ConversationsBar.vue";
+import { inbox } from "./hub/inbox";
 
 const props = withDefaults(defineProps<{
   workspaces: Workspace[];
@@ -80,7 +81,9 @@ const keepBusySet = computed(() => new Set(props.keepBusyIds));
 const deleteBusySet = computed(() => new Set(props.deleteBusyIds));
 const sessionCount = computed(() => new Set(props.sessions.map(session => session.id)).size);
 const persistenceKey = computed(() => workspaceGroupStorageKey(props.storageKey ?? (typeof window === "undefined" ? "default" : window.location.origin)));
-const groups = computed(() => groupWorkspaces(props.workspaces, props.sessions, { query: query.value, selectedWorkspaceId: props.selectedWorkspaceId, preferences: preferences.value, searchExpanded: searchExpanded.value, selectedSessionId: props.selectedSessionId, recentDays: recentDays.value }));
+/** Projects only: the folder for conversations without one lives in the Conversations view. */
+const projectWorkspaces = computed(() => props.workspaces.filter(workspace => workspace.id !== inbox.conversationsWorkspaceId));
+const groups = computed(() => groupWorkspaces(projectWorkspaces.value, props.sessions, { query: query.value, selectedWorkspaceId: props.selectedWorkspaceId, preferences: preferences.value, searchExpanded: searchExpanded.value, selectedSessionId: props.selectedSessionId, recentDays: recentDays.value }));
 const canvasWorkspaceId = computed(() => props.workspaces.some(workspace => workspace.id === props.selectedWorkspaceId) ? props.selectedWorkspaceId : props.workspaces[0]?.id);
 
 function storage(): Storage | undefined {
@@ -180,11 +183,11 @@ defineExpose({ revealSession });
       <button type="button" role="tab" :aria-selected="sidebarView === 'workspaces'" :class="{ current: sidebarView === 'workspaces' }" @click="setSidebarView('workspaces')"><Icon name="folder" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Workspaces') }}</span></button>
       <button type="button" role="tab" :aria-selected="sidebarView === 'conversations'" :class="{ current: sidebarView === 'conversations' }" @click="setSidebarView('conversations')"><Icon name="chat" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Conversations') }}</span></button>
     </div>
-    <ConversationsBar v-if="sidebarView === 'conversations'" :sessions="sessions" :workspaces="workspaces" :selected-session-id="selectedSessionId" @open-session="emit('openSession', $event)" />
+    <ConversationsBar v-if="sidebarView === 'conversations'" :sessions="sessions" :workspaces="workspaces" :selected-session-id="selectedSessionId" @open-session="emit('openSession', $event)" @new-conversation="provider => inbox.conversationsWorkspaceId && emit('quickSession', inbox.conversationsWorkspaceId, provider, false)" />
     <template v-else>
-    <header class="workspace-group-label"><span>{{ t('Workspaces') }}</span><small>{{ workspaces.length }}</small><!-- Finding the open session in the list belongs to the list, like an
+    <header class="workspace-group-label"><span>{{ t('Workspaces') }}</span><small>{{ projectWorkspaces.length }}</small><!-- Finding the open session in the list belongs to the list, like an
          explorer's "select opened file": it acts on whichever view has focus. --><button class="icon-button workspace-locate-button" :disabled="!selectedSessionId" :aria-label="t('Locate the focused session in the list')" :title="t('Locate the focused session in the list')" @click="selectedSessionId && emit('revealSession', selectedSessionId)"><Icon name="locate" :size="14" /></button><button class="icon-button" :aria-label="t('Add workspace')" :title="t('Add workspace')" @click="emit('addWorkspace')"><Icon name="plus" :size="15" /></button></header>
-    <div v-if="workspaces.length" class="workspace-group-search"><Icon name="search" :size="13" /><input v-model="query" data-sidebar-search :aria-label="t('Search workspaces and sessions')" @keydown.down.prevent="sidebarElement?.querySelector<HTMLElement>('[data-sidebar-row-focus]')?.focus()" @keydown.esc="query && ($event.stopPropagation(), query = '')" :placeholder="t('Find a workspace or session…')" /><button v-if="query" class="icon-button" :aria-label="t('Clear navigation search')" @click="query = ''"><Icon name="close" :size="12" /></button></div>
+    <div v-if="projectWorkspaces.length" class="workspace-group-search"><Icon name="search" :size="13" /><input v-model="query" data-sidebar-search :aria-label="t('Search workspaces and sessions')" @keydown.down.prevent="sidebarElement?.querySelector<HTMLElement>('[data-sidebar-row-focus]')?.focus()" @keydown.esc="query && ($event.stopPropagation(), query = '')" :placeholder="t('Find a workspace or session…')" /><button v-if="query" class="icon-button" :aria-label="t('Clear navigation search')" @click="query = ''"><Icon name="close" :size="12" /></button></div>
     <nav class="workspace-groups" :aria-label="t('Workspaces and sessions')">
       <section v-for="group in groups" :key="group.workspace.id" class="workspace-group" :class="{ selected: selectedWorkspaceId === group.workspace.id }" :aria-label="group.workspace.name">
         <div class="workspace-group-header" @contextmenu.prevent="openMenuId = group.workspace.id">
@@ -228,8 +231,8 @@ defineExpose({ revealSession });
           <li v-if="!group.sessions.length" class="workspace-group-empty"><p>{{ t('No sessions in this workspace.') }}</p><button class="text-button" @click="quick(group.workspace.id, quickProvider)"><Icon name="plus" :size="12" />{{ t('New {provider} session', { provider: quickLabel }) }}</button></li>
         </ul>
       </section>
-      <div v-if="workspaces.length && !groups.length" class="workspace-nav-empty"><Icon name="search" :size="22" /><p>{{ t('No matching workspaces or sessions.') }}</p><button class="text-button" @click="query = ''">{{ t('Clear navigation search') }}</button></div>
-      <div v-else-if="!workspaces.length" class="workspace-nav-empty"><Icon name="folder" :size="24" /><p>{{ t('Add your first workspace') }}</p><button class="secondary-button" @click="emit('addWorkspace')"><Icon name="plus" :size="14" />{{ t('Add workspace') }}</button></div>
+      <div v-if="projectWorkspaces.length && !groups.length" class="workspace-nav-empty"><Icon name="search" :size="22" /><p>{{ t('No matching workspaces or sessions.') }}</p><button class="text-button" @click="query = ''">{{ t('Clear navigation search') }}</button></div>
+      <div v-else-if="!projectWorkspaces.length" class="workspace-nav-empty"><Icon name="folder" :size="24" /><p>{{ t('Add your first workspace') }}</p><button class="secondary-button" @click="emit('addWorkspace')"><Icon name="plus" :size="14" />{{ t('Add workspace') }}</button></div>
       <OtherMachines :query="query" @settings="emit('machines')" @open-session="(machine, session) => emit('openRemoteSession', machine, session)" />
     </nav>
     </template>

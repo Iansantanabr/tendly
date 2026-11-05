@@ -30,6 +30,16 @@ pub fn open(database: &Path) -> Hub {
     }
 }
 
+/// Startup work: the folder for conversations without a project exists before
+/// the first browser asks for the workspace list.
+pub fn warm(state: AppState) {
+    tokio::spawn(async move {
+        if let Err(error) = home::ensure_conversations(&state).await {
+            tracing::warn!(?error, "could not prepare the conversations folder");
+        }
+    });
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new().merge(home::routes())
 }
