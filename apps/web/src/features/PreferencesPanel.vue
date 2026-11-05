@@ -111,7 +111,7 @@ async function changeRoots(change: () => Promise<HostRoots>, clear = false) {
       <header><span class="preference-mark general"><Icon name="settings" :size="17"/></span><strong>{{ t('General') }}</strong></header>
       <label class="preference-row">
         <span><strong>{{ t('Language') }}</strong><small>{{ t('For this browser.') }}</small></span>
-        <select :value="locale" :aria-label="t('Language')" @change="setLocale(($event.target as HTMLSelectElement).value === 'en' ? 'en' : 'zh-CN')"><option value="zh-CN" lang="zh-CN">中文</option><option value="en" lang="en">English</option></select>
+        <select :value="locale" :aria-label="t('Language')" @change="setLocale((($event.target as HTMLSelectElement).value as 'en' | 'zh-CN' | 'pt-BR'))"><option value="pt-BR" lang="pt-BR">Português (Brasil)</option><option value="zh-CN" lang="zh-CN">中文</option><option value="en" lang="en">English</option></select>
       </label>
       <label class="preference-row">
         <span><strong>{{ t('Desktop notifications') }}</strong><small>{{ t(notificationNote) }}</small></span>

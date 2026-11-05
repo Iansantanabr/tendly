@@ -1,9 +1,11 @@
 import { readonly, ref } from "vue";
+import ptBRJson from "./pt-BR.json";
 
-export type Locale = "zh-CN" | "en";
+export type Locale = "zh-CN" | "en" | "pt-BR";
 export type Interpolation = Record<string, string | number>;
 export const LOCALE_STORAGE_KEY = "tendly.locale";
-export const DEFAULT_LOCALE: Locale = "zh-CN";
+export const DEFAULT_LOCALE: Locale = "pt-BR";
+export const ptBR: Readonly<Record<string, string>> = ptBRJson;
 
 /** Only application-owned copy is translated. File names, session titles,
  * commands, provider messages, model IDs and API diagnostics remain untouched. */
@@ -2415,11 +2417,12 @@ export const zhCN: Readonly<Record<string, string>> = {
 };
 
 export function normalizeLocale(value: unknown): Locale {
-  return value === "en" ? "en" : DEFAULT_LOCALE;
+  return value === "en" || value === "zh-CN" || value === "pt-BR" ? value : DEFAULT_LOCALE;
 }
 
 export function translate(source: string, locale: Locale, values: Interpolation = {}): string {
-  const template = locale === "zh-CN" && Object.hasOwn(zhCN, source) ? zhCN[source] : source;
+  const dict = locale === "zh-CN" ? zhCN : locale === "pt-BR" ? ptBR : undefined;
+  const template = dict && Object.hasOwn(dict, source) ? dict[source] : source;
   return template.replace(/\{([\w]+)\}/g, (placeholder: string, key: string) => Object.hasOwn(values, key) ? String(values[key]) : placeholder);
 }
 
