@@ -37,6 +37,7 @@ impl Fixture {
             activity: crate::activity::Activity::default(),
             setups: crate::worktree_setup::Setups::default(),
             metrics: None,
+            hub: std::sync::Arc::new(crate::hub::HubStore::memory()),
         };
         Self { state, root }
     }

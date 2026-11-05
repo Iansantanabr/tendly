@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { computed } from 'vue';
 import { createI18n, DEFAULT_LOCALE, LOCALE_STORAGE_KEY, normalizeLocale, translate, zhCN } from '../i18n/index.ts';
 
-test('Chinese is the default, with English preference restored across instances', () => {
+test('Portuguese is the default, with English preference restored across instances', () => {
   const data = new Map();
   const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
   const first = createI18n(storage);
   assert.equal(first.locale.value, DEFAULT_LOCALE);
-  assert.equal(first.t('Workspace canvas'), '工作区画布');
+  assert.equal(DEFAULT_LOCALE, 'pt-BR');
+  assert.equal(first.t('Workspace canvas'), 'Mesa');
   first.setLocale('en');
   assert.equal(data.get(LOCALE_STORAGE_KEY), 'en');
   assert.equal(createI18n(storage).t('Workspace canvas'), 'Workspace canvas');
@@ -17,7 +18,7 @@ test('Chinese is the default, with English preference restored across instances'
 test('all consumers react immediately to a language change without remounting panes', () => {
   const i18n = createI18n();
   const label = computed(() => i18n.t('New session'));
-  assert.equal(label.value, '新建会话');
+  assert.equal(label.value, 'Nova sessão');
   i18n.setLocale('en');
   assert.equal(label.value, 'New session');
   i18n.setLocale('zh-CN');
@@ -25,10 +26,11 @@ test('all consumers react immediately to a language change without remounting pa
 });
 
 test('invalid preferences and unavailable browser storage remain usable', () => {
-  assert.equal(normalizeLocale('es'), 'zh-CN');
+  assert.equal(normalizeLocale('es'), 'pt-BR');
+  assert.equal(normalizeLocale('zh-CN'), 'zh-CN');
   const denied = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
   const i18n = createI18n(denied);
-  assert.equal(i18n.locale.value, 'zh-CN');
+  assert.equal(i18n.locale.value, 'pt-BR');
   assert.doesNotThrow(() => i18n.setLocale('en'));
   assert.equal(i18n.locale.value, 'en');
 });

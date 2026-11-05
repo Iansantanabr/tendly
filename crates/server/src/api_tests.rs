@@ -102,6 +102,7 @@ impl Fixture {
             activity: activity::Activity::default(),
             setups: worktree_setup::Setups::default(),
             metrics: None,
+            hub: std::sync::Arc::new(crate::hub::HubStore::memory()),
         };
         Self { state, path }
     }

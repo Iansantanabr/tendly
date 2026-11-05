@@ -11,6 +11,8 @@ const DESTINATIONS: Record<string, string> = {
   settings: "Back to settings",
   usage: "Back to usage",
   system: "Back to system",
+  home: "Back to home",
+  inbox: "Back to notifications",
 };
 
 /** `previous` is the route name the history steps back to, or none. */

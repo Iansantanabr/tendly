@@ -16,6 +16,7 @@ import { AGENT_CLIENTS } from "./clients";
 import SidebarSessionRow from "./SidebarSessionRow.vue";
 import MenuFlyout from "./MenuFlyout.vue";
 import OtherMachines from "./OtherMachines.vue";
+import ConversationsBar from "./hub/ConversationsBar.vue";
 
 const props = withDefaults(defineProps<{
   workspaces: Workspace[];
@@ -34,6 +35,8 @@ const props = withDefaults(defineProps<{
   workspaceBranches?: Record<string, string>;
   /** The page shown over the canvas, if any, for the navigation's current item. */
   currentPage?: string;
+  /** Unread entries in the bell. */
+  inboxUnread?: number;
 }>(), { historySupported: false, archiveSupported: false, ephemeralSupported: false, archiveBusyIds: () => [], keepBusyIds: () => [], deleteBusyIds: () => [], sessionsLoading: false });
 const emit = defineEmits<{
   branchSwitched: [id: string];
@@ -51,6 +54,8 @@ const emit = defineEmits<{
   allSessions: [];
   system: [];
   usage: [];
+  home: [];
+  inbox: [];
   /** A session the workspace groups do not list (archived, temporary): find it in the library page. */
   showInSessions: [id: string, archived: boolean];
   canvas: [];
@@ -154,17 +159,29 @@ async function revealSession(id: string): Promise<boolean> {
   row?.querySelector<HTMLButtonElement>(".workspace-session")?.focus({ preventScroll: true });
   return true;
 }
+/** Which list the sidebar shows; remembered in this browser. */
+const SIDEBAR_VIEW = "tendly.hub.sidebar-view";
+const sidebarView = ref<"workspaces" | "conversations">((() => { try { return localStorage.getItem(SIDEBAR_VIEW) === "conversations" ? "conversations" : "workspaces"; } catch { return "workspaces"; } })());
+function setSidebarView(view: "workspaces" | "conversations") { sidebarView.value = view; try { localStorage.setItem(SIDEBAR_VIEW, view); } catch { /* Fine without it. */ } }
 defineExpose({ revealSession });
 </script>
 
 <template>
   <div ref="sidebarElement" class="workspace-sidebar" @keydown="escapeMenu">
     <nav class="workspace-global-nav" :aria-label="t('Workspace navigation')">
+      <button :class="['nav-item', { current: currentPage === 'home' }]" :aria-current="currentPage === 'home' ? 'page' : undefined" @click="emit('home')"><Icon name="home" :size="16" /><span>{{ t('Home') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'canvas' }]" :aria-current="currentPage === 'canvas' ? 'page' : undefined" @click="emit('canvas')"><Icon name="grid" :size="16" /><span>{{ t('Workspace canvas') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'sessions' }]" :aria-current="currentPage === 'sessions' ? 'page' : undefined" @click="emit('allSessions')"><Icon name="clock" :size="16" /><span>{{ t('All sessions') }}</span><small class="count-badge">{{ sessionCount }}</small></button>
       <button :class="['nav-item', { current: currentPage === 'usage' }]" :aria-current="currentPage === 'usage' ? 'page' : undefined" @click="emit('usage')"><Icon name="chart" :size="16" /><span>{{ t('Usage') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'system' }]" :aria-current="currentPage === 'system' ? 'page' : undefined" @click="emit('system')"><Icon name="gauge" :size="16" /><span>{{ t('System') }}</span></button>
+      <button :class="['nav-item', { current: currentPage === 'inbox' }]" :aria-current="currentPage === 'inbox' ? 'page' : undefined" @click="emit('inbox')"><Icon name="bell" :size="16" /><span>{{ t('Notifications') }}</span><small v-if="inboxUnread" class="count-badge unread-badge">{{ inboxUnread }}</small></button>
     </nav>
+    <div class="sidebar-view-switch" role="tablist" :aria-label="t('Sidebar view')">
+      <button type="button" role="tab" :aria-selected="sidebarView === 'workspaces'" :class="{ current: sidebarView === 'workspaces' }" @click="setSidebarView('workspaces')"><Icon name="folder" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Workspaces') }}</span></button>
+      <button type="button" role="tab" :aria-selected="sidebarView === 'conversations'" :class="{ current: sidebarView === 'conversations' }" @click="setSidebarView('conversations')"><Icon name="chat" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Conversations') }}</span></button>
+    </div>
+    <ConversationsBar v-if="sidebarView === 'conversations'" :sessions="sessions" :workspaces="workspaces" :selected-session-id="selectedSessionId" @open-session="emit('openSession', $event)" />
+    <template v-else>
     <header class="workspace-group-label"><span>{{ t('Workspaces') }}</span><small>{{ workspaces.length }}</small><!-- Finding the open session in the list belongs to the list, like an
          explorer's "select opened file": it acts on whichever view has focus. --><button class="icon-button workspace-locate-button" :disabled="!selectedSessionId" :aria-label="t('Locate the focused session in the list')" :title="t('Locate the focused session in the list')" @click="selectedSessionId && emit('revealSession', selectedSessionId)"><Icon name="locate" :size="14" /></button><button class="icon-button" :aria-label="t('Add workspace')" :title="t('Add workspace')" @click="emit('addWorkspace')"><Icon name="plus" :size="15" /></button></header>
     <div v-if="workspaces.length" class="workspace-group-search"><Icon name="search" :size="13" /><input v-model="query" data-sidebar-search :aria-label="t('Search workspaces and sessions')" @keydown.down.prevent="sidebarElement?.querySelector<HTMLElement>('[data-sidebar-row-focus]')?.focus()" @keydown.esc="query && ($event.stopPropagation(), query = '')" :placeholder="t('Find a workspace or session…')" /><button v-if="query" class="icon-button" :aria-label="t('Clear navigation search')" @click="query = ''"><Icon name="close" :size="12" /></button></div>
@@ -215,6 +232,7 @@ defineExpose({ revealSession });
       <div v-else-if="!workspaces.length" class="workspace-nav-empty"><Icon name="folder" :size="24" /><p>{{ t('Add your first workspace') }}</p><button class="secondary-button" @click="emit('addWorkspace')"><Icon name="plus" :size="14" />{{ t('Add workspace') }}</button></div>
       <OtherMachines :query="query" @settings="emit('machines')" @open-session="(machine, session) => emit('openRemoteSession', machine, session)" />
     </nav>
+    </template>
   </div>
 </template>
 
@@ -243,4 +261,10 @@ defineExpose({ revealSession });
 .workspace-disclosure,.workspace-more-button,.workspace-active-count{flex-shrink:0}
 .workspace-group-header>.workspace-new-action{flex-shrink:0;width:24px;height:24px;padding:4px;color:var(--teal)}
 @media(pointer:coarse){.workspace-group-header>.workspace-new-action{width:36px;height:44px}.workspace-group-title{padding:6px 0}}
+.sidebar-view-switch { display: flex; min-width: 0; overflow: hidden; gap: 2px; margin: 6px 10px 4px; padding: 3px; border-radius: var(--radius-md); background: var(--fill-hover); }
+.sidebar-view-switch button { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); font: inherit; font-size: .85rem; cursor: pointer; }
+.sidebar-view-switch button.current { background: var(--elevated); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
+.unread-badge { background: var(--accent); color: var(--on-accent); }
+.switch-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.switch-icon { flex: none; }
 </style>

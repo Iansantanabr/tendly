@@ -14,6 +14,10 @@ import SettingsPage from "./features/SettingsPage.vue";
 import SessionsPage from "./features/SessionsPage.vue";
 import SystemPage from "./features/SystemPage.vue";
 import UsagePage from "./features/UsagePage.vue";
+import HomePage from "./features/hub/HomePage.vue";
+import InboxPage from "./features/hub/InboxPage.vue";
+import { inbox, isUnread, markSeen, refreshInbox } from "./features/hub/inbox";
+import { contextFromPanes, openContext } from "./features/hub/open-context";
 import { useRoute, useRouter } from "vue-router";
 import type { SettingsSection } from "./router";
 import HostFilePreview from "./features/HostFilePreview.vue";
@@ -120,17 +124,28 @@ const hostPreview = ref<{ path: string; line?: number }>();
 const route = useRoute() ?? reactive({ name: "canvas", params: {}, query: {}, fullPath: "/" });
 const router = useRouter() ?? ({ push: async () => undefined, replace: async () => undefined, back: () => undefined } as unknown as ReturnType<typeof useRouter>);
 /** Which page, if any, is drawn over the canvas. The canvas itself never unmounts. */
-const page = computed(() => route.name === "settings" || route.name === "sessions" || route.name === "system" || route.name === "usage" ? route.name : undefined);
+const page = computed(() => route.name === "settings" || route.name === "sessions" || route.name === "system" || route.name === "usage" || route.name === "home" || route.name === "inbox" ? route.name : undefined);
 const settingsRouteSection = computed(() => String(route.params.section ?? "preferences") as SettingsSection);
 // Session menus are teleported out of their tabs to the body, so a page over
 // the canvas cannot cover them; the body says a page is open and they step aside.
 watch(page, value => { const body = typeof document === "undefined" ? undefined : document.body; if (!body) return; if (value) body.dataset.page = value; else delete body.dataset.page; }, { immediate: true });
 function openSettings(section: SettingsSection = "preferences") { sidebarOpen.value = false; void router.push({ name: "settings", params: { section } }); }
-function openPage(name: "sessions" | "system" | "usage", query?: Record<string, string>) { sidebarOpen.value = false; void router.push({ name, query }); }
+function openPage(name: "sessions" | "system" | "usage" | "home" | "inbox", query?: Record<string, string>) { sidebarOpen.value = false; void router.push({ name, query }); }
 /** Back from a page: to wherever you came from inside the app, else the canvas. */
 function leavePage() {
   if (window.history.state?.back) router.back();
   else void router.push({ name: "canvas" });
+}
+/** A conversation on screen, in a visible tab, has been read. */
+function seeFocused() { const id = selectedSessionId.value; if (id && !page.value && !document.hidden && isUnread(id)) void markSeen(id); }
+watch(() => selectedSessionId.value, id => { if (id && !page.value) void markSeen(id); });
+async function homeStarted(id: string) {
+  try { const session = await request<Session>(sessionPath(id)); openSession(session); void refreshSessions(); }
+  catch (cause) { report(cause); }
+}
+function openFileFromHome(workspaceId: string, path: string) {
+  if (route.name !== "canvas") void router.push({ name: "canvas" });
+  void nextTick(() => canvas.value?.openPane(filePane(workspaceId, path)));
 }
 const quickBusy = ref(false);
 const ephemeralIds = computed(() => ephemeralSessionIds(sessions.value));
@@ -167,6 +182,7 @@ useKeyboardFit();
 const switcherOpen = ref(false);
 const openPanes = computed(() => flattenPanes(layout.value.root));
 const paneTitle = (pane: PaneNode) => paneDisplayTitle(pane, t);
+watch(openPanes, panes => { openContext.items = contextFromPanes(panes); }, { immediate: true });
 function paneDetail(pane: PaneNode) {
   const session = paneSession(pane, sessions.value), workspace = paneWorkspace(pane, workspaces.value, sessions.value);
   const place = panePlace(pane);
@@ -816,7 +832,8 @@ async function pingHost() {
 onMounted(() => {
   void bootstrap();
   void pingHost();
-  pollTimer = setInterval(() => { if (!document.hidden && !showAuth.value) { void refreshSessions(); void pingHost(); for (const id of trackedPlaces()) void refreshGit(id); } }, 5000);
+  pollTimer = setInterval(() => { if (!document.hidden && !showAuth.value) { void refreshSessions(); void pingHost(); for (const id of trackedPlaces()) void refreshGit(id); void refreshInbox().then(seeFocused); } }, 5000);
+  void refreshInbox();
   window.addEventListener("beforeunload", beforeUnload); window.addEventListener("resize", adaptDrawers);
   stopPageReturn = onPageReturn(stale => fileWatch.wake(stale));
 });
@@ -827,7 +844,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
   <div :class="['app-shell', { 'explorer-hidden': !explorerOpen || !explorerWorkspace, 'sidebar-collapsed': sidebarCollapsed, 'is-mobile': mobile }]">
     <header class="topbar">
       <div class="brand"><button v-if="mobile && backTarget" class="icon-button mobile-menu mobile-back" :aria-label="t('Back')" @click="goBack"><Icon name="chevron" :size="22" /></button><button v-else class="icon-button mobile-menu" :aria-label="t('Toggle workspace navigation')" @click="sidebarOpen = !sidebarOpen"><Icon name="menu" /></button><button class="icon-button sidebar-toggle" :class="{selected:!sidebarCollapsed}" :aria-pressed="!sidebarCollapsed" :aria-label="t(sidebarCollapsed?'Expand workspace panel':'Collapse workspace panel')" :title="t(sidebarCollapsed?'Expand workspace panel':'Collapse workspace panel') + ' · ' + hint('sidebar')" @click="toggleSidebar"><Icon name="panelLeft"/></button><span class="brand-mark"><span /></span><strong :title="serverVersion?t('Tendly {version}',{version:serverVersion}):undefined">Tendly<span v-if="instanceLabel" class="brand-version">{{ instanceLabel }}</span></strong></div>
-      <span v-if="mobile && page" class="mobile-title mobile-page-title"><strong>{{ t(page === "settings" ? "Settings" : page === "sessions" ? "All sessions" : page === "usage" ? "Usage" : "System") }}</strong></span>
+      <span v-if="mobile && page" class="mobile-title mobile-page-title"><strong>{{ t(page === "settings" ? "Settings" : page === "sessions" ? "All sessions" : page === "usage" ? "Usage" : page === "home" ? "Home" : page === "inbox" ? "Notifications" : "System") }}</strong></span>
       <button v-else-if="mobile && canvasReady" class="mobile-title" type="button" :aria-label="t('Switch view')" @click="switcherOpen = true">
         <TabIcon v-if="focusedPane" :kind="focusedPane.kind" :metadata="focusedPane.metadata" :session-providers="sessionProviders" :size="16" />
         <span class="mobile-title-copy"><strong>{{ focusedPane ? paneTitle(focusedPane) : (contextWorkspace?.name || 'Tendly') }}</strong><small v-if="focusedPane && paneDetail(focusedPane)">{{ paneDetail(focusedPane) }}</small></span>
@@ -858,7 +875,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
       <button v-if="sidebarOpen" class="drawer-overlay sidebar-overlay" :aria-label="t('Close workspace navigation')" @click="sidebarOpen = false"/>
       <aside :class="['sidebar',{'drawer-open':sidebarOpen}]">
         <div v-if="sidebarRail&&!sidebarCollapsed" class="sidebar-resizer" role="separator" aria-orientation="vertical" :aria-label="t('Resize workspace panel')" :title="t('Drag to resize · double-click to reset')" @pointerdown.prevent="resizeSidebar" @dblclick="resetSidebarWidth"/>
-        <WorkspaceSidebar ref="workspaceSidebar" @reveal-session="revealSession" :workspace-branches="workspaceBranches" @branch-switched="branchSwitched" :workspaces="workspaces" :sessions="sessions" :selected-workspace-id="selectedWorkspaceId" :selected-session-id="selectedSessionId" :history-supported="backendCapabilities.nativeHistory" :storage-key="storageKey" :archive-supported="backendCapabilities.sessionArchive" :ephemeral-supported="backendCapabilities.ephemeralSessions" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" @select-workspace="selectWorkspace" @open-session="openSession" @open-remote-session="openRemoteSession" @rename-session="renameSession" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions" @session-environment="environmentSessionId=$event;sidebarOpen=false" @open-files="openFiles" @open-changes="openChanges" @new-session="newSession" @quick-session="quickSession" @load-history="loadHistory" @add-workspace="showWorkspace=true" @canvas="sidebarOpen=false;router.push({ name: 'canvas' })" @all-sessions="openPage('sessions')" @system="openPage('system')" @usage="openPage('usage')" @machines="openSettings('machines')" @show-in-sessions="(id, archived) => openPage('sessions', { highlight: id, archive: archived ? 'archived' : 'current' })" :current-page="page ?? 'canvas'"/>
+        <WorkspaceSidebar ref="workspaceSidebar" @reveal-session="revealSession" :workspace-branches="workspaceBranches" @branch-switched="branchSwitched" :workspaces="workspaces" :sessions="sessions" :selected-workspace-id="selectedWorkspaceId" :selected-session-id="selectedSessionId" :history-supported="backendCapabilities.nativeHistory" :storage-key="storageKey" :archive-supported="backendCapabilities.sessionArchive" :ephemeral-supported="backendCapabilities.ephemeralSessions" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" @select-workspace="selectWorkspace" @open-session="openSession" @open-remote-session="openRemoteSession" @rename-session="renameSession" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions" @session-environment="environmentSessionId=$event;sidebarOpen=false" @open-files="openFiles" @open-changes="openChanges" @new-session="newSession" @quick-session="quickSession" @load-history="loadHistory" @add-workspace="showWorkspace=true" @canvas="sidebarOpen=false;router.push({ name: 'canvas' })" @all-sessions="openPage('sessions')" @system="openPage('system')" @usage="openPage('usage')" @home="openPage('home')" @inbox="openPage('inbox')" :inbox-unread="inbox.unread" @machines="openSettings('machines')" @show-in-sessions="(id, archived) => openPage('sessions', { highlight: id, archive: archived ? 'archived' : 'current' })" :current-page="page ?? 'canvas'"/>
         <div v-if="!mobile" class="host-card"><span class="host-symbol"><Icon name="monitor" :size="17"/></span><div class="host-card-text"><strong>{{ t('Runs on this machine') }}</strong><small>{{ platformLabel }}</small></div><span class="host-latency" :class="hostStatus.level" :title="apiOnline ? t('Round-trip to host: {ms}', { ms: hostStatus.text }) : t('Offline')" :aria-label="apiOnline ? t('Round-trip to host: {ms}', { ms: hostStatus.text }) : t('Offline')"><i class="host-dot"/><span>{{ hostStatus.text }}</span></span></div>
       
         <div v-else class="drawer-footer">
@@ -881,6 +898,8 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
         <section v-else class="welcome-screen"><div class="welcome-composition" aria-hidden="true"><span class="welcome-tile"><Icon name="spark" :size="35"/></span><span class="welcome-tile"><Icon name="git" :size="26"/><Icon name="file" :size="26"/></span></div><div class="eyebrow">{{ t('A LITTLE SPACE. ENDLESS POSSIBILITIES.') }}</div><h1>{{ t('Your agents.') }}<br/>{{ t('Your workspace.') }}</h1><p>{{ t('Claude Code, Codex, files and Git — together on your own machine. Arrange everything the way you think.') }}</p><button class="primary-button" :disabled="loading" @click="showWorkspace=true"><Icon name="plus" :size="17"/>{{ t(loading?'Connecting to host…':'Add a workspace') }}</button><small>{{ t('Rust + Vue · host native · browser first') }}</small></section>
         <SettingsPage v-if="page==='settings'" :profiles="profiles" :section="settingsRouteSection" @back="leavePage" @navigate="section => router.replace({ name: 'settings', params: { section } })" @changed="refreshProfiles"/>
         <SessionsPage v-else-if="page==='sessions'" :workspaces="workspaces" :sessions="sessions" :selected-session-id="selectedSessionId" :archive-supported="backendCapabilities.sessionArchive" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" :initial-archive="route.query.archive === 'archived' ? 'archived' : 'current'" :highlight-id="typeof route.query.highlight === 'string' ? route.query.highlight : undefined" @back="leavePage" @open-session="openSession" @rename-request="requestRenameSession" @session-environment="environmentSessionId=$event" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions"/>
+        <HomePage v-else-if="page==='home'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @open-session="openSession" @started="homeStarted" @open-file="openFileFromHome" @open-canvas="router.push({ name: 'canvas' })"/>
+        <InboxPage v-else-if="page==='inbox'" :sessions="sessions" @back="leavePage" @open-session="openSession"/>
         <SystemPage v-else-if="page==='system'" :sessions="sessions" @back="leavePage" @open-session="openSession"/>
         <UsagePage v-else-if="page==='usage'" :sessions="sessions" :workspaces="workspaces" @back="leavePage" @open-session="openSession"/>
       </main>

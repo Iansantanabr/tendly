@@ -279,8 +279,9 @@ pub(super) async fn handle_event(
         }
         Some("turn") => match event["status"].as_str() {
             Some("running") => runtime.busy.store(true, Ordering::Release),
-            Some("completed" | "failed" | "interrupted") => {
-                runtime.busy.store(false, Ordering::Release)
+            Some(finished @ ("completed" | "failed" | "interrupted")) => {
+                runtime.busy.store(false, Ordering::Release);
+                crate::hub::on_turn_finished(state, id, finished).await;
             }
             _ => return Err(ApiError::bad("Invalid turn state")),
         },
@@ -310,6 +311,7 @@ pub(super) async fn handle_event(
                     s.set_session_status(id, SessionStatus::Waiting)
                 })
                 .await?;
+                crate::hub::on_waiting(state, id).await;
             }
         }
         Some("approval_resolved") => {

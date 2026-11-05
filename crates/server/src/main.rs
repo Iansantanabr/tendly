@@ -11,6 +11,7 @@ mod app;
 mod balances;
 mod bridge;
 mod canvas;
+mod hub;
 mod chat_adapter;
 #[cfg(test)]
 mod chat_client_tests;
@@ -346,6 +347,7 @@ async fn run() -> std::result::Result<(), Box<dyn std::error::Error>> {
         activity: activity::Activity::default(),
         setups: worktree_setup::Setups::default(),
         metrics: open_metrics(&database),
+        hub: hub::open(&database),
     };
     usage::warm(state.clone());
     model_catalog::warm(state.clone());
@@ -452,6 +454,7 @@ fn router(state: AppState) -> Router {
         .merge(file_routes::routes())
         .merge(git_routes::routes())
         .merge(layout_routes::routes())
+        .merge(hub::routes())
         .route("/api/health", get(health))
         .route("/api/auth", get(security::status).post(security::login))
         .route(

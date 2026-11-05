@@ -32,6 +32,8 @@ pub(super) struct AppState {
     pub(super) setups: worktree_setup::Setups,
     /// Resource history; absent when its database could not be opened.
     pub(super) metrics: Option<Arc<tendly_persistence::metrics::MetricsStore>>,
+    /// Hub additions: inbox, automations, history, publishing, apps (`hub.rs`).
+    pub(super) hub: crate::hub::Hub,
 }
 
 #[derive(Debug)]

@@ -17,7 +17,9 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: "/", name: "canvas", component: Page },
+    { path: "/", name: "home", component: Page },
+    { path: "/mesa", name: "canvas", component: Page },
+    { path: "/notificacoes", name: "inbox", component: Page },
     { path: "/sessions", name: "sessions", component: Page },
     { path: "/system", name: "system", component: Page },
     { path: "/usage", name: "usage", component: Page },

@@ -11,6 +11,8 @@ const profile = (native = false) => ({ id: 'profile-fixture', name: 'Fixture', p
 before(async () => {
   server = await createServer({ configFile: false, root: fileURLToPath(new URL('../../', import.meta.url)), plugins: [vue()], server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom', optimizeDeps: { noDiscovery: true } });
   Dialog = (await server.ssrLoadModule('/src/features/ProfilesDialog.vue')).default;
+  // These expectations are written in Chinese; this fork defaults to Portuguese.
+  (await server.ssrLoadModule('/src/i18n/index.ts')).useI18n().setLocale('zh-CN');
   capabilities = (await server.ssrLoadModule('/src/features/backend-capabilities.ts')).backendCapabilities;
   rows = (await server.ssrLoadModule('/src/features/environment-model.ts')).environmentRows;
 });

@@ -17,6 +17,8 @@ before(async () => {
   // is ever sent from here.
   server = await createServer({ configFile: false, root: fileURLToPath(new URL('../../', import.meta.url)), plugins: [vue()], server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom', optimizeDeps: { noDiscovery: true } });
   Panel = (await server.ssrLoadModule('/src/features/ModelSelection.vue')).default;
+  // These expectations are written in Chinese; this fork defaults to Portuguese.
+  (await server.ssrLoadModule('/src/i18n/index.ts')).useI18n().setLocale('zh-CN');
 });
 after(async () => { await server?.close(); });
 
