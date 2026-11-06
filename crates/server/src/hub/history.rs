@@ -85,9 +85,11 @@ pub(crate) struct Version {
     pub author_kind: String,
     pub session_id: Option<String>,
     pub created_at: String,
+    /// One line of what the agent said it was doing, on an agent's version.
+    pub message: Option<String>,
 }
 
-const COLUMNS: &str = "id, workspace_id, path, blob, size, author_kind, session_id, created_at";
+const COLUMNS: &str = "id, workspace_id, path, blob, size, author_kind, session_id, created_at, message";
 
 impl Version {
     fn from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
@@ -100,6 +102,7 @@ impl Version {
             author_kind: r.get(5)?,
             session_id: r.get(6)?,
             created_at: r.get(7)?,
+            message: r.get(8)?,
         })
     }
 }
@@ -260,15 +263,16 @@ fn insert(
     blob: &str,
     size: usize,
     author: &Author,
+    message: Option<&str>,
     at: &str,
 ) -> rusqlite::Result<Option<Version>> {
     if latest(c, workspace, path)?.is_some_and(|v| v.blob == blob) {
         return Ok(None);
     }
     c.execute(
-        "INSERT INTO file_versions(workspace_id, path, blob, size, author_kind, session_id, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![workspace, path, blob, size as i64, author.kind, author.session.map(|s| s.to_string()), at],
+        "INSERT INTO file_versions(workspace_id, path, blob, size, author_kind, session_id, created_at, message)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![workspace, path, blob, size as i64, author.kind, author.session.map(|s| s.to_string()), at, message],
     )?;
     let id = c.last_insert_rowid();
     prune(c, workspace, path, &cutoff())?;
@@ -334,11 +338,12 @@ fn record_blocking(
     path: &str,
     bytes: &[u8],
     author: &Author,
+    message: Option<&str>,
 ) -> std::result::Result<Option<Version>, String> {
     let blob = hash(bytes);
     write_blob(blobs, &blob, bytes).map_err(|e| e.to_string())?;
     store
-        .with(|c| insert(c, &workspace.to_string(), path, &blob, bytes.len(), author, &now()))
+        .with(|c| insert(c, &workspace.to_string(), path, &blob, bytes.len(), author, message, &now()))
         .map_err(|e| e.to_string())
 }
 
@@ -398,6 +403,83 @@ async fn running_agent(state: &AppState, workspace: WorkspaceId) -> Option<Sessi
         .map(|s| s.id)
 }
 
+/// How long a version's message may be.
+const MESSAGE_CHARS: usize = 80;
+/// The latest events read to find what the agent said last.
+const MESSAGE_EVENTS: usize = 400;
+/// A sentence shorter than this ("Done.", "Sure!") carries on into the next.
+const SHORT_SENTENCE: usize = 16;
+
+/// What the agent of `session` said last in the turn it is running, as one
+/// line: the message kept with the versions it writes. Read from the stored
+/// conversation; no model is asked anything.
+async fn agent_message(state: &AppState, session: SessionId) -> Option<String> {
+    db(state, move |s| Ok(stored_message(s, session))).await.ok().flatten()
+}
+
+fn stored_message(store: &tendly_persistence::Store, session: SessionId) -> Option<String> {
+    let page = store.conversation_page(session, None, MESSAGE_EVENTS).ok()?;
+    summary_line(&super::transcript::last_agent_text(&page.events)?)
+}
+
+/// `[text](address)` becomes `text`.
+fn without_links(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        let after = &rest[open + 1..];
+        let link = after
+            .find("](")
+            .and_then(|close| after[close + 2..].find(')').map(|end| (close, close + 2 + end + 1)));
+        match link {
+            Some((close, next)) if !after[..close].contains('[') => {
+                out.push_str(&rest[..open]);
+                out.push_str(&after[..close]);
+                rest = &after[next..];
+            }
+            _ => {
+                out.push_str(&rest[..=open]);
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// One line summing up what an agent said: the first sentence of its first
+/// line of prose, without Markdown marks, at most 80 characters.
+pub(crate) fn summary_line(said: &str) -> Option<String> {
+    let mut fenced = false;
+    let line = said.lines().map(str::trim).find(|line| {
+        if line.starts_with("```") || line.starts_with("~~~") {
+            fenced = !fenced;
+            return false;
+        }
+        !fenced && line.chars().any(char::is_alphanumeric)
+    })?;
+    // Heading, quote and list marks, then a list number ("1. ", "2) ").
+    let line = line.trim_start_matches(|c: char| matches!(c, '#' | '>' | '-' | '*' | '+' | ' '));
+    let digits = line.chars().take_while(char::is_ascii_digit).count();
+    let line = match line[digits..].strip_prefix(['.', ')']) {
+        Some(rest) if digits > 0 && rest.starts_with(' ') => rest,
+        _ => line,
+    };
+    let plain = without_links(line).replace("**", "").replace("__", "").replace('`', "");
+    let chars: Vec<char> = plain.split_whitespace().collect::<Vec<_>>().join(" ").chars().collect();
+    let end = (0..chars.len())
+        .find(|&i| {
+            matches!(chars[i], '.' | '!' | '?')
+                && i + 1 >= SHORT_SENTENCE
+                && chars.get(i + 1).is_none_or(|next| next.is_whitespace())
+        })
+        .map_or(chars.len(), |i| i + 1);
+    let sentence: String = chars[..end].iter().collect();
+    let sentence = sentence.trim_end_matches([':', ' ']);
+    let line = super::transcript::one_line(sentence, MESSAGE_CHARS);
+    (!line.is_empty()).then_some(line)
+}
+
 /// The person saved this file from the browser.
 pub async fn record_saved(state: &AppState, workspace: WorkspaceId, path: &str, content: &str) {
     let Some(path) = normalize(path) else { return };
@@ -408,7 +490,7 @@ pub async fn record_saved(state: &AppState, workspace: WorkspaceId, path: &str, 
     let store = state.hub.clone();
     let blobs = blob_dir(state);
     let bytes = content.as_bytes().to_vec();
-    let done = tokio::task::spawn_blocking(move || record_blocking(&store, &blobs, workspace, &path, &bytes, &Author::YOU)).await;
+    let done = tokio::task::spawn_blocking(move || record_blocking(&store, &blobs, workspace, &path, &bytes, &Author::YOU, None)).await;
     if let Ok(Err(error)) = done {
         tracing::warn!(%error, "file history: could not record a save");
     }
@@ -426,6 +508,7 @@ fn capture(
     workspace: WorkspaceId,
     path: &str,
     agent: Option<SessionId>,
+    said: Option<&str>,
 ) -> std::result::Result<Option<Version>, String> {
     let target = root.join(path);
     // Deleted, a folder or a link: no version.
@@ -438,7 +521,9 @@ fn capture(
         return Ok(None);
     }
     let author = attribute(saved, workspace, path, &hash(&bytes), agent);
-    record_blocking(store, blobs, workspace, path, &bytes, &author)
+    // What the agent said belongs to the agent's versions only.
+    let message = said.filter(|_| author.kind == "agent");
+    record_blocking(store, blobs, workspace, path, &bytes, &author, message)
 }
 
 struct Watched {
@@ -552,11 +637,15 @@ async fn settle(state: &AppState, workspace: WorkspaceId, root: PathBuf, mut pat
         return;
     }
     let agent = running_agent(state, workspace).await;
+    let said = match agent {
+        Some(session) => agent_message(state, session).await,
+        None => None,
+    };
     let store = state.hub.clone();
     let blobs = blob_dir(state);
     let done = tokio::task::spawn_blocking(move || {
         for path in paths {
-            if let Err(error) = capture(&store, &blobs, saved(), &root, workspace, &path, agent) {
+            if let Err(error) = capture(&store, &blobs, saved(), &root, workspace, &path, agent, said.as_deref()) {
                 tracing::warn!(%error, %path, "file history: could not record a change");
             }
         }
@@ -598,6 +687,7 @@ fn view(version: &Version, titles: &HashMap<String, String>) -> Value {
         "session_id": version.session_id,
         "session_title": version.session_id.as_ref().and_then(|id| titles.get(id)),
         "created_at": version.created_at,
+        "message": version.message,
     })
 }
 
@@ -653,7 +743,7 @@ async fn restore_into(
     let path = path.to_owned();
     let bytes = content.as_bytes().to_vec();
     tokio::task::spawn_blocking(move || -> std::result::Result<Version, String> {
-        if let Some(new) = record_blocking(&store, &blobs, workspace, &path, &bytes, &Author::YOU)? {
+        if let Some(new) = record_blocking(&store, &blobs, workspace, &path, &bytes, &Author::YOU, None)? {
             return Ok(new);
         }
         store
@@ -701,15 +791,15 @@ mod tests {
         let store = HubStore::memory();
         let blobs = dir.join("blobs");
         let ws = uuid::Uuid::new_v4();
-        let first = record_blocking(&store, &blobs, ws, "a.txt", b"one", &Author::UNKNOWN).unwrap();
+        let first = record_blocking(&store, &blobs, ws, "a.txt", b"one", &Author::UNKNOWN, None).unwrap();
         assert!(first.is_some());
-        assert!(record_blocking(&store, &blobs, ws, "a.txt", b"one", &Author::UNKNOWN).unwrap().is_none());
+        assert!(record_blocking(&store, &blobs, ws, "a.txt", b"one", &Author::UNKNOWN, None).unwrap().is_none());
         assert_eq!(count(&store), 1);
         // Same content elsewhere shares the blob but is its own version.
-        record_blocking(&store, &blobs, ws, "b.txt", b"one", &Author::UNKNOWN).unwrap().unwrap();
-        record_blocking(&store, &blobs, ws, "a.txt", b"two", &Author::UNKNOWN).unwrap().unwrap();
+        record_blocking(&store, &blobs, ws, "b.txt", b"one", &Author::UNKNOWN, None).unwrap().unwrap();
+        record_blocking(&store, &blobs, ws, "a.txt", b"two", &Author::UNKNOWN, None).unwrap().unwrap();
         // Back to earlier content is a change too.
-        record_blocking(&store, &blobs, ws, "a.txt", b"one", &Author::UNKNOWN).unwrap().unwrap();
+        record_blocking(&store, &blobs, ws, "a.txt", b"one", &Author::UNKNOWN, None).unwrap().unwrap();
         assert_eq!(count(&store), 4);
         assert_eq!(std::fs::read_dir(&blobs).unwrap().count(), 2);
         assert_eq!(read_blob(&blobs, &hash(b"two")).as_deref(), Some("two"));
@@ -728,19 +818,19 @@ mod tests {
         let agent = uuid::Uuid::new_v4();
         // The browser save: recorded at once and remembered.
         saved.remember(ws, "notes.md", &hash(b"mine"));
-        record_blocking(&store, &blobs, ws, "notes.md", b"mine", &Author::YOU).unwrap().unwrap();
+        record_blocking(&store, &blobs, ws, "notes.md", b"mine", &Author::YOU, None).unwrap().unwrap();
         // Its echo from the watcher, while an agent runs: still one version, yours.
         std::fs::write(root.join("notes.md"), "mine").unwrap();
-        assert!(capture(&store, &blobs, &saved, &root, ws, "notes.md", Some(agent)).unwrap().is_none());
+        assert!(capture(&store, &blobs, &saved, &root, ws, "notes.md", Some(agent), None).unwrap().is_none());
         // Without the save on record the same content would be the agent's.
         assert_eq!(attribute(&Saved::default(), ws, "notes.md", &hash(b"mine"), Some(agent)), Author::agent(agent));
         // A later different change while the agent runs is the agent's.
         std::fs::write(root.join("notes.md"), "agent edit").unwrap();
-        let v = capture(&store, &blobs, &saved, &root, ws, "notes.md", Some(agent)).unwrap().unwrap();
+        let v = capture(&store, &blobs, &saved, &root, ws, "notes.md", Some(agent), None).unwrap().unwrap();
         assert_eq!((v.author_kind.as_str(), v.session_id), ("agent", Some(agent.to_string())));
         // With nothing running it is from outside Tendly.
         std::fs::write(root.join("notes.md"), "elsewhere").unwrap();
-        let v = capture(&store, &blobs, &saved, &root, ws, "notes.md", None).unwrap().unwrap();
+        let v = capture(&store, &blobs, &saved, &root, ws, "notes.md", None, None).unwrap().unwrap();
         assert_eq!(v.author_kind, "unknown");
         let kinds: Vec<String> = store
             .with(|c| list(c, &ws.to_string(), "notes.md"))
@@ -759,14 +849,14 @@ mod tests {
         store
             .with(|c| {
                 for i in 0..(VERSIONS_KEPT + 5) {
-                    insert(c, ws, "f", &format!("{i:064}"), 1, &Author::UNKNOWN, &now())?;
+                    insert(c, ws, "f", &format!("{i:064}"), 1, &Author::UNKNOWN, None, &now())?;
                 }
                 let kept = list(c, ws, "f")?;
                 assert_eq!(kept.len() as i64, VERSIONS_KEPT);
                 assert_eq!(kept[0].blob, format!("{:064}", VERSIONS_KEPT + 4));
                 // Old versions of a file: all go but the newest.
                 for i in 0..3 {
-                    insert(c, ws, "old", &format!("{i:064}"), 1, &Author::UNKNOWN, "2020-01-01T00:00:00.000Z")?;
+                    insert(c, ws, "old", &format!("{i:064}"), 1, &Author::UNKNOWN, None, "2020-01-01T00:00:00.000Z")?;
                 }
                 prune(c, ws, "old", &cutoff())?;
                 let left = list(c, ws, "old")?;
@@ -779,8 +869,8 @@ mod tests {
         let dir = temp();
         store
             .with(|c| {
-                insert(c, ws, "g", &"a".repeat(64), 1, &Author::UNKNOWN, "2020-01-01T00:00:00.000Z")?;
-                insert(c, ws, "g", &"b".repeat(64), 1, &Author::UNKNOWN, "2020-01-02T00:00:00.000Z")?;
+                insert(c, ws, "g", &"a".repeat(64), 1, &Author::UNKNOWN, None, "2020-01-01T00:00:00.000Z")?;
+                insert(c, ws, "g", &"b".repeat(64), 1, &Author::UNKNOWN, None, "2020-01-02T00:00:00.000Z")?;
                 Ok(())
             })
             .unwrap();
@@ -814,9 +904,88 @@ mod tests {
         std::fs::write(dir.join("image.png"), [0x89, b'P', b'N', b'G', 0, 0]).unwrap();
         std::fs::write(dir.join("big.log"), vec![b'x'; MAX_BYTES + 1]).unwrap();
         for path in ["image.png", "big.log", "missing.txt"] {
-            assert!(capture(&store, &dir.join("blobs"), &Saved::default(), &dir, ws, path, None).unwrap().is_none(), "{path}");
+            assert!(capture(&store, &dir.join("blobs"), &Saved::default(), &dir, ws, path, None, None).unwrap().is_none(), "{path}");
         }
         assert_eq!(count(&store), 0);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn hub_history_message_is_one_short_line_of_what_the_agent_said() {
+        let line = |said: &str| summary_line(said).unwrap_or_default();
+        assert_eq!(line("I'll tighten the title. Then I'll fix the footer."), "I'll tighten the title.");
+        // A short opener carries on into the next sentence.
+        assert_eq!(line("Pronto! Ajustei o título e o rodapé. Quer ver?"), "Pronto! Ajustei o título e o rodapé.");
+        // Markdown marks, list numbers, links and code fences are not prose.
+        assert_eq!(line("## **Updating** `index.html` now:\n\nmore"), "Updating index.html now");
+        assert_eq!(line("```js\nconst a = 1;\n```\n1. Rename [the page](https://example.com/a) title"), "Rename the page title");
+        assert_eq!(line("- [ ] keep this [bracket"), "[ ] keep this [bracket");
+        // A dot inside a name or a number ends nothing.
+        assert_eq!(line("Bumped version 1.2.3 in package.json and the lockfile"), "Bumped version 1.2.3 in package.json and the lockfile");
+        // Long sentences are cut on characters, not bytes.
+        let long = line(&"é".repeat(200));
+        assert_eq!(long.chars().count(), MESSAGE_CHARS);
+        assert!(long.ends_with('…'));
+        assert_eq!(line("  folded   over\ttabs  "), "folded over tabs");
+        for nothing in ["", "   \n\n", "```\ncode only\n```", "---", "***"] {
+            assert_eq!(summary_line(nothing), None, "{nothing:?}");
+        }
+    }
+
+    #[test]
+    fn hub_history_agent_versions_keep_the_message_and_others_do_not() {
+        let dir = temp();
+        let root = dir.join("ws");
+        std::fs::create_dir_all(&root).unwrap();
+        let blobs = dir.join("blobs");
+        let store = HubStore::memory();
+        let saved = Saved::default();
+        let ws = uuid::Uuid::new_v4();
+        let agent = uuid::Uuid::new_v4();
+        std::fs::write(root.join("a.md"), "one").unwrap();
+        let v = capture(&store, &blobs, &saved, &root, ws, "a.md", Some(agent), Some("Tightened the title.")).unwrap().unwrap();
+        assert_eq!((v.author_kind.as_str(), v.message.as_deref()), ("agent", Some("Tightened the title.")));
+        // The person's own save while the agent runs is not given the agent's words.
+        saved.remember(ws, "a.md", &hash(b"mine"));
+        std::fs::write(root.join("a.md"), "mine").unwrap();
+        let v = capture(&store, &blobs, &saved, &root, ws, "a.md", Some(agent), Some("Tightened the title.")).unwrap().unwrap();
+        assert_eq!((v.author_kind.as_str(), v.message), ("you", None));
+        // An agent that has said nothing yet leaves the message empty.
+        std::fs::write(root.join("a.md"), "three").unwrap();
+        let v = capture(&store, &blobs, &saved, &root, ws, "a.md", Some(agent), None).unwrap().unwrap();
+        assert_eq!((v.author_kind.as_str(), v.message), ("agent", None));
+        // The API shows the message beside the version.
+        let listed = store.with(|c| list(c, &ws.to_string(), "a.md")).unwrap();
+        let shown: Vec<Value> = listed.iter().map(|v| view(v, &HashMap::new())["message"].clone()).collect();
+        assert_eq!(shown, [Value::Null, Value::Null, json!("Tightened the title.")]);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn hub_history_message_comes_from_the_stored_conversation() {
+        let store = tendly_persistence::Store::open(":memory:").unwrap();
+        let dir = temp();
+        let workspace = store.create_workspace("talk", dir.to_str().unwrap()).unwrap();
+        let session = store
+            .create_session(workspace.id, tendly_domain::ProviderKind::ClaudeCode, "Landing page")
+            .unwrap()
+            .id;
+        // Nothing said yet: no message.
+        assert_eq!(stored_message(&store, session), None);
+        let say = |event: Value| {
+            store.append_conversation_event(session, event).unwrap();
+        };
+        say(json!({"type":"message","id":"u1","role":"user","text":"Fix the hero title","delta":false}));
+        assert_eq!(stored_message(&store, session), None);
+        say(json!({"type":"message","id":"a1","role":"assistant","text":"I'll shorten the **hero title** ","delta":true}));
+        say(json!({"type":"message","id":"a1","role":"assistant","text":"in `index.html`. Then the footer.","delta":true}));
+        say(json!({"type":"tool","id":"t1","name":"Edit","status":"running","text":"{\"file_path\":\"index.html\"}"}));
+        assert_eq!(stored_message(&store, session).as_deref(), Some("I'll shorten the hero title in index.html."));
+        // The next turn starts clean.
+        say(json!({"type":"message","id":"u2","role":"user","text":"Thanks","delta":false}));
+        assert_eq!(stored_message(&store, session), None);
+        // A conversation that does not exist has nothing to say.
+        assert_eq!(stored_message(&store, uuid::Uuid::new_v4()), None);
         std::fs::remove_dir_all(dir).ok();
     }
 
@@ -862,16 +1031,16 @@ mod tests {
         let store: crate::hub::Hub = Arc::new(HubStore::memory());
         let ws = uuid::Uuid::new_v4();
         std::fs::write(root.join("a.txt"), "first").unwrap();
-        let first = capture(&store, &blobs, &Saved::default(), &root, ws, "a.txt", None).unwrap().unwrap();
+        let first = capture(&store, &blobs, &Saved::default(), &root, ws, "a.txt", None, None).unwrap().unwrap();
         std::fs::write(root.join("a.txt"), "second").unwrap();
-        capture(&store, &blobs, &Saved::default(), &root, ws, "a.txt", None).unwrap().unwrap();
+        capture(&store, &blobs, &Saved::default(), &root, ws, "a.txt", None, None).unwrap().unwrap();
         let content = read_blob(&blobs, &first.blob).unwrap();
         let restored = restore_into(store.clone(), blobs.clone(), &root, ws, "a.txt", &content).await.unwrap();
         assert_eq!(std::fs::read_to_string(root.join("a.txt")).unwrap(), "first");
         assert_eq!((restored.author_kind.as_str(), restored.blob.as_str()), ("you", first.blob.as_str()));
         assert!(restored.id > first.id);
         // The watcher's echo of the restore adds nothing.
-        assert!(capture(&store, &blobs, saved(), &root, ws, "a.txt", None).unwrap().is_none());
+        assert!(capture(&store, &blobs, saved(), &root, ws, "a.txt", None, None).unwrap().is_none());
         // Restoring what the file already holds returns the latest version.
         let again = restore_into(store.clone(), blobs.clone(), &root, ws, "a.txt", &content).await.unwrap();
         assert_eq!(again.id, restored.id);

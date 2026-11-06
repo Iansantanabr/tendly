@@ -1,7 +1,6 @@
 -- hub.db: the fork's own SQLite database, beside Tendly's tendly.db.
 -- Source of truth is MIGRATIONS in crates/server/src/hub/store.rs; this file
--- mirrors it for planning. Entries 1-6 are live (never edit them); 7-8 are
--- proposed for the remaining milestones, in the order they would ship.
+-- mirrors it for planning. Every numbered entry below is live (never edit one).
 --
 -- Conventions (SQLite, not Postgres):
 --   ids      TEXT uuid, or INTEGER AUTOINCREMENT for append-only logs
@@ -146,8 +145,11 @@ CREATE TABLE hub_settings (
     updated_at TEXT NOT NULL
 );
 
----------------------------------------------------------------- proposed: 8 (M5, version messages)
-ALTER TABLE file_versions ADD COLUMN message TEXT;  -- "Ajustou o título" from the agent turn that wrote it
+---------------------------------------------------------------- live: 8 (M5, version messages)
+-- One line of what the agent said in the turn that wrote the version (first
+-- sentence, at most 80 characters, no model call). NULL for the person's own
+-- versions, for changes from outside Tendly and for versions kept before this.
+ALTER TABLE file_versions ADD COLUMN message TEXT;
 
 ---------------------------------------------------------------- later (multi-user, after the VPS)
 -- Not a migration yet. Sketch so today's tables don't paint us into a corner:

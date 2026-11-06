@@ -5,7 +5,7 @@ import Icon from "../Icon.vue";
 import GitDiffLines from "../GitDiffLines.vue";
 import { useI18n } from "../../i18n";
 import { openConversation } from "./start";
-import { ago, authorLabel, conversationOf, listVersions, readVersion, restoreVersion, size, unifiedDiff, type FileVersion } from "./history";
+import { ago, authorLabel, conversationOf, listVersions, messageOf, readVersion, restoreVersion, size, unifiedDiff, type FileVersion } from "./history";
 
 const props = defineProps<{ workspaceId: string; path: string; dirty: boolean }>();
 const emit = defineEmits<{ close: []; restored: [] }>();
@@ -117,6 +117,7 @@ watch(() => [props.workspaceId, props.path], () => { contents.clear(); selected.
         <li v-for="version in versions" :key="version.id" class="history-row">
           <button type="button" :class="['history-item', { active: version.id === selected }]" :aria-pressed="version.id === selected" :aria-current="version.id === selected ? 'true' : undefined" @click="select(version.id)">
             <span :class="['history-author', version.author_kind]">{{ authorLabel(version, t) }}</span>
+            <span v-if="messageOf(version)" class="history-message" :title="messageOf(version)!">{{ messageOf(version) }}</span>
             <span class="history-meta"><time :datetime="version.created_at" :title="new Date(version.created_at).toLocaleString()">{{ ago(version.created_at, t) }}</time> · {{ size(version.size) }}</span>
           </button>
           <button
@@ -137,6 +138,7 @@ watch(() => [props.workspaceId, props.path], () => { contents.clear(); selected.
           {{ t('Changed by') }}
           <button type="button" class="history-session" :title="t('Open the conversation')" @click="openConversation(conversationOf(chosen)!)">{{ authorLabel(chosen, t) }}<Icon name="arrow" :size="12" /></button>
         </p>
+        <p v-if="messageOf(chosen)" class="history-said"><span class="history-said-label">{{ t('The agent said') }}</span> {{ messageOf(chosen) }}</p>
         <p v-if="confirming" class="history-warning" role="alert">{{ t('This file has unsaved changes. Restoring replaces your draft with this version.') }}</p>
         <p v-if="comparing" class="history-note">{{ t('Comparing…') }}</p>
         <pre v-else-if="viewing" class="history-content" tabindex="0" :aria-label="t('Content of this version')">{{ content }}</pre>
@@ -167,6 +169,9 @@ watch(() => [props.workspaceId, props.path], () => { contents.clear(); selected.
 .history-author{font-size:var(--text-sm);font-weight:550;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .history-author.agent{color:var(--accent)}
 .history-author.unknown{color:var(--muted)}
+.history-message{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:var(--text-xs)}
+.history-said{margin:0;padding:5px 10px;border-bottom:1px solid var(--line);color:var(--ink);font-size:var(--text-sm);overflow-wrap:anywhere}
+.history-said-label{color:var(--muted);font-size:var(--text-xs)}
 .history-meta{font-size:var(--text-xs);color:var(--faint)}
 .history-detail{display:flex;flex-direction:column;min-width:0;min-height:0;flex:1}
 .history-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid var(--line)}

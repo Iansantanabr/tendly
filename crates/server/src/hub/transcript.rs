@@ -209,8 +209,51 @@ fn argument_of(text: &str) -> Option<String> {
     Some(one_line(pick, ARGUMENT_CHARS)).filter(|value| !value.is_empty())
 }
 
+/// What the agent said last in the turn these events end in: the text of its
+/// newest message since the person last spoke, streamed pieces added up.
+/// Nothing when the agent has not spoken in this turn yet, so words from an
+/// earlier turn are never taken for what it is doing now.
+pub(crate) fn last_agent_text(events: &[Value]) -> Option<String> {
+    let mut last: Option<(String, String)> = None;
+    for event in events {
+        match event["type"].as_str() {
+            Some("message") => {}
+            Some("cleared") => {
+                last = None;
+                continue;
+            }
+            _ => continue,
+        }
+        let (Some(id), Some(text)) = (event["id"].as_str(), event["text"].as_str()) else {
+            continue;
+        };
+        match event["role"].as_str() {
+            Some("assistant") => {}
+            Some("user") => {
+                last = None;
+                continue;
+            }
+            _ => continue,
+        }
+        let delta = event["delta"].as_bool() == Some(true);
+        match &mut last {
+            Some((was, said)) if was == id => {
+                if delta {
+                    said.push_str(text);
+                } else {
+                    *said = text.to_owned();
+                }
+            }
+            // A new message with nothing in it yet does not hide the one before.
+            _ if text.trim().is_empty() => {}
+            _ => last = Some((id.to_owned(), text.to_owned())),
+        }
+    }
+    last.map(|(_, said)| said).filter(|said| !said.trim().is_empty())
+}
+
 /// `text` folded onto one line and cut to `limit` characters.
-fn one_line(text: &str, limit: usize) -> String {
+pub(crate) fn one_line(text: &str, limit: usize) -> String {
     let folded = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if folded.chars().count() <= limit {
         return folded;
@@ -354,6 +397,31 @@ mod tests {
             blocks(&events),
             vec!["[Tool: TodoWrite]", "[The conversation was cleared here.]", "[Error: Rate limited]"]
         );
+    }
+
+    #[test]
+    fn hub_transcript_last_agent_text_is_this_turns_newest_message() {
+        let mut events = vec![
+            said("u1", "user", "Fix the title", false),
+            said("a1", "assistant", "Looking at ", true),
+            said("a1", "assistant", "the page.", true),
+            tool("t1", "Read", "running", r#"{"file_path":"/a/index.html"}"#),
+        ];
+        assert_eq!(last_agent_text(&events).as_deref(), Some("Looking at the page."));
+        // The finished message replaces its pieces; a newer one wins.
+        events.push(said("a1", "assistant", "Looking at the page now.", false));
+        assert_eq!(last_agent_text(&events).as_deref(), Some("Looking at the page now."));
+        events.push(said("a2", "assistant", "I'll tighten the title.", false));
+        events.push(said("a3", "assistant", "  ", true));
+        assert_eq!(last_agent_text(&events).as_deref(), Some("I'll tighten the title."));
+        // Once the person speaks again, the earlier turn's words no longer count.
+        events.push(said("u2", "user", "Now the footer", false));
+        assert_eq!(last_agent_text(&events), None);
+        events.push(said("a4", "assistant", "On it.", true));
+        assert_eq!(last_agent_text(&events).as_deref(), Some("On it."));
+        events.push(json!({"type":"cleared"}));
+        assert_eq!(last_agent_text(&events), None);
+        assert_eq!(last_agent_text(&[]), None);
     }
 
     #[test]

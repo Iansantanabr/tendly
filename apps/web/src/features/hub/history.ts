@@ -13,6 +13,8 @@ export interface FileVersion {
   session_id: string | null;
   session_title?: string | null;
   created_at: string;
+  /** One line of what the agent said it was doing; only on an agent's version. */
+  message?: string | null;
 }
 export interface FileVersionContent extends FileVersion { content: string; }
 
@@ -33,6 +35,12 @@ export function authorLabel(version: Pick<FileVersion, "author_kind" | "session_
 /** The conversation an agent's version came from, when there is one to open. */
 export function conversationOf(version: Pick<FileVersion, "author_kind" | "session_id">): string | null {
   return version.author_kind === "agent" && version.session_id ? version.session_id : null;
+}
+
+/** What the agent said about a version, when it said anything. */
+export function messageOf(version: Pick<FileVersion, "author_kind" | "message">): string | null {
+  const said = version.author_kind === "agent" ? version.message?.trim() : "";
+  return said || null;
 }
 
 export function ago(iso: string, t: Translate, now = Date.now()): string {

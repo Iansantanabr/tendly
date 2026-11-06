@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ago, authorLabel, lineOps, size, unifiedDiff } from './history.ts';
+import { ago, authorLabel, lineOps, messageOf, size, unifiedDiff } from './history.ts';
 import { parseUnifiedDiff } from '../git-model.ts';
 
 const t = (source, values = {}) => source.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? `{${key}}`));
@@ -16,6 +16,20 @@ test('versions name who made them', () => {
   assert.equal(ago('2026-11-05T09:00:00Z', t, NOW), '3 h ago');
   assert.equal(size(512), '512 B');
   assert.equal(size(2048), '2.0 KB');
+});
+
+test('only an agent version shows a message, and the panel shows it in the row and in the details', () => {
+  assert.equal(messageOf({ author_kind: 'agent', message: ' Tightened the title. ' }), 'Tightened the title.');
+  assert.equal(messageOf({ author_kind: 'agent', message: null }), null);
+  assert.equal(messageOf({ author_kind: 'agent' }), null);
+  assert.equal(messageOf({ author_kind: 'agent', message: '   ' }), null);
+  assert.equal(messageOf({ author_kind: 'you', message: 'not mine' }), null);
+  assert.equal(messageOf({ author_kind: 'unknown', message: 'nor this' }), null);
+  const panel = readFileSync(new URL('./FileHistoryPanel.vue', import.meta.url), 'utf8');
+  assert.match(panel, /<span v-if="messageOf\(version\)" class="history-message"/);
+  assert.match(panel, /<p v-if="messageOf\(chosen\)" class="history-said">/);
+  // A sentence to read is never the faint colour.
+  assert.match(panel, /\.history-message\{[^}]*color:var\(--muted\)/);
 });
 
 test('a line diff keeps what both sides share', () => {

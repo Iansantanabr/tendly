@@ -113,6 +113,8 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );",
+    // 8: one line of what the agent said, on the versions an agent wrote
+    "ALTER TABLE file_versions ADD COLUMN message TEXT;",
 ];
 
 pub struct HubStore {
@@ -355,7 +357,7 @@ mod tests {
         store
             .with(|c| {
                 let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-                assert_eq!(version, 7);
+                assert_eq!(version as usize, MIGRATIONS.len());
                 let (name, timezone): (String, Option<String>) =
                     c.query_row("SELECT name, timezone FROM automations", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
                 assert_eq!((name.as_str(), timezone), ("Morning report", None));
@@ -370,6 +372,50 @@ mod tests {
                 put("timezone", "America/Sao_Paulo")?;
                 assert!(put("timezone", "UTC").is_err(), "one row per key");
                 put("dictation", "off")?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_seven_database_upgrades_to_version_messages() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..7] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 7i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO file_versions(workspace_id, path, blob, size, author_kind, session_id, created_at)
+                 VALUES ('w', 'a.txt', 'h', 1, 'agent', 's', 'then')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute("INSERT INTO hub_settings(key, value, updated_at) VALUES ('timezone', 'America/Sao_Paulo', 'now')", [])
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version as usize, MIGRATIONS.len());
+                // Versions kept before the upgrade stay, with no message.
+                let (path, session, message): (String, Option<String>, Option<String>) = c.query_row(
+                    "SELECT path, session_id, message FROM file_versions",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )?;
+                assert_eq!((path.as_str(), session.as_deref(), message), ("a.txt", Some("s"), None));
+                let zone: String = c.query_row("SELECT value FROM hub_settings WHERE key = 'timezone'", [], |r| r.get(0))?;
+                assert_eq!(zone, "America/Sao_Paulo");
+                c.execute(
+                    "INSERT INTO file_versions(workspace_id, path, blob, size, author_kind, created_at, message)
+                     VALUES ('w', 'a.txt', 'i', 1, 'agent', 'now', 'Tightened the title.')",
+                    [],
+                )?;
+                let kept: Option<String> =
+                    c.query_row("SELECT message FROM file_versions ORDER BY id DESC LIMIT 1", [], |r| r.get(0))?;
+                assert_eq!(kept.as_deref(), Some("Tightened the title."));
                 Ok(())
             })
             .unwrap();
