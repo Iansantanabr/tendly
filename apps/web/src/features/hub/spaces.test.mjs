@@ -142,7 +142,6 @@ test('every space string has a pt-BR translation', () => {
   const dir = new URL('./', import.meta.url);
   const translations = {
     ...JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8')),
-    ...JSON.parse(readFileSync(new URL('m2-spaces.pt-BR.json', dir), 'utf8')),
   };
   const source = readFileSync(new URL('SpaceMenu.vue', dir), 'utf8');
   const keys = new Set(['A space needs a name', 'Space names are at most 80 characters', 'A space with this name already exists']);

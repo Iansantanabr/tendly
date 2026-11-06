@@ -242,7 +242,7 @@ function chooseMention(hit: SearchHit | undefined) {
 const fileInput = ref<HTMLInputElement>();
 const OTHER_ANSWER = '__tendly_other__';
 const canSendIgnoringText = computed(() => !isPreview.value && supported.value && mode.value === 'structured' && !loading.value && !actionBusy.value && !turnBusy.value && streamState.value === 'connected' && !uploading.value);
-const canSend = computed(() => !isPreview.value && supported.value && mode.value === 'structured' && !loading.value && !actionBusy.value && !turnBusy.value && streamState.value === 'connected' && !uploading.value && canSendMessage(draft.value.text, attachments.value));
+const canSend = computed(() => !isPreview.value && supported.value && mode.value === 'structured' && !loading.value && !actionBusy.value && !turnBusy.value && streamState.value === 'connected' && !uploading.value && hasSomethingToSend());
 const selectedEffort = ref('');
 /** A launch flag for this session only; it never rewrites a shared host configuration. */
 const canTuneModel = computed(() => props.session.provider !== 'terminal');
@@ -843,7 +843,7 @@ watch([() => props.session.id, () => draft.value.text], () => { sendWhenReady.va
 async function send(queue = false) {
   if (canQueue.value) { if (queue) queueDraft(); else await steerDraft(); return; }
   if (!canSend.value) {
-    if ((booting.value || loading.value || streamState.value === 'connecting') && canSendMessage(draft.value.text, attachments.value)) sendWhenReady.value = true;
+    if ((booting.value || loading.value || streamState.value === 'connecting') && hasSomethingToSend()) sendWhenReady.value = true;
     return;
   }
   // This client exposes no commands, so a bare slash command would reach the
@@ -912,6 +912,8 @@ function removeAttachment(path: string) { attachments.value = attachments.value.
 /** Files open on the Mesa in this conversation's workspace, offered as one-click context. */
 /** Conversations pasted as links, shown as chips and named in the message on send. */
 const linkedConversations = computed(() => conversationChips(props.session.id));
+/** Text, a file, or (fork) only a linked conversation: "read this one" is a message too. */
+function hasSomethingToSend() { return canSendMessage(draft.value.text, attachments.value) || linkedConversations.value.length > 0; }
 const linkNotice = ref('');
 /** Text put where the caret is, as if typed: v-model follows, and the caret lands after it. */
 function insertIntoComposer(text: string) {
