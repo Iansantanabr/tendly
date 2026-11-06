@@ -64,6 +64,23 @@ const MIGRATIONS: &[&str] = &[
         created_at TEXT NOT NULL
     );
     CREATE INDEX file_versions_by_path ON file_versions(workspace_id, path, id);",
+    // 4: publications
+    "CREATE TABLE publications (
+        slug TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        path TEXT NOT NULL,
+        visibility TEXT NOT NULL CHECK (visibility IN ('team', 'password', 'public')),
+        password_hash TEXT,
+        mode TEXT NOT NULL CHECK (mode IN ('frozen', 'live')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        frozen_at TEXT,
+        UNIQUE (workspace_id, path)
+    );
+    CREATE TABLE publication_secret (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        secret TEXT NOT NULL
+    );",
 ];
 
 pub struct HubStore {
@@ -122,6 +139,30 @@ mod tests {
             .unwrap();
         assert_eq!(version as usize, MIGRATIONS.len());
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn publications_are_one_per_file_with_checked_values() {
+        let store = HubStore::memory();
+        store
+            .with(|c| {
+                let insert = |slug: &str, path: &str, visibility: &str, mode: &str| {
+                    c.execute(
+                        "INSERT INTO publications(slug, workspace_id, path, visibility, mode, created_at, updated_at)
+                         VALUES (?1, 'w', ?2, ?3, ?4, 'now', 'now')",
+                        rusqlite::params![slug, path, visibility, mode],
+                    )
+                };
+                insert("a-1234", "a.html", "team", "frozen")?;
+                assert!(insert("b-1234", "a.html", "public", "live").is_err(), "one per file");
+                assert!(insert("a-1234", "b.html", "public", "live").is_err(), "slug taken");
+                assert!(insert("c-1234", "c.html", "everyone", "live").is_err());
+                assert!(insert("d-1234", "d.html", "public", "sometimes").is_err());
+                c.execute("INSERT INTO publication_secret(id, secret) VALUES (1, 's')", [])?;
+                assert!(c.execute("INSERT INTO publication_secret(id, secret) VALUES (2, 's')", []).is_err());
+                Ok(())
+            })
+            .unwrap();
     }
 
     #[test]
