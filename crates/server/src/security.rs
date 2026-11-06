@@ -292,7 +292,8 @@ impl Security {
         // An origin has no path, so anything after the authority disqualifies it.
         !authority.contains('/') && self.addressed_by_ip(authority)
     }
-    fn authenticated(&self, headers: &axum::http::HeaderMap, via_tailnet: bool) -> bool {
+    /// Also asked by the fork's published pages (`hub/publish.rs`) for team-only links.
+    pub(crate) fn authenticated(&self, headers: &axum::http::HeaderMap, via_tailnet: bool) -> bool {
         let token = if via_tailnet {
             &self.access_token
         } else {
