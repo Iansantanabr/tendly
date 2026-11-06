@@ -1,0 +1,73 @@
+M5 — os "could" que não dependem de conta externa. Concluído em 2026-11-06.
+Os sete itens foram feitos, um commit por item, nenhum pulado. Nenhuma conversa de agente foi aberta e nenhuma
+automação de agente rodou.
+
+ENTREGUE
+1. Mensagem por versão do histórico (migração 8, file_versions.message): versão escrita por agente guarda a primeira
+   frase (até 80 caracteres) do que ele disse no turno em andamento, lida da conversa guardada, sem chamar modelo.
+   Aparece na linha da versão e no detalhe ("O agente disse …").
+2. Integrações → "Chaves encontradas sem registro": GET /api/hub/catalog/env-keys lista os NOMES das variáveis dos
+   .env / .env.<x> de cada projeto, por arquivo. Nunca valores: o que vem depois do "=" é pulado byte a byte.
+3. Integrações → "Fora de uso": seção recolhida com os MCPs desligados ou nunca configurados (unused: true).
+4. Integrações → "Cofre do 1Password", só leitura: GET /api/hub/catalog/vault roda apenas op --version, op whoami e
+   op vault list; mostra login e nomes dos cofres, ou como instalar. Não recebe nem guarda token, não lê itens.
+5. Automações → "Jobs do servidor": GET /api/hub/automations/server-jobs lê crontab -l, LaunchAgents (macOS) e
+   systemctl list-timers (Linux); nome, frequência, comando com segredos ocultos. Só leitura.
+6. Fixar mensagem no topo da conversa (migração 9, pinned_messages): GET/PUT/DELETE /api/hub/sessions/{id}/pin; uma
+   por conversa, só mensagem sua; alfinete embaixo da mensagem e barra fina com "Desafixar". Coube no ChatSessionPane
+   com duas inserções de uma linha.
+7. "Reportar um problema" no rodapé da barra lateral: no clique cria apps/reportes/ no primeiro projeto (o scaffold
+   ganhou template: blank | issues) e abre na Mesa; depois só abre. A lista fica em apps/reportes/data/issues.json.
+
+TESTES
+- hub: 153 ok (28 novos no M5). Servidor inteiro: 583 ok, 2 ignorados. Web: 906 ok (12 novos); typecheck ok.
+- Contraste: 36 pares, 0 falhas AA nos dois temas (não mexi em cores).
+- Servidor rodando (depois de cada build.sh): hub.db em user_version 9; 50 integrações, 10 delas "fora de uso";
+  env-keys vazio (seus dois projetos não têm .env); vault "não instalado"; 10 LaunchAgents em server-jobs; fixar /
+  trocar / recusar / desafixar numa conversa existente, terminando com a tabela vazia; template desconhecido → 400.
+
+NÃO EXERCITADO AO VIVO (leia antes de confiar)
+- Uma versão de agente com mensagem: precisa de um agente editando um arquivo, e esta rodada não abre conversas.
+  Coberto por testes (conversa guardada → mensagem → linha → API).
+- O op de verdade: a CLI do 1Password NÃO está instalada neste Mac. Com login, sem login e conta de serviço foram
+  testados com um op de mentira. O formato do whoami / vault list é o que eu conheço da CLI 2.x; se o seu responder
+  diferente, a tela diz "formato que o Tendly não entende" em vez de inventar.
+- systemctl list-timers: só existe no Linux; o parser foi testado com uma tabela escrita à mão. Conferir na VPS.
+- Um crontab com entradas (o seu está vazio) e um .env real (seus projetos não têm).
+- A criação do app reportes no servidor de verdade: de propósito, só no seu clique. Coberta pelo teste da rota.
+- Nada foi visto num navegador.
+
+DECISÕES QUE VOCÊ PODE QUERER INVERTER
+- Versão sem mensagem quando o agente ainda não falou no turno (em vez de pegar a frase do turno anterior).
+- "Chaves sem registro" = todas as encontradas (não há cadastro para comparar); .env.example e afins e .envrc ficam
+  de fora.
+- "Não verificado", "Precisa autorizar" e "Falhou" continuam na lista principal; só desligado / nunca configurado
+  vai para "Fora de uso".
+- Abrir Integrações nunca faz o 1Password pedir aprovação: sem login, é o botão "Listar cofres" que pede.
+- Jobs do servidor sem a coluna "Se quebrar"; frequência nos termos do sistema (cron, chaves do launchd).
+- A mensagem fixada guarda uma cópia do texto (até 4.000 caracteres) no hub.db; a barra abre o texto inteiro, mas
+  não pula até a mensagem.
+- O app de problemas se chama "Problemas reportados" (pasta apps/reportes/), tile rosa.
+
+PARA CONFERIR NO NAVEGADOR
+- Arquivo → relógio: peça a um agente para editar um arquivo e veja a frase na versão dele.
+- Integrações: subtítulo "40 integrações"; "Fora de uso 10" fechado, abre com clique e teclado; "Cofre do 1Password"
+  com as instruções de instalação; "Chaves encontradas sem registro" vazio (crie um .env de teste para ver a lista).
+- Automações, no fim: "Jobs do servidor" fechado; ao abrir, "LaunchAgents 10"; "Verificar de novo".
+- Conversa: alfinete embaixo de uma mensagem sua → barra no topo; fixar outra troca; "Desafixar"; mensagem longa
+  abre ao clicar no texto. Na página da sessão e no celular, veja se o "Desafixar" não fica embaixo do menu
+  flutuante do canto (é o ponto visual em que menos confio).
+- Barra lateral, embaixo: "Reportar um problema" → cria e abre o app; clicar de novo só abre; o rodapé fica grudado
+  embaixo nas abas Workspaces e Conversas e na gaveta do celular.
+- Tudo isso no tema escuro e em 360 px.
+
+BLOQUEADO EM VOCÊ
+- Nada bloqueia o M5. Para ver o cofre de verdade: brew install 1password-cli, reiniciar o servidor, ligar a
+  integração do app com a CLI (ou OP_SERVICE_ACCOUNT_TOKEN no ambiente).
+- Continua de antes: ~/.tendly/conversations/m4-test-page.html (sobra do M4, que eu não consigo apagar daqui):
+  rm ~/.tendly/conversations/m4-test-page.html
+
+Ganchos novos no upstream: ChatSessionPane.vue (2 imports + 2 linhas), WorkspaceSidebar.vue (1 import + 1 linha),
+Icon.vue (traço pin). Listados no FORK.md. Detalhes e decisões de cada item: replica/progress/M5.md.
+Os commits levam a linha Co-Authored-By que as regras do piloto pedem (Claude Opus 5.5), mas esta rodada foi feita
+pelo Claude Fable 5.1.

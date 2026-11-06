@@ -91,7 +91,8 @@ Cabeçalho de arquivo
 Painel de histórico
   partes     lista de versões (autor: Você / Agente · conversa / Fora do Tendly; tempo; tamanho) + detalhe (legenda, diff GitDiffLines, Ver esta versão, Restaurar)
   estados    vazio ("Ainda não há versões…"), carregando, versão escolhida, rascunho sujo (Restaurar pede segundo clique), restaurando, erro
-  M1         o autor "Agente" vira link que abre a conversa; M5: mensagem curta por versão
+  M1         o autor "Agente" vira link que abre a conversa
+  M5         mensagem curta por versão de agente: na linha (uma linha, reticências, texto todo no title, --muted) e no detalhe ("O agente disse …")
   a11y       lista com aria-current na versão escolhida; o diff tem texto +/− além da cor
   usado em   S08
 ```
@@ -224,6 +225,61 @@ Página "Sem conexão" (M3, dentro do service worker)
   quando     o aparelho pede uma página e o servidor não responde; nada é servido do cache para fingir que funciona
   partes     título, uma frase (internet, Tailscale, servidor ligado), "Tentar de novo"
   regra      cores copiadas dos tokens claro/escuro (o worker não carrega o styles.css); texto em pt-BR ou inglês, pelo idioma do app
+```
+
+### M5
+
+```
+Seção recolhida (M5: "Fora de uso" nas Integrações, "Jobs do servidor" nas Automações)
+  base       <details> nativo, fechado; <summary> com seta (gira 90° aberta), nome e contador
+  regra      o que custa consultar só é pedido ao abrir (jobs do servidor); a seta não anima com reduced-motion
+  tokens     summary --muted / hover --fill-hover; contador --fill + --muted, raio --radius-full
+  a11y       teclado e leitor de tela do próprio <details>; 44px em toque
+```
+
+```
+Linha de integração (M5: `IntegrationRow.vue`, a mesma nas duas listas)
+  partes     ícone, nome, tag do plugin, transporte · destino (mono), dica de autorização ou motivo da falha, selo de status
+  estados    conectado, precisa autorizar, falhou, não verificado; fora de uso: "Não configurado" ou "Desativado"
+```
+
+```
+Chaves encontradas em .env (M5, `EnvKeysSection.vue`)
+  partes     título + contador de chaves, dica (só nomes, nunca valores; guarde cópia num gerenciador de senhas), por projeto: cartão com um arquivo por linha
+  arquivo    caminho (mono), "Chaves" (nomes com cara de credencial, --ink, peso 600) e "Outras variáveis" (--muted): a diferença vem escrita, não só na cor
+  estados    procurando, nenhum arquivo, lista, projeto com mais arquivos do que o mostrado, erro na tela
+  regra      nenhum botão abre conversa
+```
+
+```
+Cofre do 1Password (M5, `VaultSection.vue`)
+  estados    CLI ausente (como instalar: comando do Homebrew no Mac + link do guia), sem login ("Listar cofres": é o botão que faz o 1Password pedir aprovação, nunca a abertura da página),
+             com login (endereço da conta, selo "conta de serviço", nomes dos cofres em pílulas), erro em frase fixa traduzida
+  regra      só leitura: nenhum campo de texto, nenhum lugar para colar token; a dica da conta de serviço aparece sempre
+  tokens     cartão --surface / --line / --radius-lg; selo ok --ok sobre --ok-soft, sem login --warn-ink sobre --warn-soft
+```
+
+```
+Job do servidor (M5, `ServerJobs.vue`)
+  partes     nome, "Desativado" quando for, Frequência (mono, nos termos do sistema: cron ou chaves do launchd), Próxima execução (systemd), Comando (mono, quebra linha, segredos como ***)
+  grupos     crontab, systemd timers, LaunchAgents, cada um com contador
+  estados    fechado (nada consultado), olhando, vazio ("Nada agendado foi encontrado em: …"), lista, erro; "Verificar de novo"
+```
+
+```
+Mensagem fixada (M5, `PinnedMessageBar.vue` + `PinMessageButton.vue`)
+  barra      acima da linha do tempo: alfinete (--accent), a mensagem em uma linha, "Desafixar"; clicar no texto abre a mensagem inteira (aria-expanded, rolável)
+  botão      alfinete embaixo de cada mensagem sua, ao lado de Copiar (aria-pressed; --accent quando é a fixada; --danger se falhar)
+  estados    nada fixado (a barra não existe), fixada, aberta, desafixando, erro na barra
+  regra      uma por conversa; fora das prévias; 44px em toque na barra (o botão segue os 32px do Copiar do upstream)
+```
+
+```
+Reportar um problema (M5, `ReportProblem.vue`)
+  onde       rodapé da barra lateral, grudado embaixo (margin-top:auto), com linha --fill-hover em cima
+  estados    parado, "Abrindo…" (desabilitado), erro embaixo do botão (role=alert)
+  regra      só age no clique; a primeira vez cria o app, as seguintes só abrem
+  app        página própria (não usa os tokens do Tendly: roda num iframe): formulário, lista com Aberto/Resolvido, remover em dois cliques, pt/en pelo navegador, claro/escuro
 ```
 
 Fora deste sistema: modais, menus de contexto, árvore de arquivos, terminal e chat são do upstream e seguem como estão.

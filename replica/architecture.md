@@ -27,10 +27,12 @@ Um banco por responsabilidade (upstream vs fork), sem microsserviços.
 
 ## Schema
 
-Tabelas em `hub.db`: migrações 1 a 7 em produção (a 7, `hub_settings`, entrou no M4); proposta: 1 coluna nova (migração 8).
+Tabelas em `hub.db`: migrações 1 a 9 em produção (a 8, `file_versions.message`, e a 9, `pinned_messages`, entraram no M5).
 Acesso: checagens na camada de dados. O `guard` autentica todo `/api/`, e cada rota do hub valida o id do workspace e o caminho (canonicaliza e confere o prefixo).
 
-O SQL completo, com as migrações em produção e as propostas, está em [`schema.sql`](schema.sql). Restrições importantes:
+O SQL completo está em [`schema.sql`](schema.sql). Restrições importantes:
+
+- `pinned_messages.session_id PRIMARY KEY`: uma mensagem fixada por conversa.
 
 - `publications UNIQUE(workspace_id, path)`: publicar o mesmo arquivo de novo edita a publicação, não cria outra.
 - `push_subscriptions.endpoint UNIQUE`: o mesmo navegador inscrito duas vezes vira uma linha só.
@@ -104,6 +106,18 @@ Fora da API (kit em `deploy/`, feito no M4, ainda não rodado numa VPS):
 
 O link publicado usa `public_base_url` quando definido (`public_url` em cada publicação; "só a equipe" continua no endereço do app). O servidor só responde por esse nome em `/p/...`: ele nunca vira `Host` do app nem `Origin` aceito pela API (gancho no `guard`).
 
+### M5: os "could" sem conta externa (feito)
+
+| método e caminho | faz | saída |
+| --- | --- | --- |
+| `GET history`, `GET history/versions/{id}` (já existiam) | cada versão traz `message`: uma linha do que o agente disse | `message: texto \| null` |
+| `GET catalog/integrations` (já existia) | cada servidor pode vir com `unused: true` | lista |
+| `GET catalog/env-keys` | nomes das variáveis dos `.env` de cada projeto, nunca valores | `{workspaces:[{workspace_id, workspace_name, files:[{path, names:[{name, secret}]}], truncated}]}` |
+| `GET catalog/vault?unlock=` | CLI `op` do 1Password: login e nomes dos cofres | `{installed, platform, version?, signed_in, account?, service_account, listed, vaults, error?}` |
+| `GET automations/server-jobs` | crontab, LaunchAgents, timers do systemd, só leitura | `{jobs:[{source, name, schedule, next?, command, disabled?}], sources, truncated}` |
+| `GET\|PUT\|DELETE sessions/{id}/pin` | a mensagem fixada no topo da conversa (`PUT {message_id}`) | `{pin: null \| {message_id, text, pinned_at}}` |
+| `POST apps/{ws}/scaffold` (já existia) | aceita `template: blank \| issues` | app (201) |
+
 ### Webhooks e jobs
 
 Webhooks entrando: nenhum. Webhooks saindo: Web Push (M3).
@@ -144,7 +158,8 @@ Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeir
   - o domínio dos publicados só serve `/p/*` (no Caddy e de novo no servidor) e não é origem aceita pela API;
   - o publicado fica fora de `/api` e com CSP sandbox;
   - apps rodam na mesma origem e sem sandbox, aceitável com um usuário e código do próprio agente; no multiusuário passam para uma origem separada (`apps.<domínio>`);
-  - o 1Password (M5) usa o CLI `op` com um token de serviço guardado no `secrets` do Tendly, nunca no `hub.db`.
+  - o 1Password (M5, feito só leitura) usa o CLI `op`; o token da conta de serviço fica na variável `OP_SERVICE_ACCOUNT_TOKEN` do ambiente do servidor e o Tendly não o recebe nem guarda;
+  - a lista de chaves dos `.env` (M5) devolve só nomes: o valor é pulado byte a byte na leitura.
 - **Privacidade do ditado:** a Web Speech API do Chrome manda o áudio para o Google. Mostrar isso na primeira vez e deixar desligar. Um Whisper local fica para quando houver VPS com CPU sobrando.
 - **Mac dormindo:** a automação não roda e não é recuperada (a tela já mostra a próxima execução). Isso some na VPS.
 - **Apagar dados:** apagar uma publicação apaga a cópia congelada; apagar uma automação apaga as execuções; o histórico tem retenção. Não há dados de terceiros (LGPD/GDPR só entram no multiusuário).
@@ -177,11 +192,12 @@ Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeir
    - Falta: a VPS, os domínios e o DNS (do Ian), rodar a receita, trazer os dados do Mac.
    - Fecha o must "rodar 24h num servidor".
 
-6. **M5: coulds**
+6. **M5: coulds, feito o que não depende de conta externa**
    - Mensagem por versão (migração 8).
-   - Integrações: Fora de uso, chaves em `.env` sem registro (só nomes), cofre 1Password via `op`.
-   - Inventário de jobs do servidor (crontab e timers do systemd).
-   - Fixar mensagem, rail de ícones na Mesa, app de "Reportar bug", versão publicada de app por commit.
+   - Integrações: Fora de uso, chaves em `.env` (só nomes), cofre 1Password via `op` (só leitura).
+   - Inventário de jobs do servidor (crontab, LaunchAgents, timers do systemd).
+   - Fixar mensagem (migração 9), app de "Reportar um problema".
+   - Ficou de fora: rail de ícones na Mesa e versão publicada de app por commit (não estavam no pedido do M5).
 
 7. **Depois: multiusuário**
    - Pessoas, permissões por pasta, compartilhar conversa (ler/participar), "Entre nós", @menções, contas da organização.

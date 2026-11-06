@@ -31,7 +31,7 @@ Anel de uso de contexto e timer da sessão,chat,should,yes,yes,Tendly ContextRin
 Fila ou Agora ao mandar mensagem com agente rodando,chat,should,yes,yes,Tendly tem fila no ChatSessionPane (conferir rótulo)
 Tool calls colapsáveis e status ao vivo,chat,must,yes,yes,Tendly upstream
 Caminho de arquivo na resposta abre na Mesa,chat,must,yes,yes,Tendly upstream
-Fixar mensagem do usuário no topo,chat,could,yes,no,P11
+Fixar mensagem do usuário no topo,chat,could,yes,yes,M5; uma por conversa (alfinete embaixo da mensagem; barra com Desafixar); a barra não pula até a mensagem
 Ditado por voz embutido,chat,should,yes,yes,M2 (Web Speech; não testado com microfone); M4: liga/desliga em Configurações → Endereços e fuso horário
 Colar link de outra conversa como contexto,chat,should,yes,yes,M2
 Várias contas Claude e Codex ao mesmo tempo,contas,must,yes,yes,Tendly endpoints/perfis
@@ -42,7 +42,7 @@ Contas da organização com quem pode usar,contas,could,yes,skip,multiusuário f
 Renderizado ou Original para HTML e Markdown,arquivos,must,yes,yes,Tendly (markdown); conferir HTML
 Histórico de versões com autor e diff,arquivos,must,yes,yes,Fase 3
 Ver o arquivo como estava e restaurar,arquivos,must,yes,yes,Fase 3
-Mensagem estilo commit em cada versão,arquivos,could,yes,no,P09
+Mensagem estilo commit em cada versão,arquivos,could,yes,yes,M5; primeira frase do que o agente disse no turno (até 80 caracteres); sem chamar modelo; só em versões de agente
 Histórico mostra a conversa que causou a mudança,arquivos,should,yes,yes,M1
 Publicar: só o time / senha / qualquer um,publicar,must,yes,yes,Fase 3
 Publicar: congelado ou ao vivo,publicar,must,yes,yes,Fase 3
@@ -57,13 +57,13 @@ Editar automação com o chat,automações,must,yes,yes,Fase 2
 Agente cria e altera automações pela conversa,automações,must,yes,yes,Fase 2 (ferramentas tendly_automation_*)
 Rotinas de agente que abrem conversa e avisam,automações,must,yes,yes,Fase 2 (não testado: falta conta padrão)
 Automações do time com dono,automações,could,yes,skip,multiusuário
-Inventário de jobs do servidor com Se quebrar,automações,could,yes,no,P19; crons do sistema na VPS
+Inventário de jobs do servidor com Se quebrar,automações,could,yes,partial,M5: crontab + LaunchAgents (macOS) + timers do systemd (Linux) só leitura com segredos ocultos; sem a coluna Se quebrar; systemd a conferir na VPS
 Integrações: conectores com origem host e status,integrações,must,yes,yes,Fase 2
 Integrações: Testar de novo,integrações,must,yes,yes,Fase 2
 Integrações: Autorizar no claude.ai,integrações,should,yes,yes,M1
-Integrações: Fora de uso,integrações,could,yes,no,P21
-Integrações: chaves encontradas em .env sem registro,integrações,could,yes,no,P21; só nomes de variáveis
-Cofre de chaves 1Password,integrações,could,yes,no,P21
+Integrações: Fora de uso,integrações,could,yes,yes,M5; seção recolhida com os MCPs desligados ou nunca configurados
+Integrações: chaves encontradas em .env sem registro,integrações,could,yes,partial,M5: só nomes de variáveis por projeto e arquivo; sem Registrar pelo chat (abriria conversa) e sem cadastro para comparar
+Cofre de chaves 1Password,integrações,could,yes,partial,M5: só leitura pela CLI op (login e nomes dos cofres; nunca itens nem token); a CLI não está instalada neste Mac
 MCPs de cada pessoa,integrações,could,yes,skip,multiusuário
 Habilidades: lista com busca e origem,habilidades,must,yes,yes,Fase 2
 Habilidades: filtro por pasta e contagem,habilidades,should,yes,yes,M1
@@ -80,7 +80,7 @@ Versão publicada do app por commit,apps,could,yes,no,P28 Apps nas áreas
 Configurações: Contas de IA pessoais,configurações,must,yes,yes,Tendly upstream
 Configurações: Padrão do chat,configurações,should,yes,partial,Tendly Preferências
 Configurações: Segurança (2FA),configurações,could,yes,skip,só depois da VPS
-Botão Reportar bug,shell,could,yes,no,P10; poderia virar um app
+Botão Reportar bug,shell,could,yes,yes,M5; rodapé da barra lateral cria no clique o app apps/reportes (lista de problemas) e abre na Mesa
 Tema escuro,shell,must,yes,yes,Tendly upstream
 Celular: interface adaptada,celular,should,yes,partial,Tendly tem layout mobile; conferir no aparelho
 Celular: app instalável sem loja (PWA),celular,should,yes,yes,M3; manifest + service worker; instalar exige HTTPS (no iPhone: Adicionar à Tela de Início)
