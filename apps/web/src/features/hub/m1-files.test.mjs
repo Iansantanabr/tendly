@@ -98,7 +98,6 @@ test('every new M1 string has a Brazilian Portuguese translation with the same p
   const dir = new URL('.', import.meta.url);
   const translations = {
     ...JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8')),
-    ...JSON.parse(readFileSync(new URL('m1-files.pt-BR.json', dir), 'utf8')),
   };
   const sources = [
     'PublishDialog.vue', 'publish.ts', 'PublicationsList.vue', 'PublishedPanel.vue', 'SkillsPage.vue', 'catalog.ts',
@@ -113,7 +112,4 @@ test('every new M1 string has a Brazilian Portuguese translation with the same p
     assert.ok(key in translations, `missing pt-BR for ${JSON.stringify(key)}`);
     assert.deepEqual(placeholders(translations[key]), placeholders(key), key);
   }
-  // The file only adds strings: none of them overrides one already translated.
-  const base = JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8'));
-  for (const key of Object.keys(JSON.parse(readFileSync(new URL('m1-files.pt-BR.json', dir), 'utf8')))) assert.ok(!(key in base), `already in pt-BR.json: ${key}`);
 });

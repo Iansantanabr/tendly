@@ -43,7 +43,6 @@ test('every publishing string has a Brazilian Portuguese translation with the sa
   const dir = new URL('.', import.meta.url);
   const translations = {
     ...JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8')),
-    ...JSON.parse(readFileSync(new URL('m1-files.pt-BR.json', dir), 'utf8')),
   };
   const sources = ['PublishDialog.vue', 'publish.ts'].map(name => readFileSync(new URL(name, dir), 'utf8')).join('\n');
   const keys = new Set();

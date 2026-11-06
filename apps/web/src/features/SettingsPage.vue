@@ -53,15 +53,10 @@ const removeGuard = useRouter().beforeEach((to, from) => {
   return new Promise<boolean>(resolve => page.requestLeave(() => resolve(true)));
 });
 onBeforeUnmount(removeGuard);
-/** "Published" (hub) has no address of its own: it is shown over the routed section until another is chosen. */
-const published = ref(false);
-watch(() => props.section, () => { published.value = false; });
-function openPublished() {
-  if (published.value) return;
-  if (section.value === 'endpoints' && profilesPage.value) profilesPage.value.requestLeave(() => { published.value = true; });
-  else published.value = true;
-}
-function select(next: SettingsSection) { published.value = false; if (next !== section.value) emit('navigate', next); }
+/** "Published" (hub): a section of its own at /settings/published, listed apart from the upstream ones. */
+const published = computed(() => props.section === 'published');
+function openPublished() { if (!published.value) emit('navigate', 'published'); }
+function select(next: SettingsSection) { if (published.value || next !== section.value) emit('navigate', next); }
 </script>
 
 <template>
