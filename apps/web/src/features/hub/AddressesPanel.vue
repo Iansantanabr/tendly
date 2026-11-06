@@ -5,7 +5,7 @@
  * the public address published links are shown with, and whether the
  * microphone button exists at all.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { errorMessage } from "../api";
 import { useI18n } from "../../i18n";
 import {
@@ -54,6 +54,17 @@ async function load() {
 }
 onMounted(load);
 
+const zoneSelect = ref<HTMLSelectElement>();
+/** A list box opens at its top: bring the zone in use into view (Sao Paulo is
+ * row 200). Runs when the list arrives, after Vue has set the selection. */
+function showChosenZone(tries = 20) {
+  const box = zoneSelect.value, option = box?.selectedOptions[0];
+  // While the page slides in the list has no size yet: try again next frame.
+  if (!box || !option || !box.clientHeight) { if (tries > 0) requestAnimationFrame(() => showChosenZone(tries - 1)); return; }
+  box.scrollTop = option.offsetTop - box.offsetTop - box.clientHeight / 2 + option.offsetHeight / 2;
+}
+watch(() => [zoneList.value, ready.value], () => { void nextTick(() => showChosenZone()); }, { flush: "post", immediate: true });
+
 function flash(key: keyof HubSettings) {
   saved.value = key;
   clearTimeout(savedTimer);
@@ -98,7 +109,7 @@ async function toggleDictation(input: HTMLInputElement) {
       </label>
       <label class="addr-field">
         <span>{{ t('Time zone') }}</span>
-        <select v-model="zone" size="7" class="addr-zones" :disabled="!ready || saving === 'timezone'">
+        <select ref="zoneSelect" v-model="zone" size="7" class="addr-zones" :disabled="!ready || saving === 'timezone'">
           <option v-for="name in matching" :key="name" :value="name">{{ optionText(name) }}</option>
         </select>
       </label>

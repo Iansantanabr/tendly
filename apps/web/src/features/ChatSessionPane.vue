@@ -1853,4 +1853,8 @@ details.chat-branch-choices>summary{padding:6px 10px;font-size:var(--text-xs);co
 .chat-context-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 2px 6px; }
 .chat-context-chip { border: 1px dashed var(--line); background: none; border-radius: 999px; padding: 2px 10px; font: inherit; font-size: .82rem; color: var(--muted); cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-context-chip:hover { color: var(--ink); border-color: var(--accent); }
+/* Fork: the copy and pin buttons hang 26px under your message, but each row
+   clips its paint (VirtualRows `contain: paint`) and has only 12px below it:
+   they were cut in half and the next row took the click. Give them the room. */
+@media (hover:hover){.chat-pane:not(.is-phone) .chat-message.user{margin-bottom:30px}}
 </style>
