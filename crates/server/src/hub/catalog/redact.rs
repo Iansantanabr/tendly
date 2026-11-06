@@ -5,7 +5,7 @@
 const HIDDEN: &str = "***";
 
 /// Flag or variable names whose value is a credential.
-pub(super) fn secret_name(name: &str) -> bool {
+pub(in crate::hub) fn secret_name(name: &str) -> bool {
     let name = name.trim_start_matches('-').to_ascii_lowercase();
     if name.is_empty() {
         return false;
@@ -80,7 +80,7 @@ fn clean_word(word: &str) -> String {
 
 /// `command arg…` with credentials hidden: values of flags such as `--token`,
 /// `NAME=value` assignments, and anything that looks like a key on its own.
-pub(super) fn clean_command(command: &str, args: &[String]) -> String {
+pub(in crate::hub) fn clean_command(command: &str, args: &[String]) -> String {
     let mut out = vec![clean_word(command)];
     let mut hide_next = false;
     for arg in args {
@@ -107,7 +107,7 @@ pub(super) fn clean_command(command: &str, args: &[String]) -> String {
 }
 
 /// A launch line as one string (as `claude mcp list` prints it).
-pub(super) fn clean_command_line(line: &str) -> String {
+pub(in crate::hub) fn clean_command_line(line: &str) -> String {
     let mut words = line.split_whitespace();
     let Some(command) = words.next() else { return String::new() };
     let args: Vec<String> = words.map(str::to_owned).collect();

@@ -3,12 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { envKeyCount, splitByUse, splitEnvNames, vaultState } from './catalog.ts';
+import { JOB_SOURCE_LABEL, groupJobs } from './automations.ts';
 
 const here = new URL('.', import.meta.url);
 const read = name => readFileSync(new URL(name, here), 'utf8');
 
 /** The components and modules M5 added, whose strings and styles are checked below. */
-const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue', 'VaultSection.vue'];
+const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue', 'VaultSection.vue', 'ServerJobs.vue'];
 const MODULES = ['catalog.ts'];
 
 // ---------------------------------------------------------------- keys found in .env files
@@ -102,6 +103,36 @@ test('the vault section has three faces and no place for a token', () => {
   assert.match(api, /`\/hub\/catalog\/vault\$\{unlock \? "\?unlock=1" : ""\}`/);
   const info = /export interface VaultInfo \{([\s\S]*?)\n\}/.exec(api)[1];
   assert.doesNotMatch(info, /token|email|item|secret/i);
+});
+
+// ---------------------------------------------------------------- server jobs
+
+test('server jobs are grouped by scheduler and only read', () => {
+  const jobs = [
+    { source: 'launchd', name: 'com.example.sync', schedule: 'StartInterval 3600', command: '/usr/local/bin/sync --password ***' },
+    { source: 'crontab', name: 'report.sh', schedule: '30 6 * * 1-5', command: './report.sh' },
+    { source: 'systemd', name: 'tendly-backup.timer', schedule: '', next: 'Sat 2026-11-07 06:30:00 UTC', command: 'tendly-backup.service' },
+    { source: 'crontab', name: 'backup', schedule: '@daily', command: 'backup /data' },
+  ];
+  const groups = groupJobs(jobs);
+  assert.deepEqual(groups.map(g => [g.source, g.jobs.map(j => j.name)]), [
+    ['crontab', ['report.sh', 'backup']],
+    ['systemd', ['tendly-backup.timer']],
+    ['launchd', ['com.example.sync']],
+  ]);
+  assert.deepEqual(groupJobs([]), []);
+  assert.equal(JOB_SOURCE_LABEL.launchd, 'LaunchAgents');
+
+  const section = read('ServerJobs.vue');
+  assert.match(read('AutomationsPage.vue'), /<ServerJobs \/>/);
+  // Collapsed, and nothing is run on the machine until the section is opened.
+  assert.match(section, /<details class="jobs" @toggle="opened">/);
+  assert.doesNotMatch(section, /onMounted/);
+  // Read only: the one request is a GET, and no job can be run, changed or removed from here.
+  assert.doesNotMatch(section, /method:|json\(|runAutomation|deleteAutomation|updateAutomation/);
+  assert.match(read('automations.ts'), /loadServerJobs = \(\) => request<ServerJobList>\("\/hub\/automations\/server-jobs"\)/);
+  assert.match(section, /Keys and passwords in commands are hidden/);
+  assert.match(section, /@media \(pointer: coarse\) \{ \.jobs summary, \.jobs \.small-button \{ min-height: 44px; \} \}/);
 });
 
 // ---------------------------------------------------------------- translations and design rules

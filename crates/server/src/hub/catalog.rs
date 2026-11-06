@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 mod env_keys;
 mod integrations;
-mod redact;
+pub(super) mod redact;
 mod skills;
 mod vault;
 
@@ -29,7 +29,7 @@ fn home() -> Option<PathBuf> {
 }
 
 /// Reads a small text file; anything over `limit` bytes is cut off.
-fn read_capped(path: &std::path::Path, limit: u64) -> Option<String> {
+pub(super) fn read_capped(path: &std::path::Path, limit: u64) -> Option<String> {
     use std::io::Read;
     let file = std::fs::File::open(path).ok()?;
     let mut text = String::new();

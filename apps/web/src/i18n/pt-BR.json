@@ -2783,5 +2783,14 @@
  "1Password answered in a form Tendly does not understand.": "O 1Password respondeu num formato que o Tendly não entende.",
  "1Password could not list the vaults.": "O 1Password não conseguiu listar os cofres.",
  "1Password did not sign in. Approve the request in the 1Password app, or sign in with a service account.": "O 1Password não fez login. Aprove o pedido no app do 1Password ou use uma conta de serviço.",
- "1Password took too long to answer.": "O 1Password demorou demais para responder."
+ "1Password took too long to answer.": "O 1Password demorou demais para responder.",
+ "Server jobs": "Jobs do servidor",
+ "What this machine runs on a schedule outside Tendly. Read only: to change one, edit it where it lives. Keys and passwords in commands are hidden.": "O que esta máquina roda com hora marcada fora do Tendly. Só leitura: para mudar um, edite onde ele mora. Chaves e senhas nos comandos ficam ocultas.",
+ "Looking at the scheduled jobs of this machine…": "Olhando os jobs agendados desta máquina…",
+ "Nothing scheduled was found in: {places}.": "Nada agendado foi encontrado em: {places}.",
+ "No scheduler could be read on this machine.": "Não foi possível ler nenhum agendador nesta máquina.",
+ "next run {time}": "próxima execução {time}",
+ "none (starts on demand)": "nenhuma (inicia sob demanda)",
+ "Next run": "Próxima execução",
+ "There are more jobs than are shown here.": "Há mais jobs do que os mostrados aqui."
 }

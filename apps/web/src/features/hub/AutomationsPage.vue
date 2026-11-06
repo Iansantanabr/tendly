@@ -15,6 +15,7 @@ import {
   presetLabel, runAutomation, updateAutomation, type Automation, type AutomationDraft, type AutomationKind, type AutomationRun,
 } from "./automations";
 import { hubTimezone, loadHubSettings } from "./settings";
+import ServerJobs from "./ServerJobs.vue";
 
 /** Scheduled scripts and agent routines: what runs when, and how it went. */
 const props = defineProps<{ workspaces: Workspace[]; sessions: Session[]; profiles: EndpointProfile[] }>();
@@ -249,6 +250,7 @@ async function save() {
           </div>
         </li>
       </ul>
+      <ServerJobs />
     </div>
   </PageShell>
 </template>

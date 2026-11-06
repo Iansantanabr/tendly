@@ -1,8 +1,9 @@
 //! Additions to this fork of Tendly: the home page, the inbox and unread
 //! conversations, and (in later modules) automations, the integration and
 //! skill catalogs, file history, publishing, custom apps, and the phone:
-//! an installable app (`pwa`) and Web Push (`push`), and the settings a move
-//! to a VPS needs (`settings`: time zone, public link address, dictation).
+//! an installable app (`pwa`) and Web Push (`push`), the settings a move
+//! to a VPS needs (`settings`: time zone, public link address, dictation),
+//! and a read-only list of what the machine itself schedules (`server_jobs`).
 //!
 //! Everything here keeps its rows in a database of its own, `hub.db` beside
 //! the main one, so upstream schema migrations never collide with ours.
@@ -21,6 +22,7 @@ mod home;
 mod publish;
 mod push;
 mod pwa;
+mod server_jobs;
 pub(crate) mod settings;
 mod spaces;
 pub(crate) mod transcript;
@@ -65,6 +67,7 @@ pub fn routes() -> Router<AppState> {
         .merge(publish::routes())
         .merge(push::routes())
         .merge(pwa::routes())
+        .merge(server_jobs::routes())
         .merge(settings::routes())
         .merge(spaces::routes())
         .merge(transcript::routes())

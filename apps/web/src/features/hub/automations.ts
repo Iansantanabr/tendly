@@ -111,3 +111,30 @@ export function editPrompt(automation: Automation, t: Translate, zone = automati
     t("Ask me what to change if I have not said it yet. Then save the change with the tendly_automation_update tool, using this id; do not create a new automation. The schedule is a five-field cron in the time zone of Tendly's settings ({zone}) unless timezone says otherwise.", { zone }),
   ].join("\n");
 }
+
+/** A job the machine itself schedules, outside Tendly. Read only. */
+export type JobSource = "crontab" | "launchd" | "systemd";
+export interface ServerJob {
+  source: JobSource;
+  name: string;
+  /** As the system writes it: a cron expression or launchd's keys; empty when it has none. */
+  schedule: string;
+  /** When it runs next, where the system says (systemd timers). */
+  next?: string;
+  /** The command, with credentials already hidden by the server. */
+  command: string;
+  disabled?: boolean;
+}
+export interface ServerJobList { jobs: ServerJob[]; sources: JobSource[]; truncated: boolean }
+
+export const loadServerJobs = () => request<ServerJobList>("/hub/automations/server-jobs");
+
+/** Product names, the same in every language. */
+export const JOB_SOURCE_LABEL: Record<string, string> = { crontab: "crontab", launchd: "LaunchAgents", systemd: "systemd timers" };
+
+const JOB_ORDER: JobSource[] = ["crontab", "systemd", "launchd"];
+
+/** Jobs by where they are scheduled: crontab first, then timers, then LaunchAgents. */
+export function groupJobs(jobs: ServerJob[]): { source: JobSource; jobs: ServerJob[] }[] {
+  return JOB_ORDER.map(source => ({ source, jobs: jobs.filter(job => job.source === source) })).filter(group => group.jobs.length);
+}
