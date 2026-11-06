@@ -150,7 +150,8 @@ impl ChatManager {
             .get(&id)
             .cloned()
     }
-    fn choose_permission(&self, id: SessionId, mode: &str) {
+    /// Recorded for the session's next start (fork: also used by hub::home::start).
+    pub(crate) fn choose_permission(&self, id: SessionId, mode: &str) {
         self.permissions
             .lock()
             .expect("chat permissions")

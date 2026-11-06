@@ -15,6 +15,7 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - Todo código novo do servidor fica em `crates/server/src/hub.rs` + `hub/`. Banco próprio `hub.db` ao lado de `tendly.db`, com migrações numeradas em `hub/store.rs` (`MIGRATIONS`, nunca editar uma entrada já publicada).
 - Ganchos no código upstream (manter mínimos):
   - `conversations/events.rs`: `hub::on_turn_finished` (fim de turno) e `hub::on_waiting` (primeira aprovação pendente).
+  - `conversations.rs`: `ChatManager::choose_permission` virou `pub(crate)` (o Início escolhe o modo de permissão antes do primeiro start).
   - `main.rs`: `mod hub`, campo `hub` no `AppState` (`app.rs`), `.merge(hub::routes())`. Os testes (`api_tests.rs`, `accounts/tests.rs`) usam `HubStore::memory()`.
 - Web novo em `apps/web/src/features/hub/`. Texto da interface em inglês no código, com tradução em `i18n/pt-BR.json`.
 - Rotas: `/` = Início (`home`), `/mesa` = canvas (nome `canvas` mantido), `/notificacoes` = sino (`inbox`).

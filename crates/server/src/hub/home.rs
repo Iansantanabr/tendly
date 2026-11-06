@@ -90,25 +90,6 @@ fn permission_choice(provider: tendly_domain::ProviderKind, value: Option<&str>)
     Ok(Some(value.to_owned()))
 }
 
-/// The upstream permission route, called in-process: it records the mode for
-/// the session's next start, which is the start that follows.
-async fn choose_permission(state: &AppState, id: SessionId, mode: &str) -> Result<()> {
-    use tower::ServiceExt;
-    let request = axum::http::Request::post(format!("/api/sessions/{id}/conversation/permission"))
-        .header(axum::http::header::CONTENT_TYPE, "application/json")
-        .body(axum::body::Body::from(json!({ "mode": mode }).to_string()))
-        .map_err(ApiError::internal)?;
-    let response = crate::conversations::routes()
-        .with_state(state.clone())
-        .oneshot(request)
-        .await
-        .map_err(ApiError::internal)?;
-    if !response.status().is_success() {
-        return Err(ApiError::internal(format!("permission mode was not applied ({})", response.status())));
-    }
-    Ok(())
-}
-
 /// "O que a gente faz agora?": a new structured conversation that starts with
 /// the prompt typed on the home page. It is kept, not temporary. Like
 /// `agent_sessions::start_in`, but with the effort and permission the person
@@ -140,11 +121,9 @@ async fn start(State(state): State<AppState>, Json(request): Json<StartRequest>)
     let (_, Json(created)) =
         crate::create_session(State(state.clone()), Path(request.workspace_id), Json(input)).await?;
     let id = created.id;
+    // Recorded before the first start, which applies it (as the permission route does for a stopped session).
     if let Some(mode) = permission {
-        if let Err(error) = choose_permission(&state, id, &mode).await {
-            let _ = db(&state, move |s| s.delete_session(id)).await;
-            return Err(error);
-        }
+        state.chats.choose_permission(id, &mode);
     }
     crate::conversations::open(&state, id).await?;
     crate::conversations::say(&state, id, start.prompt).await?;
