@@ -42,6 +42,7 @@ const paths: Record<string, string> = {
   clipboard: "M9 4h6v3H9z M9 5H5v16h14V5h-4 M8 12h8 M8 16h5",
   check: "m5 12 4 4L19 6",
   clock: "M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0 M12 6v6l4 2",
+  pin: "M9 3h6 M10 3v6l-3 4h10l-3-4V3 M12 13v8",
   // A dial with its needle part-way round: how deeply this is being thought
   // about, which is a level rather than a duration.
   gauge: "M3 17a9 9 0 1 1 18 0 M12 17l4.5-5.5",

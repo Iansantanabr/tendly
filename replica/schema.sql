@@ -151,6 +151,17 @@ CREATE TABLE hub_settings (
 -- versions, for changes from outside Tendly and for versions kept before this.
 ALTER TABLE file_versions ADD COLUMN message TEXT;
 
+---------------------------------------------------------------- live: 9 (M5, pinned message)
+-- The message the person pinned to the top of a conversation. One per
+-- conversation (the primary key), always a message of theirs; `text` is a copy
+-- read from the stored conversation when it is pinned, at most 4000 characters.
+CREATE TABLE pinned_messages (
+    session_id TEXT PRIMARY KEY,   -- soft ref to tendly.db sessions
+    message_id TEXT NOT NULL,      -- the id of the message event
+    text TEXT NOT NULL,
+    pinned_at TEXT NOT NULL
+);
+
 ---------------------------------------------------------------- later (multi-user, after the VPS)
 -- Not a migration yet. Sketch so today's tables don't paint us into a corner:
 --   people(id, name, email UNIQUE, role CHECK IN ('admin','member'), created_at)

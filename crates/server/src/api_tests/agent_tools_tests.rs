@@ -909,3 +909,78 @@ async fn hub_transcript_route_and_tool_read_a_stored_conversation() {
     .await;
     assert_eq!(result["isError"], true);
 }
+
+#[tokio::test]
+async fn hub_pins_route_keeps_one_message_of_the_person_per_conversation() {
+    let f = Fixture::new("127.0.0.1:8787".parse().unwrap(), None);
+    let workspace = f
+        .state
+        .store
+        .create_workspace("talk", f.path.join("repo").to_str().unwrap())
+        .unwrap();
+    let session = f
+        .state
+        .store
+        .create_session(workspace.id, ProviderKind::ClaudeCode, "Pricing talk")
+        .unwrap();
+    for event in [
+        json!({"type":"message","id":"u1","role":"user","text":"  Always answer in Portuguese.  ","delta":false}),
+        json!({"type":"message","id":"a1","role":"assistant","text":"Combinado.","delta":false}),
+        json!({"type":"message","id":"u2","role":"user","text":"And keep it short.","delta":false}),
+    ] {
+        f.state
+            .store
+            .append_conversation_event(session.id, event)
+            .unwrap();
+    }
+    let path = format!("/api/hub/sessions/{}/pin", session.id);
+
+    // Nothing pinned yet.
+    let (status, body) = call(f.app(), "GET", &path, Value::Null).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body, json!({ "pin": null }));
+
+    // The text comes from the stored conversation, not from the request.
+    let (status, body) = call(f.app(), "PUT", &path, json!({ "message_id": "u1", "text": "something else" })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["pin"]["message_id"], "u1");
+    assert_eq!(body["pin"]["text"], "Always answer in Portuguese.");
+    assert!(body["pin"]["pinned_at"].as_str().unwrap().ends_with('Z'));
+
+    // Pinning another message replaces the first: one per conversation.
+    let (status, _) = call(f.app(), "PUT", &path, json!({ "message_id": "u2" })).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, body) = call(f.app(), "GET", &path, Value::Null).await;
+    assert_eq!(body["pin"]["text"], "And keep it short.");
+    let rows: i64 = f
+        .state
+        .hub
+        .with(|c| c.query_row("SELECT count(*) FROM pinned_messages", [], |r| r.get(0)))
+        .unwrap();
+    assert_eq!(rows, 1);
+
+    // The agent's message, an unknown message and an empty id are refused, and the pin stays.
+    let (status, _) = call(f.app(), "PUT", &path, json!({ "message_id": "a1" })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = call(f.app(), "PUT", &path, json!({ "message_id": "nope" })).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(f.app(), "PUT", &path, json!({ "message_id": "  " })).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (_, body) = call(f.app(), "GET", &path, Value::Null).await;
+    assert_eq!(body["pin"]["message_id"], "u2");
+
+    // A conversation that does not exist can not be pinned to.
+    let missing = format!("/api/hub/sessions/{}/pin", uuid::Uuid::new_v4());
+    let (status, _) = call(f.app(), "PUT", &missing, json!({ "message_id": "u1" })).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, body) = call(f.app(), "GET", &missing, Value::Null).await;
+    assert_eq!((status, body), (StatusCode::OK, json!({ "pin": null })));
+
+    // Unpin, twice: the second finds nothing and is still fine.
+    for _ in 0..2 {
+        let (status, _) = call(f.app(), "DELETE", &path, Value::Null).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+    let (_, body) = call(f.app(), "GET", &path, Value::Null).await;
+    assert_eq!(body, json!({ "pin": null }));
+}

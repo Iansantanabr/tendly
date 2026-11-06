@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { envKeyCount, splitByUse, splitEnvNames, vaultState } from './catalog.ts';
 import { JOB_SOURCE_LABEL, groupJobs } from './automations.ts';
+import { isPinned, pinHasMore, pinPreview, pins } from './pins.ts';
 
 const here = new URL('.', import.meta.url);
 const read = name => readFileSync(new URL(name, here), 'utf8');
 
 /** The components and modules M5 added, whose strings and styles are checked below. */
-const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue', 'VaultSection.vue', 'ServerJobs.vue'];
+const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue', 'VaultSection.vue', 'ServerJobs.vue', 'PinnedMessageBar.vue', 'PinMessageButton.vue'];
 const MODULES = ['catalog.ts'];
 
 // ---------------------------------------------------------------- keys found in .env files
@@ -133,6 +134,47 @@ test('server jobs are grouped by scheduler and only read', () => {
   assert.match(read('automations.ts'), /loadServerJobs = \(\) => request<ServerJobList>\("\/hub\/automations\/server-jobs"\)/);
   assert.match(section, /Keys and passwords in commands are hidden/);
   assert.match(section, /@media \(pointer: coarse\) \{ \.jobs summary, \.jobs \.small-button \{ min-height: 44px; \} \}/);
+});
+
+// ---------------------------------------------------------------- pinned message
+
+test('one message is pinned per conversation and the bar shows it on one line', () => {
+  assert.equal(pinPreview('  Always answer\n in   Portuguese.  '), 'Always answer in Portuguese.');
+  const long = pinPreview('é'.repeat(300));
+  assert.equal(Array.from(long).length, 160);
+  assert.ok(long.endsWith('…'));
+  assert.equal(pinHasMore('short'), false);
+  assert.equal(pinHasMore('two\nlines'), true);
+  assert.equal(pinHasMore('x'.repeat(300)), true);
+
+  assert.equal(isPinned('s1', 'm1'), false);
+  pins.s1 = { message_id: 'm1', text: 'Keep it short', pinned_at: '2026-11-06T12:00:00.000Z' };
+  assert.equal(isPinned('s1', 'm1'), true);
+  assert.equal(isPinned('s1', 'm2'), false);
+  assert.equal(isPinned('s2', 'm1'), false);
+  pins.s1 = null;
+  assert.equal(isPinned('s1', 'm1'), false);
+  delete pins.s1;
+});
+
+test('the chat pane gains the bar and the button, and nothing else changes in it', () => {
+  const pane = readFileSync(new URL('../ChatSessionPane.vue', here), 'utf8');
+  // The bar sits above the timeline; the button only under the person's own messages; neither in a preview.
+  assert.match(pane, /<PinnedMessageBar v-if="!isPreview" :session-id="session\.id" \/>\n    <div ref="viewport"/);
+  assert.match(pane, /<PinMessageButton v-if="item\.role==='user'&&!isPreview" :session-id="session\.id" :message-id="item\.id" \/><\/div>/);
+  assert.equal(pane.match(/PinnedMessageBar|PinMessageButton/g).length, 6, 'two imports (name and file) and two uses');
+
+  const bar = read('PinnedMessageBar.vue');
+  // Drawing the pane asks the server nothing; the pin is read once it is on screen.
+  assert.match(bar, /onMounted\(\(\) => \{\s*watch\(\(\) => props\.sessionId/);
+  assert.match(bar, /<aside v-if="pin" class="pinned-bar"/);
+  assert.match(bar, /t\('Unpin'\)/);
+  assert.match(bar, /@media \(pointer: coarse\) \{[^}]*\{[^}]*\} \.pinned-unpin, button\.pinned-text \{ min-height: 44px; \}/);
+  const button = read('PinMessageButton.vue');
+  assert.match(button, /:aria-pressed="pinned"/);
+  // The server reads the text from the conversation: the browser sends only which message.
+  assert.match(read('pins.ts'), /json\("PUT", \{ message_id: messageId \}\)/);
+  assert.match(readFileSync(new URL('../Icon.vue', here), 'utf8'), /\n  pin: "/);
 });
 
 // ---------------------------------------------------------------- translations and design rules

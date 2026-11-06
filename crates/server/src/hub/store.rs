@@ -115,6 +115,13 @@ const MIGRATIONS: &[&str] = &[
     );",
     // 8: one line of what the agent said, on the versions an agent wrote
     "ALTER TABLE file_versions ADD COLUMN message TEXT;",
+    // 9: the message pinned to the top of a conversation, one per conversation
+    "CREATE TABLE pinned_messages (
+        session_id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        pinned_at TEXT NOT NULL
+    );",
 ];
 
 pub struct HubStore {
@@ -416,6 +423,43 @@ mod tests {
                 let kept: Option<String> =
                     c.query_row("SELECT message FROM file_versions ORDER BY id DESC LIMIT 1", [], |r| r.get(0))?;
                 assert_eq!(kept.as_deref(), Some("Tightened the title."));
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_eight_database_upgrades_to_pinned_messages() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..8] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 8i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO file_versions(workspace_id, path, blob, size, author_kind, created_at, message)
+                 VALUES ('w', 'a.txt', 'h', 1, 'agent', 'then', 'Tightened the title.')",
+                [],
+            )
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version as usize, MIGRATIONS.len());
+                let kept: Option<String> = c.query_row("SELECT message FROM file_versions", [], |r| r.get(0))?;
+                assert_eq!(kept.as_deref(), Some("Tightened the title."));
+                let pin = |session: &str, message: &str| {
+                    c.execute(
+                        "INSERT INTO pinned_messages(session_id, message_id, text, pinned_at) VALUES (?1, ?2, 'said', 'now')",
+                        [session, message],
+                    )
+                };
+                pin("s1", "m1")?;
+                assert!(pin("s1", "m2").is_err(), "one pin per conversation");
+                pin("s2", "m1")?;
+                let rows: i64 = c.query_row("SELECT count(*) FROM pinned_messages", [], |r| r.get(0))?;
+                assert_eq!(rows, 2);
                 Ok(())
             })
             .unwrap();

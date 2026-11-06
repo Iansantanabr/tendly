@@ -2792,5 +2792,12 @@
  "next run {time}": "próxima execução {time}",
  "none (starts on demand)": "nenhuma (inicia sob demanda)",
  "Next run": "Próxima execução",
- "There are more jobs than are shown here.": "Há mais jobs do que os mostrados aqui."
+ "There are more jobs than are shown here.": "Há mais jobs do que os mostrados aqui.",
+ "Pinned message": "Mensagem fixada",
+ "Show less": "Mostrar menos",
+ "Show the whole message": "Mostrar a mensagem inteira",
+ "Unpinning…": "Desafixando…",
+ "Unpin": "Desafixar",
+ "Could not pin this message": "Não foi possível fixar esta mensagem",
+ "Pin to the top of the conversation": "Fixar no topo da conversa"
 }

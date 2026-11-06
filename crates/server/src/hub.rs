@@ -19,6 +19,7 @@ pub(crate) mod automations;
 mod catalog;
 mod history;
 mod home;
+mod pins;
 mod publish;
 mod push;
 mod pwa;
@@ -61,6 +62,7 @@ pub fn warm(state: AppState) {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .merge(home::routes())
+        .merge(pins::routes())
         .merge(automations::routes())
         .merge(catalog::routes())
         .merge(history::routes())
