@@ -2539,7 +2539,6 @@
  "No versions yet. Tendly keeps a version each time this file changes.": "Nenhuma versão ainda. O Tendly guarda uma versão cada vez que este arquivo muda.",
  "This version": "Esta versão",
  "Changes from the previous version": "Mudanças em relação à versão anterior",
- "Compared with the current file": "Comparada com o arquivo atual",
  "Show changes": "Mostrar mudanças",
  "View this version": "Ver esta versão",
  "Restoring…": "Restaurando…",
@@ -2548,7 +2547,6 @@
  "Comparing…": "Comparando…",
  "Content of this version": "Conteúdo desta versão",
  "No line changes from the previous version.": "Nenhuma linha mudou em relação à versão anterior.",
- "Same as the current file.": "Igual ao arquivo atual.",
  "Agent · {title}": "Agente · {title}",
  "Outside Tendly": "Fora do Tendly",
  "A link name has 3 to 64 lowercase letters, digits or hyphens.": "O nome do link tem de 3 a 64 letras minúsculas, números ou hifens.",
@@ -2574,5 +2572,8 @@
  "Updating…": "Atualizando…",
  "When it updates": "Quando atualiza",
  "Who can see it": "Quem pode ver",
- "made from the file name": "gerado a partir do nome do arquivo"
+ "made from the file name": "gerado a partir do nome do arquivo",
+ "Oldest version kept": "Versão mais antiga guardada",
+ "This version is empty.": "Esta versão está vazia.",
+ "Confirm unpublish": "Confirmar despublicação"
 }

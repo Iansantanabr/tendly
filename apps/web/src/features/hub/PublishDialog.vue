@@ -13,6 +13,8 @@ import {
 const props = defineProps<{ workspaceId: string; path: string }>();
 const emit = defineEmits<{ close: [] }>();
 const { t } = useI18n();
+// Radio groups are per panel: two open panels must not share one group.
+const uid = Math.random().toString(36).slice(2, 8);
 
 const current = ref<Publication | null>(null);
 const loading = ref(true), busy = ref(""), error = ref(""), copied = ref(false);
@@ -65,8 +67,11 @@ function submit() {
   }
 }
 const refresh = () => current.value && void act("refresh", async () => fill(await refreshPublication(current.value!.slug)));
+/** Unpublishing asks twice, inline: the first click arms the button. */
+const removing = ref<string | null>(null);
 function remove(publication: Publication) {
-  if (!window.confirm(t("Unpublish {name}? The link stops working.", { name: fileName(publication.path) }))) return;
+  if (removing.value !== publication.slug) { removing.value = publication.slug; return; }
+  removing.value = null;
   void act(`remove:${publication.slug}`, async () => {
     await unpublish(publication.slug);
     if (current.value?.slug === publication.slug) fill(null);
@@ -110,7 +115,7 @@ function toggleOthers(event: Event) {
       <fieldset class="publish-group">
         <legend>{{ t('Who can see it') }}</legend>
         <label v-for="choice in VISIBILITIES" :key="choice.value" class="publish-choice">
-          <input v-model="form.visibility" type="radio" name="publish-visibility" :value="choice.value">{{ t(choice.label) }}
+          <input v-model="form.visibility" type="radio" :name="`publish-visibility-${uid}`" :value="choice.value">{{ t(choice.label) }}
         </label>
         <input
           v-if="form.visibility === 'password'" v-model="form.password" class="publish-input" type="password" autocomplete="new-password"
@@ -121,7 +126,7 @@ function toggleOthers(event: Event) {
       <fieldset class="publish-group">
         <legend>{{ t('When it updates') }}</legend>
         <label v-for="choice in MODES" :key="choice.value" class="publish-choice">
-          <input v-model="form.mode" type="radio" name="publish-mode" :value="choice.value">{{ t(choice.label) }}
+          <input v-model="form.mode" type="radio" :name="`publish-mode-${uid}`" :value="choice.value">{{ t(choice.label) }}
         </label>
       </fieldset>
 
@@ -137,7 +142,8 @@ function toggleOthers(event: Event) {
           <span v-if="current.mode === 'frozen' && frozenAt" class="publish-hint">{{ t('Frozen at {time}', { time: frozenAt }) }}</span>
           <button v-if="current.mode === 'frozen'" type="button" class="small-button" :disabled="!!busy || dirty" @click="refresh"><Icon name="refresh" :size="13" />{{ t(busy === 'refresh' ? 'Updating…' : 'Update now') }}</button>
           <span class="publish-spacer" />
-          <button type="button" class="small-button danger" :disabled="!!busy" @click="remove(current)">{{ t('Unpublish') }}</button>
+          <button v-if="removing === current.slug" type="button" class="small-button" @click="removing = null">{{ t('Cancel') }}</button>
+          <button type="button" class="small-button danger" :disabled="!!busy" @click="remove(current)">{{ t(removing === current.slug ? 'Confirm unpublish' : 'Unpublish') }}</button>
           <button type="submit" class="small-button primary" :disabled="!!busy || !dirty">{{ t(busy === 'save' ? 'Saving…' : 'Save') }}</button>
         </template>
         <template v-else>
@@ -145,6 +151,7 @@ function toggleOthers(event: Event) {
           <button type="submit" class="small-button primary" :disabled="!!busy"><Icon name="globe" :size="13" />{{ t(busy === 'publish' ? 'Publishing…' : 'Publish') }}</button>
         </template>
       </div>
+      <p v-if="current && removing === current.slug" class="publish-hint" role="alert">{{ t('Unpublish {name}? The link stops working.', { name: fileName(current.path) }) }}</p>
       <p class="publish-hint">{{ t('On this Mac the link opens only on this machine or your Tailscale network.') }}</p>
     </form>
 
@@ -157,7 +164,7 @@ function toggleOthers(event: Event) {
           <a :href="item.url" target="_blank" rel="noopener" :title="item.path">{{ fileName(item.path) }}</a>
           <code>{{ item.url }}</code>
           <span class="publish-spacer" />
-          <button type="button" class="link-button danger" :disabled="!!busy" @click="remove(item)">{{ t('Unpublish') }}</button>
+          <button type="button" class="link-button danger" :disabled="!!busy" @click="remove(item)">{{ t(removing === item.slug ? 'Confirm unpublish' : 'Unpublish') }}</button>
         </li>
       </ul>
     </details>

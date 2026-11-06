@@ -24,6 +24,7 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - Teste Rust `task_tests` (worktree) pode estourar 20 s com a suíte toda em paralelo; passa sozinho. Não é do fork.
 - Traduções: arquivo único `i18n/pt-BR.json`, indentado com 1 espaço e sem quebra de linha no fim (manter esse formato ao editar por script).
 - `cargo check` precisa de `apps/web/dist` existir (RustEmbed); num clone novo, rodar `pnpm build:web` antes.
+- Confirmações na tela, não `window.confirm` (no navegador do app o diálogo nativo não aparece).
 - Ícones novos em `features/Icon.vue`: home, bell, chat, arrowUp, plug, sparkles, timer, apps.
 
 ## API nova (`/api/hub/...`)
@@ -31,6 +32,8 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - `GET inbox`, `POST inbox/read {ids|all}`, `GET activity`, `POST activity/seen-all`, `POST sessions/{id}/seen`
 - `GET recent-files?limit=`, `POST start {workspace_id, provider, prompt}` (usa `agent_sessions::start_in`)
 - Automações (`hub/automations.rs`, migração 2): `GET|POST automations`, `PATCH|DELETE automations/{id}`, `POST automations/{id}/run`, `GET automations/{id}/runs?limit=`. Agendador tokio a cada 30 s (croner); lacuna > 5 min (Mac dormindo) não é recuperada. Script: `$SHELL -l -c`, timeout 10 min, últimos 64 KB. Agente: `start_in`. Ferramentas MCP `tendly_automation_list|create|update` em `agent.rs` (criar/alterar script pede confirmação na janela).
+- Histórico (`hub/history.rs`, migração 3): `GET history?workspace_id=&path=`, `GET history/versions/{id}`, `POST history/versions/{id}/restore`. Observador `notify` próprio por workspace (não depende do `file_watch.rs`, que só roda com navegador aberto), reavalia a lista a cada 60 s, espera 1,5 s de silêncio. Só texto ≤ 1 MB; ignora pastas com ponto, build/dependências e o `.gitignore` (via `git check-ignore`). Conteúdo em `~/.tendly/history/blobs/<sha256>`. Autoria: salvar pela interface = você (gancho em `file_routes.rs::write_file`); sessão do workspace rodando = agente; senão "fora do Tendly". 100 versões / 60 dias por arquivo. A primeira versão é a que o observador vê depois da primeira mudança.
+- Publicação (`hub/publish.rs` + `hub/publish/`, migração 4): `GET|POST publications`, `GET publications/for?workspace_id=&path=`, `PATCH|DELETE publications/{slug}`, `POST publications/{slug}/refresh`. Página pública `/p/{slug}/` (fora de `/api`, então o guard não pede token). Time = mesma autenticação da API (`Security::authenticated` virou `pub(crate)`); senha = argon2 + cookie HMAC por slug, 7 dias, 10 tentativas/min; congelado = cópia em `~/.tendly/published/<slug>/` com só os arquivos que a página referencia. CSP com sandbox para a página não chamar a API.
 - Catálogos (`hub/catalog/`): `GET catalog/integrations?refresh=1` (`claude mcp list` 20 s + cache 10 min, `~/.claude.json`, `~/.codex/config.toml`, `.mcp.json`; segredos removidos), `GET catalog/skills` (`~/.claude/skills`, plugins, `.claude/skills` dos workspaces, `~/.codex/skills`).
 
 ## Status
@@ -39,5 +42,5 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - [x] Pendência da Fase 1 (pedido do Ian): a aba Conversas mostra só conversas SEM projeto e tem "Nova conversa". Implementação: workspace oculto em `~/.tendly/conversations` criado pelo servidor (`GET /api/hub/conversations`), filtrado da lista de Workspaces; Início com opção "Sem projeto".
 - Regra do Ian: depois de compilar, sempre reiniciar o servidor (`~/tendly-src/bin/tendly-server restart`) e conferir no navegador.
 - [x] Fase 2: automações (`/automacoes`), integrações (`/integracoes`), habilidades (`/habilidades`). Testado no navegador: rotina `* * * * *` rodou sozinha e apareceu no histórico; 50 integrações e 166 habilidades listadas. 794 testes web e 24 testes hub ok.
-- [ ] Fase 3: histórico e publicação de arquivos
+- [x] Fase 3: histórico (botão relógio no arquivo) e publicação (botão globo). Testado: salvar = Você, edição por fora = Fora do Tendly, restaurar; publicar com senha (401 sem, 303 com a certa, traversal 404), despublicar com confirmação na tela. 803 testes web e 49 hub ok.
 - [ ] Fase 4: apps personalizados

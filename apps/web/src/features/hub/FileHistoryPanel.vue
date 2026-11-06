@@ -4,7 +4,7 @@ import { computed, ref, watch } from "vue";
 import Icon from "../Icon.vue";
 import GitDiffLines from "../GitDiffLines.vue";
 import { useI18n } from "../../i18n";
-import { ago, authorLabel, listVersions, readCurrent, readVersion, restoreVersion, size, unifiedDiff, type FileVersion } from "./history";
+import { ago, authorLabel, listVersions, readVersion, restoreVersion, size, unifiedDiff, type FileVersion } from "./history";
 
 const props = defineProps<{ workspaceId: string; path: string; dirty: boolean }>();
 const emit = defineEmits<{ close: []; restored: [] }>();
@@ -15,7 +15,7 @@ const loading = ref(true);
 const error = ref("");
 const selected = ref<number>();
 const diff = ref<string>();
-const base = ref<"previous" | "current">("previous");
+const base = ref<"previous" | "first">("previous");
 const content = ref<string>();
 const viewing = ref(false);
 const comparing = ref(false);
@@ -66,12 +66,12 @@ async function select(id: number) {
     const index = versions.value.findIndex(v => v.id === id);
     const previous = versions.value[index + 1];
     const text = await contentOf(id);
-    // The oldest version is compared with what the file holds now.
-    const before = previous ? await contentOf(previous.id) : await readCurrent(props.workspaceId, props.path).catch(() => "");
+    // The oldest version kept has nothing before it: all of it reads as added.
+    const before = previous ? await contentOf(previous.id) : "";
     if (own !== revision || selected.value !== id) return;
     content.value = text;
-    base.value = previous ? "previous" : "current";
-    diff.value = previous ? unifiedDiff(before, text) : unifiedDiff(text, before);
+    base.value = previous ? "previous" : "first";
+    diff.value = unifiedDiff(before, text);
   } catch (cause) {
     if (selected.value === id) error.value = message(cause);
   } finally {
@@ -122,7 +122,7 @@ watch(() => [props.workspaceId, props.path], () => { contents.clear(); selected.
       </ol>
       <div v-if="chosen" class="history-detail">
         <div class="history-actions">
-          <span class="history-caption">{{ viewing ? t('This version') : base === 'previous' ? t('Changes from the previous version') : t('Compared with the current file') }}</span>
+          <span class="history-caption">{{ viewing ? t('This version') : base === 'previous' ? t('Changes from the previous version') : t('Oldest version kept') }}</span>
           <button type="button" class="small-button" :disabled="content === undefined" @click="viewing = !viewing">{{ viewing ? t('Show changes') : t('View this version') }}</button>
           <button type="button" :class="['small-button', confirming ? 'danger' : 'primary']" :disabled="restoring || content === undefined" @click="restore"><Icon name="restore" :size="13" />{{ restoring ? t('Restoring…') : confirming ? t('Replace draft and restore') : t('Restore') }}</button>
           <button v-if="confirming" type="button" class="small-button" @click="confirming = false">{{ t('Cancel') }}</button>
@@ -131,7 +131,7 @@ watch(() => [props.workspaceId, props.path], () => { contents.clear(); selected.
         <p v-if="comparing" class="history-note">{{ t('Comparing…') }}</p>
         <pre v-else-if="viewing" class="history-content" tabindex="0" :aria-label="t('Content of this version')">{{ content }}</pre>
         <GitDiffLines v-else-if="diff" class="history-diff" :diff="diff" />
-        <p v-else-if="diff === ''" class="history-note">{{ base === 'previous' ? t('No line changes from the previous version.') : t('Same as the current file.') }}</p>
+        <p v-else-if="diff === ''" class="history-note">{{ base === 'previous' ? t('No line changes from the previous version.') : t('This version is empty.') }}</p>
       </div>
     </div>
   </section>
@@ -153,7 +153,7 @@ watch(() => [props.workspaceId, props.path], () => { contents.clear(); selected.
 .history-meta{font-size:var(--text-xs);color:var(--faint)}
 .history-detail{display:flex;flex-direction:column;min-width:0;min-height:0;flex:1}
 .history-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid var(--line)}
-.history-caption{flex:1;min-width:0;color:var(--muted);font-size:var(--text-xs)}
+.history-caption{flex:1 1 12em;min-width:0;color:var(--muted);font-size:var(--text-xs)}
 .history-actions .small-button{min-height:26px;padding:0 9px;font-size:var(--text-xs)}
 .history-warning{margin:0;padding:6px 10px;background:var(--surface);color:var(--warn);font-size:var(--text-xs);border-bottom:1px solid var(--line)}
 .history-content{margin:0;padding:8px 12px;overflow:auto;flex:1;min-height:0;font:var(--text-xs)/19px var(--mono);color:var(--ink);background:var(--surface);white-space:pre}
