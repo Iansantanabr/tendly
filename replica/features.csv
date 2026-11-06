@@ -94,3 +94,21 @@ Instalação guiada na VPS por receita,infra,should,yes,partial,M4: deploy/insta
 Rodar 24h num servidor,infra,must,yes,partial,roda no Mac; M4 deixou pronto o kit (deploy/) e o fuso das automações independente do relógio da máquina; falta o Ian contratar a VPS e os domínios
 Apps do negócio da Dobra (Conteúdo Pipeline Workshop Sessões),apps,could,yes,skip,são conteúdo deles; o fork dá a plataforma para criar os seus
 Comunidade cursos e receitas,negócio,could,yes,skip,conteúdo pago da Ratos de IA
+Rail de ícones na Mesa (nav + tiles dos apps + sino),shell,must,yes,no,Etapa A; P02 P11 P13 P29; painel Arquivos/Conversas fica ao lado
+Barra expandida com lista vertical de apps + Ver todos + criar,shell,should,yes,partial,Etapa A; hoje chips em grade (P10 P28)
+Arrastar tile do app para a Mesa,apps,could,yes,no,Etapa A
+App em tela cheia com cabeçalho (Conversar · Abrir na Mesa · recarregar · link · abrir fora),apps,must,yes,no,Etapa B; P29 P31; hoje só como painel
+Conversar abre chat ao lado do app em tela cheia,apps,must,yes,partial,Etapa B; hoje só divide no painel
+App recarrega sozinho quando o agente muda o código,apps,must,yes,no,Etapa B; transcrição "eu recarrego aqui o aplicativo"
+Erros do app no cabeçalho com Pedir correção,apps,should,no,no,Etapa B; ideia nossa para o loop do construtor
+Contexto do app com a tela atual (App · Quadro),apps,should,yes,partial,Etapa C; P32; hoje só o nome
+Ponte app → Mesa (abrir conversa · arquivo · app),apps,should,yes,no,Etapa C; P32 botão Abrir do card
+App lê dados do Tendly (sessões · arquivos · automações) com permissão,apps,should,yes,no,Etapa C; app Sessões (P11)
+Origem separada para apps + permissões declaradas,apps,must,no,no,Etapa C; segurança: hoje same-origin
+Coleções com registros e revisão + ao vivo,apps,should,yes,no,Etapa D; kanbans com arrastar (P30 P32)
+Subir arquivos/fotos pelo app,apps,could,yes,no,Etapa D; P31 Subir outra foto
+Criar com o agente com modelos (kanban · tabela · calendário · painel · formulário · editor),apps,must,yes,partial,Etapa E; hoje blank/issues
+Kit de UI para apps (navegação lateral/inferior · kanban · tabela),apps,should,yes,no,Etapa E; P12 P13 visual coerente
+Versões do app inteiro e voltar,apps,should,yes,partial,Etapa E; P28 No ar · hash; hoje histórico por arquivo
+Adicionar atalho para sistema de fora,apps,could,yes,no,Etapa E; P28
+App com servidor (ações · webhooks · jobs · segredos · logs),apps,could,yes,no,Etapa F; Bancada Salvar e renderizar · Pipeline leads · Monitoramento
