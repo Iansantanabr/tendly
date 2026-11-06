@@ -22,7 +22,11 @@ export interface HubApp {
 export interface HubAppError { workspace_id: string; slug: string; message: string }
 
 /** Every app on this host, shared by the sidebar, Home, the Apps page and the app tabs. */
-export const apps = reactive({ list: [] as HubApp[], errors: [] as HubAppError[], loaded: false, loading: false, error: "" });
+export const apps = reactive({
+  list: [] as HubApp[], errors: [] as HubAppError[], loaded: false, loading: false, error: "",
+  /** Someone pressed "+" beside Apps: the Apps page puts the cursor in its form when it sees this. */
+  wantCreate: false,
+});
 
 let pending: Promise<void> | undefined;
 /** Reads the list again; calls made while one is in flight share it. */

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import type { EndpointProfile, ProviderKind, Workspace } from "@tendly/protocol";
 import PageShell from "../PageShell.vue";
 import Icon from "../Icon.vue";
@@ -10,7 +10,10 @@ import { loadPreferences, preferenceFor } from "../preferences";
 import { useI18n } from "../../i18n";
 import { inbox, loadConversationsWorkspace } from "./inbox";
 import AppTile from "./AppTile.vue";
+import AppOrderMenu from "./AppOrderMenu.vue";
 import { apps, colorFor, createPrompt, freeSlug, refreshApps, scaffoldApp, type HubApp } from "./apps";
+import { appKey, appOrder, arrangedApps, hiddenAppList, isHiddenApp, isPinnedApp } from "./app-order";
+import { loadHubSettings } from "./settings";
 
 /** Apps: small tools an agent builds in a project's `apps/` folder, opened on the Mesa. */
 const props = defineProps<{ workspaces: Workspace[]; profiles: EndpointProfile[]; selectedWorkspaceId?: string }>();
@@ -29,11 +32,30 @@ watch([projects, () => props.selectedWorkspaceId], ([list]) => {
 }, { immediate: true });
 watch(() => [form.provider, form.workspaceId], () => { try { localStorage.setItem(STORAGE, JSON.stringify({ provider: form.provider, workspace: form.workspaceId })); } catch { /* Fine without it. */ } });
 
-const sorted = computed(() => [...apps.list].sort((a, b) => a.name.localeCompare(b.name)));
+/** The person's order (as in the rail and the sidebar), then the apps they hid. */
+const sorted = computed(() => [...arrangedApps.value, ...hiddenAppList.value]);
+const menuKey = ref<string>();
+const menuOpeners = new Map<string, HTMLElement>();
+function recordOpener(key: string, element: unknown) { if (element instanceof HTMLElement) menuOpeners.set(key, element); else menuOpeners.delete(key); }
+function closeMenu(key: string) { if (menuKey.value !== key) return; menuKey.value = undefined; menuOpeners.get(key)?.focus(); }
+function menuEscape(event: KeyboardEvent, key: string) {
+  if (event.key !== "Escape" || menuKey.value !== key) return;
+  event.preventDefault(); event.stopPropagation();
+  closeMenu(key);
+}
+/** "+" beside Apps, anywhere: the form takes the cursor. */
+const nameField = ref<HTMLInputElement>();
+watch(() => apps.wantCreate, async wanted => {
+  if (!wanted) return;
+  apps.wantCreate = false;
+  await nextTick();
+  nameField.value?.focus();
+  nameField.value?.scrollIntoView?.({ block: "nearest" });
+}, { immediate: true, flush: "post" });
 const workspaceName = (id: string) => props.workspaces.find(w => w.id === id)?.name ?? "";
 const showWorkspace = computed(() => new Set(apps.list.map(app => app.workspace_id)).size > 1);
 
-onMounted(() => { void loadConversationsWorkspace(); void refreshApps(); });
+onMounted(() => { void loadConversationsWorkspace(); void refreshApps(); void loadHubSettings(); });
 
 /** The account "New session" would use for this agent; null for the default. */
 async function endpointFor(provider: ProviderKind): Promise<string | null> {
@@ -92,7 +114,7 @@ function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noope
       <div class="apps-grid">
         <form class="apps-card apps-create" @submit.prevent="createWithAgent">
           <header><span class="apps-create-icon"><Icon name="sparkles" :size="16" /></span><h2>{{ t('Create with the agent') }}</h2></header>
-          <label class="apps-field"><span>{{ t('Name') }}</span><input v-model="form.name" type="text" maxlength="60" required :placeholder="t('Sales pipeline')" /></label>
+          <label class="apps-field"><span>{{ t('Name') }}</span><input ref="nameField" v-model="form.name" type="text" maxlength="60" required :placeholder="t('Sales pipeline')" /></label>
           <label class="apps-field"><span>{{ t('What should it do?') }}</span><textarea v-model="form.description" rows="3" maxlength="4000" :placeholder="t('A board with my deals by stage, where I can add and move them.')" /></label>
           <div class="apps-row">
             <label class="apps-field"><span>{{ t('Project') }}</span>
@@ -114,17 +136,21 @@ function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noope
           </div>
         </form>
 
-        <article v-for="app in sorted" :key="app.workspace_id + app.slug" class="apps-card apps-app">
+        <article v-for="app in sorted" :key="app.workspace_id + app.slug" :class="['apps-card', 'apps-app', { 'is-hidden': isHiddenApp(appOrder, appKey(app)) }]" @keydown="menuEscape($event, appKey(app))">
           <button type="button" class="apps-app-main" :title="t('Open on the Mesa')" @click="emit('openApp', app)">
             <AppTile :name="app.name" :letter="app.letter" :color="app.color" :size="40" />
             <span class="apps-app-text"><strong>{{ app.name }}</strong><small v-if="app.description">{{ app.description }}</small></span>
           </button>
           <footer>
             <small class="apps-app-meta" :title="app.code_path">{{ showWorkspace || projects.length > 1 ? app.workspace_name : app.code_path }}</small>
+            <span v-if="isHiddenApp(appOrder, appKey(app))" class="apps-app-flag" :title="t('Hidden: it is only on the Apps page.')">{{ t('Hidden') }}</span>
+            <span v-else-if="isPinnedApp(appOrder, appKey(app))" class="apps-app-flag pinned">{{ t('Pinned') }}</span>
             <span class="flex-spacer" />
+            <button :ref="element => recordOpener(appKey(app), element)" type="button" class="icon-button" :aria-label="t('Options for {app}', { app: app.name })" :title="t('Options for {app}', { app: app.name })" :aria-expanded="menuKey === appKey(app)" @click="menuKey = menuKey === appKey(app) ? undefined : appKey(app)"><Icon name="more" :size="14" /></button>
             <button type="button" class="icon-button" :aria-label="t('Open in new tab')" :title="t('Open in new tab')" @click="openTab(app)"><Icon name="arrow" :size="14" /></button>
             <button type="button" class="small-button" @click="emit('openApp', app)">{{ t('Open on the Mesa') }}</button>
           </footer>
+          <AppOrderMenu v-if="menuKey === appKey(app)" class="apps-app-menu" :app="app" autofocus @close="closeMenu(appKey(app))" />
         </article>
       </div>
       <p v-if="apps.loaded && !apps.list.length && !apps.error" class="apps-empty">{{ t('No apps yet. Describe one above and an agent builds it in the project you choose.') }}</p>
@@ -158,6 +184,11 @@ function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noope
 .apps-app-text small { color: var(--muted); font-size: var(--text-sm); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .apps-app footer { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4); border-top: 1px solid var(--border); min-width: 0; }
 .apps-app-meta { color: var(--faint); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.apps-app-flag { flex: none; padding: 1px 7px; border-radius: var(--radius-full); background: var(--fill); color: var(--muted); font-size: var(--text-xs); }
+.apps-app-flag.pinned { background: var(--accent-soft); color: var(--accent-ink); }
+.apps-app.is-hidden .apps-app-main { opacity: .7; }
+.apps-app-menu { padding: 4px; border-top: 1px solid var(--border); }
+@media (pointer: coarse) { .apps-app footer .icon-button { width: 44px; height: 44px; } }
 .apps-notice { display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2) var(--space-3); border: 1px solid var(--warn-line); background: var(--warn-soft); color: var(--warn-ink); border-radius: var(--radius-md); font-size: var(--text-sm); }
 .apps-notice ul { margin: 4px 0 0; padding-left: 18px; }
 .apps-notice code { font-family: var(--mono); }

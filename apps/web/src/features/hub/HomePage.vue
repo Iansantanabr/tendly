@@ -16,6 +16,7 @@ import { startConversation } from "./start";
 import { continueTarget, effortOptions, keepOffered, modelOptions, permissionOptions, readHomeMemory, usageText, type AgentChoice } from "./home";
 import AppTile from "./AppTile.vue";
 import { apps, refreshApps, type HubApp } from "./apps";
+import { arrangedApps } from "./app-order";
 import { conversationChips, insertAt, parseConversationLink, pastedConversation, removeConversationChip, restoreConversationChips, takeConversationChips, withConversations } from "./conversation-link";
 import { speechLang, useDictation } from "./dictation";
 import DictationButton from "./DictationButton.vue";
@@ -103,7 +104,8 @@ onMounted(async () => {
   restoreChoices();
   preferencesReady.value = true;
 });
-const homeApps = computed(() => [...apps.list].sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")).slice(0, 8));
+/** The first eight, in the order of the rail and the sidebar; hidden apps stay out. */
+const homeApps = computed(() => arrangedApps.value.slice(0, 8));
 
 /** The composer's key for conversation chips. */
 const CHIPS = "home";
@@ -255,7 +257,8 @@ const suggestions = computed(() => [
 
         <article class="home-card">
           <header><h2>{{ t('Apps') }}</h2><button type="button" class="link-button" @click="emit('apps')">+ {{ t('New') }}</button></header>
-          <p v-if="!homeApps.length" class="home-empty">{{ t('No apps yet. Ask an agent to build one for you.') }}</p>
+          <p v-if="!apps.list.length" class="home-empty">{{ t('No apps yet. Ask an agent to build one for you.') }}</p>
+          <p v-else-if="!homeApps.length" class="home-empty">{{ t('Every app is hidden.') }} <button type="button" class="link-button" @click="emit('apps')">{{ t('See all apps') }}</button></p>
           <div v-else class="home-apps">
             <button v-for="app in homeApps" :key="app.workspace_id + app.slug" type="button" class="home-app" :title="app.description || app.name" @click="emit('openApp', app)">
               <AppTile :name="app.name" :letter="app.letter" :color="app.color" :size="36" /><span>{{ app.name }}</span>

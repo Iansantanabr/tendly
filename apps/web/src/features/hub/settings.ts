@@ -1,6 +1,7 @@
 /**
  * The fork's own settings (`/api/hub/settings`): the time zone automations run
- * in, the public address published links are shown with, and dictation.
+ * in, the public address published links are shown with, dictation, how the
+ * sidebar looks on the Mesa and the order of the apps.
  *
  * They are read once per page load and shared: the dictation button, the
  * publish panel and Settings → Addresses and time zone all look at the same
@@ -10,12 +11,17 @@ import { computed, ref } from "vue";
 import { json, request } from "../api";
 
 export type DictationMode = "browser" | "off";
+/** On the Mesa: a narrow rail of icons, or the full sidebar as on the other pages. */
+export type MesaSidebar = "icons" | "expanded";
 export interface HubSettings {
   /** IANA zone for automations that name none. */
   timezone: string;
   /** `https://pub.example.com`, or "" for this server's own address. */
   public_base_url: string;
   dictation: DictationMode;
+  mesa_sidebar: MesaSidebar;
+  /** The person's arrangement of their apps (app-order.ts); entries are `<workspace id>/<slug>`. */
+  app_order: { pinned: string[]; order: string[]; hidden: string[] };
 }
 export interface ZoneList {
   zones: string[];
@@ -24,7 +30,7 @@ export interface ZoneList {
 }
 
 /** What the server answers before anything is saved. */
-export const DEFAULT_SETTINGS: HubSettings = { timezone: "America/Sao_Paulo", public_base_url: "", dictation: "browser" };
+export const DEFAULT_SETTINGS: HubSettings = { timezone: "America/Sao_Paulo", public_base_url: "", dictation: "browser", mesa_sidebar: "icons", app_order: { pinned: [], order: [], hidden: [] } };
 
 export const hubSettings = ref<HubSettings>();
 /** Asked and answered (or failed): from here on `hubSettings` or the defaults are what there is. */

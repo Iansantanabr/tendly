@@ -3,15 +3,17 @@
  * Settings → Addresses and time zone: what changes when Tendly moves from this
  * Mac to a server. The time zone automations run in (a VPS clock is in UTC),
  * the public address published links are shown with, and whether the
- * microphone button exists at all.
+ * microphone button exists at all. It also holds the one layout choice kept
+ * with these settings: how the sidebar looks on the Mesa.
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { errorMessage } from "../api";
 import { useI18n } from "../../i18n";
 import {
   DEFAULT_SETTINGS, baseUrlProblem, filterZones, hubSettings, loadHubSettings, loadZones, sampleLink, saveHubSettings, tidyBaseUrl,
-  timeInZone, zoneLabel, zoneList, zoneOffset, type HubSettings,
+  timeInZone, zoneLabel, zoneList, zoneOffset, type HubSettings, type MesaSidebar,
 } from "./settings";
+import { mesaSidebar, setMesaSidebar } from "./rail";
 
 const { t, locale } = useI18n();
 
@@ -19,7 +21,7 @@ const loadError = ref("");
 const zone = ref(hubSettings.value?.timezone ?? ""), zoneQuery = ref("");
 const base = ref(hubSettings.value?.public_base_url ?? "");
 const saving = ref<"" | keyof HubSettings>(""), saved = ref<"" | keyof HubSettings>("");
-const zoneError = ref(""), baseError = ref(""), dictationError = ref("");
+const zoneError = ref(""), baseError = ref(""), dictationError = ref(""), sidebarError = ref("");
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
 const ready = computed(() => !!hubSettings.value);
@@ -92,6 +94,21 @@ async function toggleDictation(input: HTMLInputElement) {
   // The click moved the switch; it shows what is saved, also when saving failed.
   input.checked = dictationOn.value;
 }
+
+const SIDEBAR_CHOICES: { value: MesaSidebar; label: string; hint: string }[] = [
+  { value: "icons", label: "Icons", hint: "A narrow rail with the pages, your apps and the bell. Workspaces and conversations get a panel of their own beside it." },
+  { value: "expanded", label: "Expanded", hint: "The full sidebar with names, as on Home and the other pages." },
+];
+async function chooseSidebar(value: MesaSidebar, input: HTMLInputElement) {
+  if (value === mesaSidebar.value) return;
+  sidebarError.value = ""; saved.value = "";
+  saving.value = "mesa_sidebar";
+  const problem = await setMesaSidebar(value);
+  saving.value = "";
+  if (problem) sidebarError.value = problem; else flash("mesa_sidebar");
+  // The radios show what is saved, also when saving failed.
+  input.checked = mesaSidebar.value === value;
+}
 </script>
 
 <template>
@@ -157,6 +174,18 @@ async function toggleDictation(input: HTMLInputElement) {
       </label>
       <p v-if="dictationError" class="inline-error" role="alert">{{ dictationError }}</p>
     </div>
+
+    <div class="addr-card" role="radiogroup" aria-labelledby="addr-sidebar-title" :aria-busy="saving === 'mesa_sidebar'">
+      <h2 id="addr-sidebar-title">{{ t('Sidebar on the Mesa') }}</h2>
+      <p class="addr-hint">{{ t('How the sidebar looks while you are on the Mesa, on a computer. On a phone it stays a drawer.') }}</p>
+      <label v-for="choice in SIDEBAR_CHOICES" :key="choice.value" :class="['addr-radio-row', { disabled: !ready || saving === 'mesa_sidebar' }]">
+        <input type="radio" name="mesa-sidebar" :value="choice.value" :checked="mesaSidebar === choice.value" :disabled="!ready || saving === 'mesa_sidebar'" @change="chooseSidebar(choice.value, $event.target as HTMLInputElement)" />
+        <span class="addr-switch-text"><strong>{{ t(choice.label) }}</strong><small>{{ t(choice.hint) }}</small></span>
+      </label>
+      <p v-if="sidebarError" class="inline-error" role="alert">{{ sidebarError }}</p>
+      <span v-if="saving === 'mesa_sidebar'" class="addr-hint" role="status">{{ t('Saving…') }}</span>
+      <span v-else-if="saved === 'mesa_sidebar'" class="addr-saved" role="status">{{ t('Saved. The Mesa shows it right away.') }}</span>
+    </div>
   </section>
 </template>
 
@@ -185,6 +214,9 @@ async function toggleDictation(input: HTMLInputElement) {
 .addr-switch:checked { background: var(--accent); }
 .addr-switch:checked::after { transform: translateX(16px); }
 .addr-switch:disabled { opacity: .6; cursor: not-allowed; }
+.addr-radio-row { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 44px; padding: 4px 0; cursor: pointer; }
+.addr-radio-row > input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
+.addr-radio-row.disabled, .addr-radio-row.disabled > input { cursor: default; }
 @media (pointer: coarse) {
   .addr-field input, .addr-zones { min-height: 44px; }
   .addr-actions .primary-button { min-height: 44px; padding: 0 16px; }

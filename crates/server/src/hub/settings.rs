@@ -9,21 +9,30 @@
 //!   are shown with instead of whatever address the browser happens to use.
 //!   Empty means "this server's own address".
 //! - `dictation`: `browser` (the Web Speech API) or `off` (no microphone button).
+//! - `mesa_sidebar`: `icons` (on the Mesa the navigation is a narrow rail of
+//!   icons, the default) or `expanded` (the full sidebar, as on the other pages).
+//! - `app_order`: how the person arranged their apps, as three lists of
+//!   `<workspace id>/<slug>`: `pinned` (first, in this order), `order` (the
+//!   rest, in this order; apps not named come after) and `hidden` (left out of
+//!   the rail, the sidebar and Home, still in the Apps catalog). Stored as JSON.
 //!
-//! `GET /api/hub/settings` returns all three; `PUT` takes any of them and
+//! `GET /api/hub/settings` returns all of them; `PUT` takes any of them and
 //! changes nothing unless every value sent is valid.
 use super::{HubStore, cs};
 use crate::{ApiError, AppState, Result};
 use axum::{Json, Router, extract::State, routing::get};
 use chrono_tz::Tz;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::path::Path;
 
 pub(crate) const DEFAULT_TIMEZONE: &str = "America/Sao_Paulo";
 const DEFAULT_DICTATION: &str = "browser";
+const DEFAULT_MESA_SIDEBAR: &str = "icons";
 const MAX_URL: usize = 200;
+/// Apps named in each list of `app_order`: far more than anyone arranges by hand.
+const MAX_ORDERED_APPS: usize = 500;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -36,6 +45,20 @@ pub(crate) struct Settings {
     pub timezone: String,
     pub public_base_url: String,
     pub dictation: String,
+    pub mesa_sidebar: String,
+    pub app_order: AppOrder,
+}
+
+/// The person's arrangement of their apps; every entry is `<workspace id>/<slug>`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AppOrder {
+    #[serde(default)]
+    pub pinned: Vec<String>,
+    #[serde(default)]
+    pub order: Vec<String>,
+    #[serde(default)]
+    pub hidden: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +87,13 @@ pub(crate) fn load(c: &Connection) -> rusqlite::Result<Settings> {
         dictation: stored(c, "dictation")?
             .filter(|value| check_dictation(value).is_ok())
             .unwrap_or_else(|| DEFAULT_DICTATION.to_owned()),
+        mesa_sidebar: stored(c, "mesa_sidebar")?
+            .filter(|value| check_mesa_sidebar(value).is_ok())
+            .unwrap_or_else(|| DEFAULT_MESA_SIDEBAR.to_owned()),
+        app_order: stored(c, "app_order")?
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+            .and_then(|value| check_app_order(&value).ok())
+            .unwrap_or_default(),
     })
 }
 
@@ -136,11 +166,60 @@ fn check_dictation(text: &str) -> std::result::Result<String, String> {
     }
 }
 
-/// The valid form of every setting in `patch`, or the first problem. Nothing
-/// is written here, so a request with one bad value changes nothing.
+fn check_mesa_sidebar(text: &str) -> std::result::Result<String, String> {
+    match text.trim() {
+        value @ ("icons" | "expanded") => Ok(value.to_owned()),
+        other => Err(format!("The sidebar on the Mesa is \"icons\" or \"expanded\", not \"{other}\"")),
+    }
+}
+
+/// `<workspace id>/<slug>`: the id as the server writes it, the slug as an app folder is named.
+fn valid_app_key(key: &str) -> bool {
+    key.split_once('/').is_some_and(|(workspace, slug)| {
+        (1..=64).contains(&workspace.len())
+            && workspace.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            && super::apps::valid_slug(slug)
+    })
+}
+
+/// The arrangement as it is stored: every entry a valid app key, none twice in
+/// a list, and a hidden app never pinned (hiding wins).
+fn check_app_order(value: &Value) -> std::result::Result<AppOrder, String> {
+    const SHAPE: &str = "app_order is an object with the lists pinned, order and hidden, each of \"<workspace id>/<slug>\"";
+    if !value.is_object() {
+        return Err(SHAPE.into());
+    }
+    let raw: AppOrder = serde_json::from_value(value.clone()).map_err(|error| format!("{SHAPE} ({error})"))?;
+    let tidy = |name: &str, list: Vec<String>| -> std::result::Result<Vec<String>, String> {
+        if list.len() > MAX_ORDERED_APPS {
+            return Err(format!("app_order.{name} names {} apps; the limit is {MAX_ORDERED_APPS}", list.len()));
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut kept = Vec::with_capacity(list.len());
+        for key in list {
+            if !valid_app_key(&key) {
+                let shown: String = key.chars().take(80).collect();
+                return Err(format!("\"{shown}\" in app_order.{name} is not an app; write <workspace id>/<slug>"));
+            }
+            if seen.insert(key.clone()) {
+                kept.push(key);
+            }
+        }
+        Ok(kept)
+    };
+    let hidden = tidy("hidden", raw.hidden)?;
+    let mut pinned = tidy("pinned", raw.pinned)?;
+    pinned.retain(|key| !hidden.contains(key));
+    Ok(AppOrder { pinned, order: tidy("order", raw.order)?, hidden })
+}
+
+const KEYS: &str = "timezone, public_base_url, dictation, mesa_sidebar and app_order";
+
+/// The valid form of every setting in `patch`, as it is stored, or the first
+/// problem. Nothing is written here, so a request with one bad value changes nothing.
 fn checked(patch: &Map<String, Value>) -> std::result::Result<Vec<(&'static str, String)>, String> {
     if patch.is_empty() {
-        return Err("Send at least one of: timezone, public_base_url, dictation".into());
+        return Err(format!("Send at least one of: {KEYS}"));
     }
     patch
         .iter()
@@ -149,7 +228,12 @@ fn checked(patch: &Map<String, Value>) -> std::result::Result<Vec<(&'static str,
                 "timezone" => ("timezone", check_timezone),
                 "public_base_url" => ("public_base_url", check_base_url),
                 "dictation" => ("dictation", check_dictation),
-                other => return Err(format!("Unknown setting \"{other}\"; there are timezone, public_base_url and dictation")),
+                "mesa_sidebar" => ("mesa_sidebar", check_mesa_sidebar),
+                "app_order" => {
+                    let order = check_app_order(value)?;
+                    return Ok(("app_order", serde_json::to_string(&order).map_err(|error| error.to_string())?));
+                }
+                other => return Err(format!("Unknown setting \"{other}\"; there are {KEYS}")),
             };
             let text = value.as_str().ok_or_else(|| format!("{key} must be a string"))?;
             Ok((key, check(text)?))
@@ -261,14 +345,32 @@ mod tests {
         value.as_object().unwrap().clone()
     }
 
+    /// What a database nobody changed answers, but for the given three.
+    fn settings(timezone: &str, public_base_url: &str, dictation: &str) -> Settings {
+        Settings {
+            timezone: timezone.into(),
+            public_base_url: public_base_url.into(),
+            dictation: dictation.into(),
+            mesa_sidebar: "icons".into(),
+            app_order: AppOrder::default(),
+        }
+    }
+
+    /// The same, as the API writes it.
+    fn answer(timezone: &str, public_base_url: &str, dictation: &str) -> Value {
+        json!({
+            "timezone": timezone, "public_base_url": public_base_url, "dictation": dictation,
+            "mesa_sidebar": "icons", "app_order": { "pinned": [], "order": [], "hidden": [] },
+        })
+    }
+
+    const WS: &str = "c4beb975-88a1-47e6-8d5c-71be467f0a54";
+
     #[test]
     fn hub_settings_have_defaults_and_survive_a_bad_row() {
         let hub = HubStore::memory();
         hub.with(|c| {
-            assert_eq!(
-                load(c)?,
-                Settings { timezone: DEFAULT_TIMEZONE.into(), public_base_url: String::new(), dictation: "browser".into() }
-            );
+            assert_eq!(load(c)?, settings(DEFAULT_TIMEZONE, "", "browser"));
             assert_eq!(public_base_url(c)?, None);
             store(c, "timezone", "Asia/Tokyo")?;
             store(c, "public_base_url", "https://pub.example.com")?;
@@ -280,12 +382,11 @@ mod tests {
             store(c, "timezone", "Mars/Olympus")?;
             store(c, "public_base_url", "http://plain.example.com")?;
             store(c, "dictation", "whisper")?;
-            assert_eq!(
-                load(c)?,
-                Settings { timezone: DEFAULT_TIMEZONE.into(), public_base_url: String::new(), dictation: "browser".into() }
-            );
+            store(c, "mesa_sidebar", "floating")?;
+            store(c, "app_order", "{\"pinned\": [\"not an app\"]}")?;
+            assert_eq!(load(c)?, settings(DEFAULT_TIMEZONE, "", "browser"));
             let rows: i64 = c.query_row("SELECT count(*) FROM hub_settings", [], |r| r.get(0))?;
-            assert_eq!(rows, 3, "one row per key, replaced in place");
+            assert_eq!(rows, 5, "one row per key, replaced in place");
             Ok(())
         })
         .unwrap();
@@ -338,6 +439,129 @@ mod tests {
         assert!(checked(&object(json!({ "theme": "dark" }))).unwrap_err().contains("Unknown setting"));
         assert!(checked(&object(json!({ "dictation": true }))).unwrap_err().contains("must be a string"));
         assert!(checked(&object(json!({ "timezone": null }))).is_err());
+    }
+
+    #[test]
+    fn hub_settings_validate_the_sidebar_and_the_app_order() {
+        assert_eq!(check_mesa_sidebar("icons").unwrap(), "icons");
+        assert_eq!(check_mesa_sidebar(" expanded ").unwrap(), "expanded");
+        for bad in ["", "rail", "Icons", "collapsed"] {
+            assert!(check_mesa_sidebar(bad).unwrap_err().contains("\"icons\" or \"expanded\""), "{bad}");
+        }
+
+        assert!(valid_app_key(&format!("{WS}/reportes")));
+        assert!(valid_app_key("w1/a"));
+        let long = format!("{}/a", "w".repeat(65));
+        for bad in ["", "reportes", "/reportes", "w1/", "w1/Reportes", "w1/../etc", "w1/a/b", "w 1/a", "w1/-a", long.as_str()] {
+            assert!(!valid_app_key(bad), "{bad}");
+        }
+
+        let a = format!("{WS}/pipeline");
+        let b = format!("{WS}/reportes");
+        let c = format!("{WS}/vendas");
+        // Lists left out are empty; a repeated app counts once; hiding wins over pinning.
+        assert_eq!(check_app_order(&json!({})).unwrap(), AppOrder::default());
+        assert_eq!(
+            check_app_order(&json!({ "pinned": [a, b, a], "order": [c, b, c], "hidden": [b] })).unwrap(),
+            AppOrder { pinned: vec![a.clone()], order: vec![c.clone(), b.clone()], hidden: vec![b.clone()] }
+        );
+        for bad in [
+            json!("pinned"),
+            json!([a]),
+            json!(null),
+            json!({ "pinned": a }),
+            json!({ "pinned": [1] }),
+            json!({ "pinned": ["not an app"] }),
+            json!({ "order": ["w1/Upper"] }),
+            json!({ "hidden": [format!("{WS}/../secrets")] }),
+            json!({ "favourites": [a] }),
+        ] {
+            let error = check_app_order(&bad).expect_err(&bad.to_string());
+            assert!(error.contains("app_order"), "{bad}: {error}");
+        }
+        let many: Vec<String> = (0..=MAX_ORDERED_APPS).map(|n| format!("w1/app-{n}")).collect();
+        assert!(check_app_order(&json!({ "order": many })).unwrap_err().contains("limit"));
+        assert!(check_app_order(&json!({ "order": many[..MAX_ORDERED_APPS] })).is_ok());
+
+        // Through `checked`: the sidebar is a string, the order an object, stored as JSON.
+        let ok = checked(&object(json!({ "mesa_sidebar": "expanded", "app_order": { "hidden": [a] } }))).unwrap();
+        assert!(ok.contains(&("mesa_sidebar", "expanded".into())));
+        let stored = &ok.iter().find(|(key, _)| *key == "app_order").unwrap().1;
+        assert_eq!(serde_json::from_str::<Value>(stored).unwrap(), json!({ "pinned": [], "order": [], "hidden": [a] }));
+        assert!(checked(&object(json!({ "mesa_sidebar": true }))).unwrap_err().contains("must be a string"));
+        assert!(checked(&object(json!({ "app_order": "[]" }))).unwrap_err().contains("app_order is an object"));
+        assert!(checked(&object(json!({ "theme": "dark" }))).unwrap_err().contains("mesa_sidebar and app_order"));
+    }
+
+    #[tokio::test]
+    async fn hub_settings_api_keeps_the_sidebar_choice_and_the_app_order() {
+        let f = fixture();
+        let a = format!("{WS}/pipeline");
+        let b = format!("{WS}/reportes");
+
+        let (status, body) = f.api("PUT", "/api/hub/settings", json!({ "mesa_sidebar": "expanded" })).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["mesa_sidebar"], "expanded");
+        assert_eq!(body["timezone"], DEFAULT_TIMEZONE, "the other settings stay");
+
+        let (status, body) = f
+            .api("PUT", "/api/hub/settings", json!({ "app_order": { "pinned": [b], "order": [a, b], "hidden": [] } }))
+            .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["app_order"], json!({ "pinned": [b], "order": [a, b], "hidden": [] }));
+        assert_eq!(body["mesa_sidebar"], "expanded");
+
+        // One bad entry: neither the order nor the setting sent with it changes.
+        for bad in [
+            json!({ "mesa_sidebar": "icons", "app_order": { "pinned": ["../../etc/passwd"] } }),
+            json!({ "mesa_sidebar": "icons", "app_order": { "pinned": [a], "extra": [] } }),
+            json!({ "mesa_sidebar": "icons", "app_order": [a] }),
+            json!({ "mesa_sidebar": "sideways" }),
+        ] {
+            let (status, body) = f.api("PUT", "/api/hub/settings", bad.clone()).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+            assert!(body["error"].is_string(), "{body}");
+        }
+        let (_, body) = f.api("GET", "/api/hub/settings", Value::Null).await;
+        assert_eq!(body["mesa_sidebar"], "expanded");
+        assert_eq!(body["app_order"], json!({ "pinned": [b], "order": [a, b], "hidden": [] }));
+
+        // Hiding a pinned app unpins it; an empty object clears the arrangement.
+        let (_, body) = f.api("PUT", "/api/hub/settings", json!({ "app_order": { "pinned": [b], "hidden": [b] } })).await;
+        assert_eq!(body["app_order"], json!({ "pinned": [], "order": [], "hidden": [b] }));
+        let (_, body) = f.api("PUT", "/api/hub/settings", json!({ "app_order": {}, "mesa_sidebar": "icons" })).await;
+        assert_eq!(body["app_order"], json!({ "pinned": [], "order": [], "hidden": [] }));
+        assert_eq!(body["mesa_sidebar"], "icons");
+
+        // Without the web header the arrangement cannot be changed either.
+        let bearer = format!("Bearer {TOKEN}");
+        let (status, _) = f
+            .send(
+                "PUT",
+                "/api/hub/settings",
+                &[("authorization", bearer.as_str()), ("content-type", "application/json")],
+                r#"{"mesa_sidebar":"expanded"}"#,
+            )
+            .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    /// `hub_settings` is the table migration 7 made: the two new keys are rows
+    /// in it, so a database from before this stage needs no migration and
+    /// answers the defaults until the person chooses.
+    #[test]
+    fn hub_settings_from_before_the_rail_answer_the_new_defaults() {
+        let hub = HubStore::memory();
+        hub.with(|c| {
+            store(c, "timezone", "America/Bahia")?;
+            store(c, "dictation", "off")?;
+            let loaded = load(c)?;
+            assert_eq!(loaded.mesa_sidebar, "icons");
+            assert_eq!(loaded.app_order, AppOrder::default());
+            assert_eq!((loaded.timezone.as_str(), loaded.dictation.as_str()), ("America/Bahia", "off"));
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -453,17 +677,17 @@ mod tests {
         let f = fixture();
         let (status, body) = f.api("GET", "/api/hub/settings", Value::Null).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, json!({ "timezone": DEFAULT_TIMEZONE, "public_base_url": "", "dictation": "browser" }));
+        assert_eq!(body, answer(DEFAULT_TIMEZONE, "", "browser"));
 
         let (status, body) = f.api("PUT", "/api/hub/settings", json!({ "timezone": "Europe/Lisbon" })).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, json!({ "timezone": "Europe/Lisbon", "public_base_url": "", "dictation": "browser" }));
+        assert_eq!(body, answer("Europe/Lisbon", "", "browser"));
 
         let (status, body) = f
             .api("PUT", "/api/hub/settings", json!({ "public_base_url": "https://Pub.Example.com/", "dictation": "off" }))
             .await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, json!({ "timezone": "Europe/Lisbon", "public_base_url": "https://pub.example.com", "dictation": "off" }));
+        assert_eq!(body, answer("Europe/Lisbon", "https://pub.example.com", "off"));
 
         // One bad value: nothing in the request is applied.
         let (status, body) = f
@@ -482,7 +706,7 @@ mod tests {
             assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
         }
         let (_, body) = f.api("GET", "/api/hub/settings", Value::Null).await;
-        assert_eq!(body, json!({ "timezone": "Europe/Lisbon", "public_base_url": "https://pub.example.com", "dictation": "off" }));
+        assert_eq!(body, answer("Europe/Lisbon", "https://pub.example.com", "off"));
 
         // Emptying the address goes back to this server's own.
         let (status, body) = f.api("PUT", "/api/hub/settings", json!({ "public_base_url": "" })).await;

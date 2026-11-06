@@ -102,7 +102,8 @@ test('Settings has a routed section for addresses and the time zone', () => {
   const page = read('apps/web/src/features/SettingsPage.vue');
   assert.match(page, /\{ id: 'addresses', icon: 'clock', label: 'Addresses and time zone' \}/);
   assert.match(page, /<AddressesPanel v-else-if="hubSection==='addresses'"\/>/);
-  assert.deepEqual(DEFAULT_SETTINGS, { timezone: 'America/Sao_Paulo', public_base_url: '', dictation: 'browser' });
+  // Apps A added the sidebar choice and the order of the apps to the same settings.
+  assert.deepEqual(DEFAULT_SETTINGS, { timezone: 'America/Sao_Paulo', public_base_url: '', dictation: 'browser', mesa_sidebar: 'icons', app_order: { pinned: [], order: [], hidden: [] } });
 });
 
 test('automations say which time zone their schedule is read in', async () => {
