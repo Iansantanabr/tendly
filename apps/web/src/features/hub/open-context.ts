@@ -8,8 +8,19 @@ export interface OpenContext {
   name: string;
 }
 
-/** Kept current by App.vue from the canvas; read by every chat composer. */
-export const openContext = reactive({ items: [] as OpenContext[] });
+const state = reactive({ canvas: [] as OpenContext[], page: [] as OpenContext[] });
+const sameItem = (a: OpenContext, b: OpenContext) => a.workspaceId === b.workspaceId && a.path === b.path;
+/**
+ * What every chat composer offers as context. `items` is what is open on the
+ * Mesa (App.vue assigns it from the canvas) after what the page over it shows:
+ * the app of the full-screen view, which is not a tab of the Mesa.
+ */
+export const openContext = {
+  get items(): OpenContext[] { return [...state.page, ...state.canvas.filter(item => !state.page.some(shown => sameItem(shown, item)))]; },
+  set items(value: OpenContext[]) { state.canvas = value; },
+};
+/** What the page on screen shows (the full-screen app); empty when it shows nothing of the kind. */
+export function setPageContext(items: OpenContext[]) { state.page = items; }
 
 const meta = (pane: PaneNode, key: string) => {
   const value = (pane.metadata as Record<string, unknown> | undefined)?.[key];

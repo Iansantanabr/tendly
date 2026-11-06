@@ -69,6 +69,8 @@ const emit = defineEmits<{
   apps: [];
   /** An app, opened on the Mesa. */
   openApp: [app: HubApp];
+  /** An app from the list: in full screen. */
+  openAppPage: [app: HubApp];
   /** A session the workspace groups do not list (archived, temporary): find it in the library page. */
   showInSessions: [id: string, archived: boolean];
   canvas: [];
@@ -195,7 +197,7 @@ defineExpose({ revealSession });
       <button :class="['nav-item', { current: currentPage === 'skills' }]" :aria-current="currentPage === 'skills' ? 'page' : undefined" @click="emit('skills')"><Icon name="sparkles" :size="16" /><span>{{ t('Skills') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'apps' }]" :aria-current="currentPage === 'apps' ? 'page' : undefined" @click="emit('apps')"><Icon name="apps" :size="16" /><span>{{ t('Apps') }}</span></button>
     </nav>
-    <SidebarApps v-if="!compact" @catalog="emit('apps')" @open-app="emit('openApp', $event)" />
+    <SidebarApps v-if="!compact" @catalog="emit('apps')" @open-app="emit('openAppPage', $event)" />
     <div class="sidebar-view-switch" role="tablist" :aria-label="t('Sidebar view')">
       <button type="button" role="tab" :aria-selected="sidebarView === 'workspaces'" :class="{ current: sidebarView === 'workspaces' }" @click="setSidebarView('workspaces')"><Icon name="folder" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Workspaces') }}</span></button>
       <button type="button" role="tab" :aria-selected="sidebarView === 'conversations'" :class="{ current: sidebarView === 'conversations' }" @click="setSidebarView('conversations')"><Icon name="chat" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Conversations') }}</span></button>

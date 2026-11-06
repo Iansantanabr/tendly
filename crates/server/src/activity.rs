@@ -246,6 +246,11 @@ impl Activity {
             .send(json!({ "type": "canvas", "revision": revision }));
     }
 
+    /// Something the hub tells every open window (`hub.rs`), passed on as it is.
+    pub fn hub_event(&self, event: Value) {
+        let _ = self.inner.events.send(event);
+    }
+
     fn take_undo(&self, id: Uuid) -> Option<Undo> {
         let mut kept = self.inner.undo.lock().expect("undo");
         let index = kept.iter().position(|(entry, _)| *entry == id)?;

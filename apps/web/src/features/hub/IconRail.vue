@@ -32,9 +32,18 @@ const props = withDefaults(defineProps<{
   openApps?: string[];
   /** Whether the Workspaces/Conversations panel beside the rail is showing. */
   panelOpen: boolean;
+  /** False where the rail stands alone (an app in full screen): no panel, so no handle for it. */
+  panel?: boolean;
   workspaces: Workspace[];
-}>(), { inboxUnread: 0, openApps: () => [] });
-const emit = defineEmits<{ go: [target: RailTarget]; openApp: [app: HubApp]; togglePanel: [] }>();
+}>(), { inboxUnread: 0, openApps: () => [], panel: true });
+const emit = defineEmits<{
+  go: [target: RailTarget];
+  /** A tile was pressed: the app in full screen. */
+  openApp: [app: HubApp];
+  /** "Report a problem": its app in a tab of the Mesa, beside what you were doing. */
+  openOnMesa: [app: HubApp];
+  togglePanel: [];
+}>();
 const { t } = useI18n();
 
 const root = ref<HTMLElement>(), flyout = ref<HTMLElement>();
@@ -178,7 +187,7 @@ async function report(event: MouseEvent) {
   const from = event.currentTarget as HTMLElement;
   if (reporting.value) return;
   reporting.value = true; closeAll();
-  try { emit("openApp", await openReportApp(props.workspaces.filter(workspace => workspace.id !== inbox.conversationsWorkspaceId).map(workspace => workspace.id), t)); }
+  try { emit("openOnMesa", await openReportApp(props.workspaces.filter(workspace => workspace.id !== inbox.conversationsWorkspaceId).map(workspace => workspace.id), t)); }
   catch (cause) { openMenu({ kind: "notice", text: errorMessage(cause) }, from, true); }
   finally { reporting.value = false; }
 }
@@ -212,7 +221,7 @@ async function expand() {
      </div>
       <span id="rail-app-hint" class="sr-only">{{ t('Press the right arrow for options. Drag onto the Mesa to open it beside what is there.') }}</span>
     </nav>
-    <button type="button" :class="['rail-panel-toggle', { folded: !panelOpen }]" :aria-expanded="panelOpen" :aria-label="t(panelOpen ? 'Hide the workspaces and conversations panel' : 'Show the workspaces and conversations panel')" :title="t(panelOpen ? 'Hide the workspaces and conversations panel' : 'Show the workspaces and conversations panel')" @click="emit('togglePanel')"><Icon name="chevron" :size="12" /></button>
+    <button v-if="panel" type="button" :class="['rail-panel-toggle', { folded: !panelOpen }]" :aria-expanded="panelOpen" :aria-label="t(panelOpen ? 'Hide the workspaces and conversations panel' : 'Show the workspaces and conversations panel')" :title="t(panelOpen ? 'Hide the workspaces and conversations panel' : 'Show the workspaces and conversations panel')" @click="emit('togglePanel')"><Icon name="chevron" :size="12" /></button>
     <Teleport to="body">
       <div v-if="tip && !menu" class="rail-tip" aria-hidden="true" :style="{ left: `${tip.left}px`, top: `${tip.top}px` }">{{ tip.text }}</div>
       <div v-if="menu" ref="flyout" class="rail-flyout" :style="{ left: `${place.left}px`, top: `${place.top}px` }" @keydown="menuKey">

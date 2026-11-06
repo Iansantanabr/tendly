@@ -31,11 +31,15 @@ export const RAIL_MORE: readonly RailItem[] = [
 ];
 
 /**
- * Which sidebar a window gets. The rail is for the Mesa only, and only where
- * the sidebar is a column: below that width it is a drawer, left as it was.
+ * Which sidebar a window gets. The rail is for the Mesa, and only where the
+ * sidebar is a column: below that width it is a drawer, left as it was. An
+ * app in full screen (`app`) keeps the rail alone, whatever the preference
+ * says about the Mesa: the page is the app's.
  */
-export function sidebarLayout(input: { page?: string; wide: boolean; mobile: boolean; preference: MesaSidebar }): "rail" | "expanded" {
-  return !input.page && input.wide && !input.mobile && input.preference === "icons" ? "rail" : "expanded";
+export function sidebarLayout(input: { page?: string; wide: boolean; mobile: boolean; preference: MesaSidebar }): "rail" | "expanded" | "app" {
+  if (!input.wide || input.mobile) return "expanded";
+  if (input.page === "app") return "app";
+  return !input.page && input.preference === "icons" ? "rail" : "expanded";
 }
 
 /** Where an arrow key moves within the rail, or undefined for any other key. The ends wrap. */

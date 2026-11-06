@@ -589,6 +589,9 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .hub-rail-on .sidebar { grid-column: 2; }
 .hub-rail-on .main-workspace { grid-column: 3; }
 .hub-rail-on .explorer-panel { grid-column: 4; }
+/* An app in full screen: the rail alone, no Workspaces/Conversations panel (a width dragged for it is set inline, so the column is given outright). */
+.hub-app-focus .app-body { grid-template-columns: var(--hub-rail) 0 minmax(0, 1fr) var(--rail-right); }
+.hub-app-focus .sidebar { display: none; }
 .sidebar { position: relative; display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--glass-edge); background: var(--glass-side); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); padding: 14px 12px 0; }
 .sidebar-resizer { position: absolute; top: 0; right: -4px; bottom: 0; width: 8px; cursor: col-resize; z-index: 5; }
 .sidebar-resizer:hover, .sidebar-resizer:active { background: linear-gradient(90deg, transparent 3px, var(--line-strong) 3px, var(--line-strong) 5px, transparent 5px); }

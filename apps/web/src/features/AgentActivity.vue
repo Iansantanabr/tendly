@@ -14,6 +14,7 @@ import { errorMessage, json, request } from "./api";
 import ProviderIcon from "./ProviderIcon.vue";
 import Icon from "./Icon.vue";
 import { useI18n } from "../i18n";
+import { liveMessage } from "./hub/app-live";
 
 interface Who { kind: "session" | "external" | "machine" | "you"; session_id?: string; title?: string | null; provider?: ProviderKind | null }
 interface Row { label: string; value: string }
@@ -44,6 +45,7 @@ function dismiss(id: string) {
 function received(event: MessageEvent) {
   let message: { type: string; id?: string; requests?: AgentRequest[] } & Partial<AgentRequest & Notice>;
   try { message = JSON.parse(String(event.data)); } catch { return; }
+  liveMessage(message);
   if (message.type === "snapshot") requests.value = message.requests ?? [];
   else if (message.type === "request") { const next = message as unknown as AgentRequest; requests.value = [...requests.value.filter(item => item.id !== next.id), next]; }
   else if (message.type === "resolved" && message.id) { requests.value = requests.value.filter(item => item.id !== message.id); delete keys[message.id]; delete errors[message.id]; }

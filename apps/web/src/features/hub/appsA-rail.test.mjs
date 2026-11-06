@@ -138,6 +138,10 @@ test('the rail is for the Mesa on a desktop-width window with the preference on 
   assert.equal(sidebarLayout(on), 'rail');
   assert.equal(sidebarLayout({ ...on, preference: 'expanded' }), 'expanded');
   for (const page of ['home', 'apps', 'settings', 'inbox', 'skills', 'automations', 'integrations', 'sessions']) assert.equal(sidebarLayout({ ...on, page }), 'expanded', page);
+  // Stage B: an app in full screen keeps the rail alone, whatever the Mesa preference is.
+  assert.equal(sidebarLayout({ ...on, page: 'app' }), 'app');
+  assert.equal(sidebarLayout({ ...on, page: 'app', preference: 'expanded' }), 'app');
+  assert.equal(sidebarLayout({ ...on, page: 'app', wide: false, mobile: true }), 'expanded');
   // Below the column width the sidebar is a drawer, exactly as before.
   assert.equal(sidebarLayout({ ...on, wide: false, mobile: true }), 'expanded');
   assert.equal(sidebarLayout({ ...on, wide: false }), 'expanded');
@@ -396,9 +400,11 @@ test('Settings offers "Sidebar on the Mesa" with the saved choice selected', asy
 
 test('the shell shows the rail on the Mesa and strips the sidebar to its lists', () => {
   const shell = read('../../App.vue');
-  assert.match(shell, /const railMode = computed\(\(\) => sidebarLayout\(\{ page: page\.value, wide: sidebarRail\.value, mobile: mobile\.value, preference: mesaSidebar\.value \}\) === "rail"\)/);
+  assert.match(shell, /const sidebarMode = computed\(\(\) => sidebarLayout\(\{ page: page\.value, wide: sidebarRail\.value, mobile: mobile\.value, preference: mesaSidebar\.value \}\)\)/);
+  assert.match(shell, /const railMode = computed\(\(\) => sidebarMode\.value !== "expanded"\)/);
   assert.match(shell, /'hub-rail-on': railMode/);
-  assert.match(shell, /<IconRail v-if="railMode"[^>]*:current-app="appPaneKey\(focusedPane\)"[^>]*:open-apps="openAppKeys\(openPanes\)"[^>]*@open-app="openApp"[^>]*@toggle-panel="toggleSidebar"\/>/);
+  // Since stage B a tile opens the app in full screen; "Report a problem" still opens its app on the Mesa.
+  assert.match(shell, /<IconRail v-if="railMode"[^>]*:current-app="appFocus \? routeApp : appPaneKey\(focusedPane\)"[^>]*:open-apps="openAppKeys\(openPanes\)"[^>]*@open-app="openAppPage"[^>]*@open-on-mesa="openApp"[^>]*@toggle-panel="toggleSidebar"\/>/);
   assert.match(shell, /<WorkspaceSidebar ref="workspaceSidebar" :compact="railMode"/);
   // The rail comes before the panel, so Tab reaches it first.
   assert.ok(shell.indexOf('<IconRail') < shell.indexOf('<aside :class="[\'sidebar\''));
@@ -417,7 +423,7 @@ test('the shell shows the rail on the Mesa and strips the sidebar to its lists',
 test('the sidebar keeps its lists whole, and the menu only where the rail is not', () => {
   const sidebar = read('../WorkspaceSidebar.vue');
   assert.match(sidebar, /<nav v-if="!compact" class="workspace-global-nav"/);
-  assert.match(sidebar, /<SidebarApps v-if="!compact" @catalog="emit\('apps'\)" @open-app="emit\('openApp', \$event\)" \/>/);
+  assert.match(sidebar, /<SidebarApps v-if="!compact" @catalog="emit\('apps'\)" @open-app="emit\('openAppPage', \$event\)" \/>/);
   assert.match(sidebar, /<ReportProblem v-if="!compact" :workspaces="projectWorkspaces" :on-mesa="currentPage === 'canvas'"/);
   assert.doesNotMatch(sidebar, /sidebar-app\b|sidebarApps/, 'the wrapped chips are gone');
   // The Workspaces/Conversations switch and the lists are in both layouts.

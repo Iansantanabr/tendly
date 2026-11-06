@@ -17,7 +17,7 @@ import { loadHubSettings } from "./settings";
 
 /** Apps: small tools an agent builds in a project's `apps/` folder, opened on the Mesa. */
 const props = defineProps<{ workspaces: Workspace[]; profiles: EndpointProfile[]; selectedWorkspaceId?: string }>();
-const emit = defineEmits<{ back: []; started: [sessionId: string]; openApp: [app: HubApp] }>();
+const emit = defineEmits<{ back: []; started: [sessionId: string]; /** In full screen. */ openApp: [app: HubApp]; openOnMesa: [app: HubApp] }>();
 const { t } = useI18n();
 
 const STORAGE = "tendly.hub.apps";
@@ -98,7 +98,7 @@ function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noope
 </script>
 
 <template>
-  <PageShell :title="t('Apps')" :subtitle="t('Small tools an agent builds for you inside a project, opened on the Mesa.')" @back="emit('back')">
+  <PageShell :title="t('Apps')" :subtitle="t('Small tools an agent builds for you inside a project. Open one in full screen, or as a tab on the Mesa.')" @back="emit('back')">
     <template #actions>
       <button type="button" class="secondary-button" :disabled="apps.loading" @click="refreshApps()"><Icon name="refresh" :size="14" />{{ t('Refresh') }}</button>
     </template>
@@ -137,7 +137,7 @@ function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noope
         </form>
 
         <article v-for="app in sorted" :key="app.workspace_id + app.slug" :class="['apps-card', 'apps-app', { 'is-hidden': isHiddenApp(appOrder, appKey(app)) }]" @keydown="menuEscape($event, appKey(app))">
-          <button type="button" class="apps-app-main" :title="t('Open on the Mesa')" @click="emit('openApp', app)">
+          <button type="button" class="apps-app-main" :title="t('Open {app}', { app: app.name })" @click="emit('openApp', app)">
             <AppTile :name="app.name" :letter="app.letter" :color="app.color" :size="40" />
             <span class="apps-app-text"><strong>{{ app.name }}</strong><small v-if="app.description">{{ app.description }}</small></span>
           </button>
@@ -148,7 +148,7 @@ function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noope
             <span class="flex-spacer" />
             <button :ref="element => recordOpener(appKey(app), element)" type="button" class="icon-button" :aria-label="t('Options for {app}', { app: app.name })" :title="t('Options for {app}', { app: app.name })" :aria-expanded="menuKey === appKey(app)" @click="menuKey = menuKey === appKey(app) ? undefined : appKey(app)"><Icon name="more" :size="14" /></button>
             <button type="button" class="icon-button" :aria-label="t('Open in new tab')" :title="t('Open in new tab')" @click="openTab(app)"><Icon name="arrow" :size="14" /></button>
-            <button type="button" class="small-button" @click="emit('openApp', app)">{{ t('Open on the Mesa') }}</button>
+            <button type="button" class="small-button" :title="t('Open this app in a tab on the Mesa')" @click="emit('openOnMesa', app)">{{ t('Open on the Mesa') }}</button>
           </footer>
           <AppOrderMenu v-if="menuKey === appKey(app)" class="apps-app-menu" :app="app" autofocus @close="closeMenu(appKey(app))" />
         </article>

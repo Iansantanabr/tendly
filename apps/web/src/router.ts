@@ -25,6 +25,8 @@ export const router = createRouter({
     { path: "/habilidades", name: "skills", component: Page },
     { path: "/design", name: "design", component: Page },
     { path: "/apps", name: "apps", component: Page },
+    // One app on the whole page, with the icon rail beside it.
+    { path: "/apps/:workspace/:slug", name: "app", component: Page },
     { path: "/sessions", name: "sessions", component: Page },
     { path: "/system", name: "system", component: Page },
     { path: "/usage", name: "usage", component: Page },

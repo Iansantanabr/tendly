@@ -75,10 +75,28 @@ fn hub_apps_clean_path_refuses_escapes_and_data() {
 
 #[test]
 fn hub_apps_sdk_is_small_and_complete() {
-    assert!(SDK.lines().count() < 80, "{} lines", SDK.lines().count());
+    assert!(SDK.lines().count() < 180, "{} lines", SDK.lines().count());
     for needle in ["window.tendly", "credentials: 'same-origin'", "X-Tendly-Client", "remove", "list"] {
         assert!(SDK.contains(needle), "{needle}");
     }
+}
+
+#[test]
+fn hub_apps_sdk_reports_errors_to_the_tendly_page_only() {
+    // What it listens to, and what it offers.
+    for needle in ["'error'", "'unhandledrejection'", "console.error = function", "holdReload", "'hold-reload'", "'location'"] {
+        assert!(SDK.contains(needle), "{needle}");
+    }
+    // Every message goes through one function, to the parent, addressed to this page's own origin.
+    assert_eq!(SDK.matches("postMessage(").count(), 1, "one place posts");
+    assert!(SDK.contains("window.parent.postMessage(message, HOST_ORIGIN)"));
+    assert!(SDK.contains("var HOST_ORIGIN = location.origin;"));
+    assert!(!SDK.contains("'*'"), "never to any origin");
+    // Nothing is reported from a tab of its own, and the original console.error still runs.
+    assert!(SDK.contains("window.parent !== window"));
+    assert!(SDK.contains("consoleError.apply(console, arguments)"));
+    // Bounded: a looping error cannot flood the page.
+    assert!(SDK.contains("MAX_REPORTS = 50"));
 }
 
 #[test]
@@ -474,4 +492,240 @@ async fn hub_apps_sdk_is_served_as_javascript() {
     assert_eq!(reply.status, StatusCode::OK);
     assert!(reply.header("content-type").starts_with("text/javascript"));
     assert!(reply.text().contains("window.tendly"));
+}
+
+// ---------------------------------------------------------------------------
+// Reload on its own, and undo (`live.rs`)
+
+impl Fixture {
+    fn id(&self) -> tendly_domain::WorkspaceId {
+        self.workspace.parse().unwrap()
+    }
+    /// Plays the watcher: these paths changed.
+    fn touch(&self, paths: &[&str]) {
+        for path in paths {
+            self.state.hub.app_live.touched(self.id(), &self.repo, path);
+        }
+    }
+    /// Plays the task: the app went quiet.
+    async fn settle(&self, slug: &str) -> Option<Value> {
+        live::testing::settle(&self.state, self.id(), slug).await
+    }
+    fn read(&self, path: &str) -> String {
+        fs::read_to_string(self.repo.join(path)).unwrap()
+    }
+    async fn scaffold(&self, slug: &str) {
+        let url = format!("/api/hub/apps/{}/scaffold", self.workspace);
+        let reply = self.send("POST", &url, json!({ "slug": slug, "name": "Demo" }).to_string(), true).await;
+        assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.text());
+    }
+    async fn undo(&self, slug: &str, id: &str) -> Reply {
+        self.send("POST", &format!("{}/changes/{id}/undo", self.base(slug)), axum::body::Body::empty(), true).await
+    }
+}
+
+#[test]
+fn hub_apps_live_only_app_files_reload_an_app() {
+    assert_eq!(live::app_path("apps/crm/index.html"), Some(("crm", "index.html")));
+    assert_eq!(live::app_path("apps/crm/js/app.js"), Some(("crm", "js/app.js")));
+    assert_eq!(live::app_path("apps/crm/assets/data/x.json"), Some(("crm", "assets/data/x.json")));
+    for other in [
+        "apps/crm", "apps/crm/", "apps/crm/data", "apps/crm/data/leads.json", "apps/crm/.env", "apps/crm/js/.cache/x",
+        "apps/Bad Name/index.html", "src/apps/crm/index.html", "notes.md", "apps/index.html", "apps/crm//x",
+    ] {
+        assert_eq!(live::app_path(other), None, "{other}");
+    }
+}
+
+#[tokio::test]
+async fn hub_apps_live_a_burst_is_one_change_once_the_app_is_quiet() {
+    let f = fixture();
+    f.scaffold("demo").await;
+    // Data the app saves and paths elsewhere open no burst.
+    f.touch(&["apps/demo/data/notes.json", "apps/demo/data", "README.md", "apps/demo"]);
+    assert_eq!(live::testing::open_bursts(&f.state), 0);
+    assert_eq!(f.get(&format!("{}/changes", f.base("demo"))).await.json()["latest"], Value::Null);
+
+    f.write("apps/demo/index.html", "<h1>two</h1>");
+    f.write("apps/demo/app.js", "let a = 1;");
+    f.touch(&["apps/demo/index.html", "apps/demo/app.js", "apps/demo/index.html"]);
+    assert_eq!(live::testing::open_bursts(&f.state), 1);
+    // Not due while the files are still moving, due after the quiet time.
+    assert_eq!(live::testing::due(&f.state, std::time::Duration::ZERO), 0);
+    assert_eq!(live::testing::due(&f.state, live::QUIET), 1);
+
+    let change = f.settle("demo").await.expect("a change");
+    assert_eq!(change["count"], 2);
+    assert_eq!(change["paths"], json!(["apps/demo/app.js", "apps/demo/index.html"]));
+    assert_eq!(change["undoable"], true);
+    assert_eq!(change["undo_of"], Value::Null);
+    let listed = f.get(&format!("{}/changes", f.base("demo"))).await.json();
+    assert_eq!(listed["latest"]["id"], change["id"]);
+    assert_eq!(listed["quiet_ms"], 600);
+
+    // A file touched without being changed is not a change: nothing to reload.
+    f.touch(&["apps/demo/index.html"]);
+    assert_eq!(f.settle("demo").await, None);
+    assert_eq!(f.get(&format!("{}/changes", f.base("demo"))).await.json()["latest"]["id"], change["id"]);
+    // An app that does not exist has no changes to ask about.
+    assert_eq!(f.get(&format!("{}/changes", f.base("ghost"))).await.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn hub_apps_live_undo_puts_the_files_back_and_undoing_that_is_the_redo() {
+    let f = fixture();
+    f.scaffold("demo").await;
+    let original = f.read("apps/demo/index.html");
+    f.write("apps/demo/style.css", "body { color: red; }");
+    f.touch(&["apps/demo/style.css"]);
+    f.settle("demo").await.expect("the stylesheet arrived");
+
+    // One burst: a file edited, one created, one deleted.
+    f.write("apps/demo/index.html", "<h1>broken</h1>");
+    f.write("apps/demo/extra.js", "console.log(1);");
+    fs::remove_file(f.repo.join("apps/demo/style.css")).unwrap();
+    f.touch(&["apps/demo/index.html", "apps/demo/extra.js", "apps/demo/style.css"]);
+    let change = f.settle("demo").await.expect("a change");
+    assert_eq!((change["count"].clone(), change["undoable"].clone()), (json!(3), json!(true)));
+    let id = change["id"].as_str().unwrap().to_owned();
+
+    // Writes need the web header, like every other change.
+    let plain = f.send("POST", &format!("{}/changes/{id}/undo", f.base("demo")), axum::body::Body::empty(), false).await;
+    assert_eq!(plain.status, StatusCode::FORBIDDEN);
+
+    let undone = f.undo("demo", &id).await;
+    assert_eq!(undone.status, StatusCode::OK, "{}", undone.text());
+    let body = undone.json();
+    assert_eq!(body["undone"], true);
+    assert_eq!(body["restored"], json!(["apps/demo/index.html", "apps/demo/style.css"]));
+    assert_eq!(body["removed"], json!(["apps/demo/extra.js"]));
+    assert_eq!(body["skipped"], json!([]));
+    assert_eq!(f.read("apps/demo/index.html"), original);
+    assert_eq!(f.read("apps/demo/style.css"), "body { color: red; }");
+    assert!(!f.repo.join("apps/demo/extra.js").exists());
+
+    // The undo's own writes are the next change, marked as the undo of the first.
+    f.touch(&["apps/demo/index.html", "apps/demo/extra.js", "apps/demo/style.css"]);
+    let echo = f.settle("demo").await.expect("the undo is a change");
+    assert_eq!(echo["undo_of"], json!(id));
+    assert_eq!((echo["undoable"].clone(), echo["redo"].clone()), (json!(true), json!(false)));
+    // The first change is not the latest anymore.
+    assert_eq!(f.undo("demo", &id).await.status, StatusCode::CONFLICT);
+
+    // Undoing the undo is the redo: the three files are as the burst left them.
+    let redo = f.undo("demo", echo["id"].as_str().unwrap()).await;
+    assert_eq!(redo.status, StatusCode::OK, "{}", redo.text());
+    assert_eq!(f.read("apps/demo/index.html"), "<h1>broken</h1>");
+    assert_eq!(f.read("apps/demo/extra.js"), "console.log(1);");
+    assert!(!f.repo.join("apps/demo/style.css").exists());
+    // ...and is announced as a redo, which can be undone like any change.
+    f.touch(&["apps/demo/index.html", "apps/demo/extra.js", "apps/demo/style.css"]);
+    let again = f.settle("demo").await.expect("the redo is a change");
+    assert_eq!((again["undo_of"].clone(), again["redo"].clone()), (echo["id"].clone(), json!(true)));
+    assert_eq!(again["undoable"], true);
+
+    // The file history has every step, the restores credited to the person.
+    let history = f
+        .get(&format!("/api/hub/history?workspace_id={}&path=apps/demo/index.html", f.workspace))
+        .await
+        .json();
+    let authors: Vec<&str> = history["versions"].as_array().unwrap().iter().map(|v| v["author_kind"].as_str().unwrap()).collect();
+    assert_eq!(authors, ["you", "you", "unknown", "unknown"]);
+
+    assert_eq!(f.undo("demo", "no-such-change").await.status, StatusCode::NOT_FOUND);
+    assert_eq!(f.undo("ghost", &id).await.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn hub_apps_live_undo_leaves_what_it_cannot_put_back() {
+    let f = fixture();
+    f.scaffold("demo").await;
+    // A picture changes with the page: the page comes back, the picture stays and is named.
+    fs::write(f.repo.join("apps/demo/logo.png"), [0x89, b'P', b'N', b'G', 0, 1]).unwrap();
+    f.touch(&["apps/demo/logo.png"]);
+    let first = f.settle("demo").await.expect("the picture arrived");
+    assert_eq!(first["undoable"], false, "a new binary file cannot be undone");
+    assert_eq!(f.undo("demo", first["id"].as_str().unwrap()).await.status, StatusCode::CONFLICT);
+
+    let original = f.read("apps/demo/index.html");
+    f.write("apps/demo/index.html", "<h1>new</h1>");
+    fs::write(f.repo.join("apps/demo/logo.png"), [0x89, b'P', b'N', b'G', 0, 2]).unwrap();
+    f.touch(&["apps/demo/index.html", "apps/demo/logo.png"]);
+    let change = f.settle("demo").await.unwrap();
+    let body = f.undo("demo", change["id"].as_str().unwrap()).await.json();
+    assert_eq!(body["restored"], json!(["apps/demo/index.html"]));
+    assert_eq!(body["skipped"][0]["path"], "apps/demo/logo.png");
+    assert_eq!(f.read("apps/demo/index.html"), original);
+    assert_eq!(fs::read(f.repo.join("apps/demo/logo.png")).unwrap()[5], 2);
+
+    // An app made behind Tendly's back (no index yet): its first burst does not
+    // know what was there, so nothing is removed, least of all app.json.
+    f.write("apps/fresh/app.json", r#"{"name":"Fresh"}"#);
+    f.write("apps/fresh/index.html", "<p>hi</p>");
+    f.touch(&["apps/fresh/app.json", "apps/fresh/index.html"]);
+    let born = f.settle("fresh").await.unwrap();
+    assert_eq!(born["undoable"], false);
+    assert_eq!(f.undo("fresh", born["id"].as_str().unwrap()).await.status, StatusCode::CONFLICT);
+    assert!(f.repo.join("apps/fresh/app.json").exists());
+    // From then on it is indexed like any other.
+    f.write("apps/fresh/index.html", "<p>bye</p>");
+    f.touch(&["apps/fresh/index.html"]);
+    let edit = f.settle("fresh").await.unwrap();
+    assert_eq!(f.undo("fresh", edit["id"].as_str().unwrap()).await.status, StatusCode::OK);
+    assert_eq!(f.read("apps/fresh/index.html"), "<p>hi</p>");
+}
+
+#[tokio::test]
+async fn hub_apps_live_a_flood_of_paths_reloads_but_cannot_be_undone() {
+    let f = fixture();
+    f.scaffold("demo").await;
+    let paths: Vec<String> = (0..=live::testing::max_paths() + 5).map(|n| format!("apps/demo/gen/f{n}.txt")).collect();
+    f.touch(&paths.iter().map(String::as_str).collect::<Vec<_>>());
+    let change = f.settle("demo").await.expect("still a reload");
+    assert_eq!((change["count"].clone(), change["undoable"].clone()), (json!(0), json!(false)));
+    assert_eq!(f.undo("demo", change["id"].as_str().unwrap()).await.status, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn hub_apps_live_asking_for_changes_indexes_an_app_seen_for_the_first_time() {
+    let f = fixture();
+    f.write("apps/old/app.json", r#"{"name":"Old"}"#);
+    f.write("apps/old/index.html", "<p>one</p>");
+    // A window shows the app: that is when its files are written down.
+    assert_eq!(f.get(&format!("{}/changes", f.base("old"))).await.status, StatusCode::OK);
+    f.write("apps/old/index.html", "<p>two</p>");
+    f.write("apps/old/new.js", "1");
+    f.touch(&["apps/old/index.html", "apps/old/new.js"]);
+    let change = f.settle("old").await.unwrap();
+    let body = f.undo("old", change["id"].as_str().unwrap()).await.json();
+    assert_eq!(body["restored"], json!(["apps/old/index.html"]));
+    assert_eq!(body["removed"], json!(["apps/old/new.js"]));
+    assert_eq!(f.read("apps/old/index.html"), "<p>one</p>");
+    // Without the index, a file with no history is not taken for a new one.
+    live::testing::forget_index(&f.state, f.id(), "old");
+    f.write("apps/old/keep.js", "2");
+    f.touch(&["apps/old/keep.js"]);
+    let unknown = f.settle("old").await.unwrap();
+    assert_eq!(unknown["undoable"], false);
+    assert!(f.repo.join("apps/old/keep.js").exists());
+}
+
+#[tokio::test]
+async fn hub_apps_live_every_window_hears_the_change_after_the_quiet_time() {
+    let f = fixture();
+    f.scaffold("demo").await;
+    let mut heard = f.state.activity.subscribe();
+    live::start(f.state.clone());
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    f.write("apps/demo/index.html", "<h1>live</h1>");
+    let started = std::time::Instant::now();
+    f.touch(&["apps/demo/index.html"]);
+    let event = tokio::time::timeout(std::time::Duration::from_secs(5), heard.recv()).await.expect("in time").unwrap();
+    assert!(started.elapsed() >= live::QUIET, "{:?}", started.elapsed());
+    assert_eq!(event["type"], "hub");
+    assert_eq!(event["event"], "app-changed");
+    assert_eq!(event["workspace_id"], json!(f.workspace));
+    assert_eq!(event["slug"], "demo");
+    assert_eq!(event["change"]["paths"], json!(["apps/demo/index.html"]));
+    assert_eq!(event["change"]["undoable"], true);
 }

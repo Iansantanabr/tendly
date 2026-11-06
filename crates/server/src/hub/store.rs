@@ -126,6 +126,9 @@ const MIGRATIONS: &[&str] = &[
 
 pub struct HubStore {
     connection: SharedConnection,
+    /// Apps that changed on disk and what their files held before (`apps/live.rs`).
+    /// In memory only: it belongs here because this handle is what every part of the hub shares.
+    pub(crate) app_live: super::apps::live::Live,
 }
 
 impl HubStore {
@@ -155,6 +158,7 @@ impl HubStore {
         tx.commit()?;
         Ok(Self {
             connection: SharedConnection::new(connection),
+            app_live: Default::default(),
         })
     }
 

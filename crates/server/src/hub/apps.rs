@@ -19,6 +19,9 @@
 //! What is served is confined to the app's folder: no `..`, absolute paths,
 //! backslashes, NUL, dot-files or the `data/` folder, and no symlink that
 //! leads out of the folder. Any refusal is a bare 404.
+//!
+//! `live.rs` makes an open app reload when its files change, and undoes the
+//! change; `sdk.js` reports the app's errors to the page that frames it.
 use crate::{ApiError, AppState, Result, app::db};
 use axum::{
     Json, Router,
@@ -38,6 +41,7 @@ use std::{
 };
 use tendly_domain::{Workspace, WorkspaceId};
 
+pub(crate) mod live;
 #[cfg(test)]
 mod tests;
 
@@ -72,6 +76,8 @@ pub fn routes() -> Router<AppState> {
         .route("/api/hub/apps/{workspace_id}/{slug}/files", get(entry_route))
         .route("/api/hub/apps/{workspace_id}/{slug}/files/", get(entry_route))
         .route("/api/hub/apps/{workspace_id}/{slug}/files/{*path}", get(file_route))
+        .route("/api/hub/apps/{workspace_id}/{slug}/changes", get(live::changes_route))
+        .route("/api/hub/apps/{workspace_id}/{slug}/changes/{id}/undo", post(live::undo_route))
         .route("/api/hub/apps/{workspace_id}/{slug}/data", get(keys_route))
         .route(
             "/api/hub/apps/{workspace_id}/{slug}/data/{key}",
@@ -711,5 +717,9 @@ async fn scaffold_route(
     .await
     .map_err(ApiError::internal)??;
     let entry = entry_for(&workspace, &slug, &app).map_err(ApiError::internal)?;
+    // Indexed at birth, so its first change can be undone.
+    if let Ok(root) = crate::app::root(&state, id).await {
+        live::ensure_indexed(&state, id, &slug, root).await;
+    }
     Ok((StatusCode::CREATED, Json(entry)))
 }

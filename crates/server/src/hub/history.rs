@@ -210,7 +210,7 @@ pub(super) async fn git_ignored(root: &FsPath, paths: &[String]) -> HashSet<Stri
 // ---------------------------------------------------------------------------
 // Storage
 
-fn blob_dir(state: &AppState) -> PathBuf {
+pub(super) fn blob_dir(state: &AppState) -> PathBuf {
     state.state_dir.join("history").join("blobs")
 }
 
@@ -225,7 +225,7 @@ fn write_blob(blobs: &FsPath, hash: &str, bytes: &[u8]) -> std::io::Result<()> {
     std::fs::rename(&temporary, &target)
 }
 
-fn read_blob(blobs: &FsPath, hash: &str) -> Option<String> {
+pub(super) fn read_blob(blobs: &FsPath, hash: &str) -> Option<String> {
     if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
@@ -345,6 +345,24 @@ fn record_blocking(
     store
         .with(|c| insert(c, &workspace.to_string(), path, &blob, bytes.len(), author, message, &now()))
         .map_err(|e| e.to_string())
+}
+
+/// Keeps what a file holds as a version of it, unless its latest version
+/// already holds that: the apps' reload (`apps/live.rs`) calls it so that what
+/// an app's file held before a change can always be put back.
+pub(super) fn keep(
+    store: &super::HubStore,
+    blobs: &FsPath,
+    workspace: WorkspaceId,
+    path: &str,
+    bytes: &[u8],
+) -> std::result::Result<(), String> {
+    record_blocking(store, blobs, workspace, path, bytes, &Author::UNKNOWN, None).map(|_| ())
+}
+
+/// The content hash of a file's latest version, if it has one.
+pub(super) fn latest_blob(store: &super::HubStore, workspace: WorkspaceId, path: &str) -> Option<String> {
+    store.with(|c| latest(c, &workspace.to_string(), path)).ok().flatten().map(|version| version.blob)
 }
 
 // ---------------------------------------------------------------------------
@@ -553,6 +571,8 @@ async fn run(state: AppState) {
                 let Ok(relative) = absolute.strip_prefix(root) else { continue };
                 if ignored(relative) { continue }
                 let Some(path) = relative.to_str().and_then(normalize) else { continue };
+                // An app's files: its open panes reload once the change settles (`apps/live.rs`).
+                state.hub.app_live.touched(workspace, root, &path);
                 pending.insert((workspace, path), Instant::now() + DEBOUNCE);
             }
             _ = resync.tick() => sync(&state, &mut watched, &sender).await,
@@ -626,7 +646,7 @@ async fn sync(
 }
 
 /// Records the files of one workspace that settled.
-async fn settle(state: &AppState, workspace: WorkspaceId, root: PathBuf, mut paths: Vec<String>) {
+pub(super) async fn settle(state: &AppState, workspace: WorkspaceId, root: PathBuf, mut paths: Vec<String>) {
     if paths.len() > MAX_BURST {
         tracing::info!(workspace = %workspace, count = paths.len(), "file history: skipped a burst of changes");
         return;
@@ -723,7 +743,7 @@ async fn version_route(State(state): State<AppState>, Path(id): Path<i64>) -> Re
 
 /// Writes `content` back to `path` and records it as the person's version.
 /// Returns the version the file is now at.
-async fn restore_into(
+pub(super) async fn restore_into(
     store: super::Hub,
     blobs: PathBuf,
     root: &FsPath,

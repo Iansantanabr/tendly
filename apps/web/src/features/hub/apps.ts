@@ -49,6 +49,11 @@ export function findApp(workspaceId: string | undefined, slug: string | undefine
   return apps.list.find(app => app.workspace_id === workspaceId && app.slug === slug);
 }
 
+/** The address of an app's full-screen view: `/apps/<workspace id>/<slug>`. */
+export function appPagePath(app: Pick<HubApp, "workspace_id" | "slug">): string {
+  return `/apps/${encodeURIComponent(app.workspace_id)}/${encodeURIComponent(app.slug)}`;
+}
+
 /** A folder name for an app: lowercase letters, digits and hyphens. */
 export function slugify(name: string): string {
   const slug = name.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48).replace(/-+$/, "");

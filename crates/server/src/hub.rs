@@ -56,6 +56,7 @@ pub fn warm(state: AppState) {
         }
     });
     history::start(state.clone());
+    apps::live::start(state.clone());
     automations::start_scheduler(state);
 }
 
