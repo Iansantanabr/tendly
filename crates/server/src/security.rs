@@ -351,6 +351,10 @@ pub async fn guard(State(state): State<AppState>, request: Request, next: Next) 
     // The fork's address for published pages (hub settings): answered for
     // under `/p/` and nowhere else, so it never becomes an origin the API trusts.
     let public_pages = |authority: &str| crate::hub::serves_public_pages(&state, path, authority);
+    // The fork's app frames: sandboxed pages with no origin and no session,
+    // reading their own files (and the SDK) on a signed address. The Host is
+    // still checked; the Origin, the site and the session are not theirs to have.
+    let app_frame = crate::hub::serves_app_frames(request.method(), path);
     if !headers
         .get(header::HOST)
         .and_then(|v| v.to_str().ok())
@@ -367,6 +371,7 @@ pub async fn guard(State(state): State<AppState>, request: Request, next: Next) 
         );
     }
     if let Some(origin) = headers.get(header::ORIGIN)
+        && !app_frame
         && !origin.to_str().ok().is_some_and(|v| {
             state.security.origins.contains(v)
                 || state.security.own_origin(v)
@@ -380,12 +385,13 @@ pub async fn guard(State(state): State<AppState>, request: Request, next: Next) 
         .get("sec-fetch-site")
         .is_some_and(|v| v == "cross-site")
         && !page_opened_from_elsewhere(request.method(), path, headers)
+        && !app_frame
     {
         return error(StatusCode::FORBIDDEN, "Cross-site requests are blocked");
     }
     if path.starts_with("/api/") {
         // Pairing is authenticated by the invite code it carries (peers.rs).
-        let public = path == "/api/health" || path == "/api/auth" || path == "/api/peer/pair";
+        let public = path == "/api/health" || path == "/api/auth" || path == "/api/peer/pair" || app_frame;
         // A session's agent token opens the agent tools and nothing else; the
         // rest of the API still takes the deployment's own credentials.
         let agent_path = path.starts_with("/api/agent/");
@@ -439,7 +445,7 @@ pub async fn guard(State(state): State<AppState>, request: Request, next: Next) 
         .insert("referrer-policy", "no-referrer".parse().unwrap());
     response.headers_mut().insert(
         "cross-origin-resource-policy",
-        "same-origin".parse().unwrap(),
+        if app_frame { "cross-origin" } else { "same-origin" }.parse().unwrap(),
     );
     response
 }

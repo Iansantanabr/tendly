@@ -51,7 +51,8 @@ pub(super) fn check_password(password: &str, stored: &str) -> bool {
         .is_ok_and(|hash| Argon2::default().verify_password(password.as_bytes(), &hash).is_ok())
 }
 
-fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+/// Also signs the addresses app frames are served from (`apps/frame.rs`).
+pub(in crate::hub) fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
     const BLOCK: usize = 64;
     let mut block = [0u8; BLOCK];
     if key.len() > BLOCK {

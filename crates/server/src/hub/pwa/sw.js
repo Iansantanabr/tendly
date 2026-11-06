@@ -25,6 +25,7 @@ const TEXTS = {
     waiting: "Está esperando você",
     automation_done: "Rotina terminou",
     automation_failed: "Rotina falhou",
+    app: "Aviso de um app",
     test: "As notificações estão funcionando neste aparelho.",
     offlineTitle: "Sem conexão",
     offlineBody: "Não deu para falar com o Tendly. Confira a internet (ou o Tailscale) e se o servidor está ligado.",
@@ -64,8 +65,8 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // The API, and published pages, always go to the server untouched.
-  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/p/")) return;
+  // The API, published pages and the files of custom apps always go to the server untouched.
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/p/") || url.pathname.startsWith("/apps-run/")) return;
   if (request.mode === "navigate") {
     event.respondWith(fetch(request).catch(() => offlinePage()));
     return;

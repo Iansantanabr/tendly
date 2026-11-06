@@ -12,7 +12,9 @@ export interface HubApp {
   color: AppColor;
   description: string;
   entry: string;
-  /** The page a frame loads: `/api/hub/apps/<ws>/<slug>/files/<entry>`. */
+  /** What the app asks to be allowed (`app-bridge.ts`); what the person answered is asked of the server. */
+  permissions?: string[];
+  /** A stable address of the entry page. It redirects to where the app is served; a frame asks for that address instead (`loadFrame`). */
   url: string;
   /** The app's folder in its workspace, `apps/<slug>/`. */
   code_path: string;
@@ -90,7 +92,9 @@ export function appConvention(slug: string): string {
     `- \`apps/${slug}/app.json\` describes it: {"name": string, "letter"?: one character for its tile, "color"?: one of ${APP_COLORS.map(color => `"${color}"`).join(", ")}, "description": one sentence, "entry"?: the page to open, "index.html" by default}.`,
     `- \`apps/${slug}/index.html\` is the page. Static files only (HTML, CSS, JavaScript, images): no build step, no server of its own, no package installs. Relative links between its files work.`,
     "- Include `<script src=\"/api/hub/apps/sdk.js\"></script>` and keep whatever the app needs to remember with `await tendly.data.get(key, fallback)`, `await tendly.data.set(key, value)`, `await tendly.data.list()` and `await tendly.data.remove(key)` (JSON values). It is stored in `apps/" + slug + "/data/`; do not use localStorage for data that matters.",
-    "- It runs in a frame inside Tendly: make it responsive down to about 360px wide, and follow light and dark mode (`prefers-color-scheme`).",
+    "- It runs in a sandboxed frame inside Tendly, as a page of its own: it cannot call Tendly's API with `fetch`, and `localStorage` does not persist there. Everything goes through `window.tendly` (the comment at the top of `/api/hub/apps/sdk.js` lists it all).",
+    "- Make it responsive down to about 360px wide, and follow light and dark mode: `prefers-color-scheme`, and `:root[data-tendly-theme=\"dark\"]` / `[data-tendly-theme=\"light\"]`, which the SDK keeps in step with Tendly's own theme.",
+    "- To read Tendly's own data or reach the person, ask for it in `app.json`, for example `\"permissions\": [\"sessions:read\", \"notify\"]` (also `files:read`, `automations:read`, `agent:draft`); the person is asked once when the app opens. `tendly.host.setContext({ view, selection, summary })` tells the chat what is on screen.",
     "- Tendly reloads the open app by itself a moment after its files change (never for `data/`), so there is no reload to ask for. If the app holds input the person has not saved, call `tendly.host.holdReload(true)` while that is so and `tendly.host.holdReload(false)` once it is saved. Errors (uncaught, unhandled rejections, `console.error`) are shown to the person in the app's header: use `console.error` for real failures only.",
   ].join("\n");
 }

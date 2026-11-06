@@ -122,6 +122,21 @@ const MIGRATIONS: &[&str] = &[
         text TEXT NOT NULL,
         pinned_at TEXT NOT NULL
     );",
+    // 10: what the person allowed each app to do, the secret that signs the
+    // addresses app frames are served from, and where an inbox entry leads
+    "CREATE TABLE app_grants (
+        workspace_id TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        permission TEXT NOT NULL,
+        allowed INTEGER NOT NULL CHECK (allowed IN (0, 1)),
+        granted_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, slug, permission)
+    );
+    CREATE TABLE app_frame_secret (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        secret TEXT NOT NULL
+    );
+    ALTER TABLE notifications ADD COLUMN link TEXT;",
 ];
 
 pub struct HubStore {
@@ -129,6 +144,8 @@ pub struct HubStore {
     /// Apps that changed on disk and what their files held before (`apps/live.rs`).
     /// In memory only: it belongs here because this handle is what every part of the hub shares.
     pub(crate) app_live: super::apps::live::Live,
+    /// App frame addresses kept alive past their signed expiry (`apps/frame.rs`). In memory only.
+    pub(crate) app_frames: super::apps::frame::Frames,
 }
 
 impl HubStore {
@@ -159,6 +176,7 @@ impl HubStore {
         Ok(Self {
             connection: SharedConnection::new(connection),
             app_live: Default::default(),
+            app_frames: Default::default(),
         })
     }
 
@@ -464,6 +482,58 @@ mod tests {
                 pin("s2", "m1")?;
                 let rows: i64 = c.query_row("SELECT count(*) FROM pinned_messages", [], |r| r.get(0))?;
                 assert_eq!(rows, 2);
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_nine_database_upgrades_to_app_grants() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..9] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 9i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO notifications(kind, session_id, title, body, created_at) VALUES ('waiting', 's1', 'kept', '', 'then')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO pinned_messages(session_id, message_id, text, pinned_at) VALUES ('s1', 'm1', 'said', 'then')",
+                [],
+            )
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version as usize, MIGRATIONS.len());
+                // What was there stays, and an old inbox entry leads nowhere in particular.
+                let (title, link): (String, Option<String>) =
+                    c.query_row("SELECT title, link FROM notifications", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                assert_eq!((title.as_str(), link), ("kept", None));
+                let pinned: i64 = c.query_row("SELECT count(*) FROM pinned_messages", [], |r| r.get(0))?;
+                assert_eq!(pinned, 1);
+                let grant = |slug: &str, permission: &str, allowed: i64| {
+                    c.execute(
+                        "INSERT INTO app_grants(workspace_id, slug, permission, allowed, granted_at) VALUES ('w', ?1, ?2, ?3, 'now')",
+                        rusqlite::params![slug, permission, allowed],
+                    )
+                };
+                grant("crm", "sessions:read", 1)?;
+                grant("crm", "notify", 0)?;
+                grant("other", "sessions:read", 1)?;
+                assert!(grant("crm", "sessions:read", 0).is_err(), "one decision per app and permission");
+                assert!(grant("crm", "files:read", 2).is_err(), "allowed is yes or no");
+                c.execute("INSERT INTO app_frame_secret(id, secret) VALUES (1, 's')", [])?;
+                assert!(c.execute("INSERT INTO app_frame_secret(id, secret) VALUES (2, 's')", []).is_err(), "one secret");
+                c.execute(
+                    "INSERT INTO notifications(kind, title, created_at, link) VALUES ('app', 'CRM: New lead', 'now', '/apps/w/crm')",
+                    [],
+                )?;
                 Ok(())
             })
             .unwrap();

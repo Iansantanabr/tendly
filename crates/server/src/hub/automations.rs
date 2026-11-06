@@ -538,6 +538,36 @@ pub(crate) async fn list_views(state: &AppState) -> Result<Vec<Value>> {
         .collect())
 }
 
+/// The automations as an app with `automations:read` sees them
+/// (`apps/tendly.rs`): what each is and when it runs, with its latest runs.
+/// Never the command, the prompt or a run's output, which may hold secrets.
+pub(crate) async fn list_for_apps(state: &AppState, run_limit: i64) -> Result<Vec<Value>> {
+    let (automations, default, latest) = cs(state, move |c| {
+        let automations = list_all(c)?;
+        let mut latest = Vec::new();
+        for automation in &automations {
+            latest.push(runs(c, &automation.id, run_limit)?);
+        }
+        Ok((automations, settings::timezone(c)?, latest))
+    })
+    .await?;
+    Ok(automations
+        .iter()
+        .zip(latest)
+        .map(|(a, runs)| {
+            json!({
+                "id": a.id, "name": a.name, "description": a.description, "kind": a.kind, "cron": a.cron,
+                "timezone": zone_of(a, default).map(|zone| zone.name()),
+                "workspace_id": a.workspace_id, "enabled": a.enabled,
+                "next_run": if a.enabled { next_run(a, default) } else { None },
+                "running": is_running(&a.id),
+                "created_at": a.created_at, "updated_at": a.updated_at,
+                "runs": runs.iter().map(run_summary).collect::<Vec<_>>(),
+            })
+        })
+        .collect())
+}
+
 // ---------------------------------------------------------------------------
 // Running
 

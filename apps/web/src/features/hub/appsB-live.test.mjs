@@ -10,7 +10,7 @@ import vue from '@vitejs/plugin-vue';
 import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { NOTICE_MS, changeNotice, changedFiles, latestChange, liveMessage, onChange, onLiveReconnect, undoChange, watchApp } from './app-live.ts';
-import { FIX_ERRORS, MAX_ERRORS, appFilePath, appFilesPrefix, appScreen, errorPlace, fixRequest, kindLabel, readAppMessage, stackLines, withError } from './app-errors.ts';
+import { FIX_ERRORS, FRAME_ORIGIN, MAX_ERRORS, appFilePath, appScreen, insideApp, errorPlace, fixRequest, kindLabel, readAppMessage, stackLines, withError } from './app-errors.ts';
 import { APP_MIN, CHAT_DEFAULT, CHAT_MIN, appAttachment, chatPaneFor, clampChatWidth, fillComposer, maxChatWidth, onAppChatRequest, readSideChats, requestAppChat, writeSideChats } from './app-chat.ts';
 import { appPagePath } from './apps.ts';
 import { contextFromPanes, openContext, setPageContext } from './open-context.ts';
@@ -120,38 +120,50 @@ test('the latest change is asked for, and undo is a POST for that change of that
 // ---------------------------------------------------------------- what an app reports
 
 const FRAME = { frame: true };
-const from = (data, more = {}) => ({ data, origin: 'http://127.0.0.1:28789', source: FRAME, ...more });
-const EXPECTED = { origin: 'http://127.0.0.1:28789', frame: FRAME };
-const report = (more = {}) => ({ source: 'tendly-app', v: 1, type: 'error', kind: 'error', message: 'x is not defined', file: 'http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/js/app.js', line: 12, column: 4, stack: '', page: '/api/hub/apps/w1/pipeline/files/index.html#/board', at: 1, ...more });
+// A sandboxed frame has no origin of its own: its messages say "null".
+const from = (data, more = {}) => ({ data, origin: FRAME_ORIGIN, source: FRAME, ...more });
+const EXPECTED = { frame: FRAME };
+const report = (more = {}) => ({ source: 'tendly-app', v: 2, type: 'error', kind: 'error', message: 'x is not defined', file: 'http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/js/app.js', line: 12, column: 4, stack: '', page: '/apps-run/w1/pipeline/tk9/index.html#/board', at: 1, ...more });
 
-test('only the frame of the app, on this origin, is listened to', () => {
+test('only the sandboxed frame of the app is listened to', () => {
   const message = readAppMessage(from(report()), EXPECTED, APP);
   assert.equal(message.type, 'error');
   assert.deepEqual([message.error.file, message.error.line, message.error.column, message.error.page, message.error.count], ['apps/pipeline/js/app.js', 12, 4, 'index.html#/board', 1]);
-  // Another origin, another window, no frame at all, or another shape: nothing.
+  assert.equal(FRAME_ORIGIN, 'null');
+  // A page with a real origin (Tendly's own included), another window, no frame at all, or another shape: nothing.
   assert.equal(readAppMessage(from(report(), { origin: 'https://evil.example' }), EXPECTED, APP), undefined);
+  assert.equal(readAppMessage(from(report(), { origin: 'http://127.0.0.1:28789' }), EXPECTED, APP), undefined);
   assert.equal(readAppMessage(from(report(), { source: { other: true } }), EXPECTED, APP), undefined);
-  assert.equal(readAppMessage(from(report()), { origin: EXPECTED.origin, frame: undefined }, APP), undefined);
-  for (const data of [null, 'error', 42, { type: 'error' }, report({ source: 'someone-else' }), report({ v: 2 }), report({ kind: 'warning' }), report({ message: '   ' }), report({ type: 'navigate' }), { source: 'tendly-app', v: 1, type: 'location' }]) {
+  assert.equal(readAppMessage(from(report()), { frame: undefined }, APP), undefined);
+  for (const data of [null, 'error', 42, { type: 'error' }, report({ source: 'someone-else' }), report({ v: 1 }), report({ kind: 'warning' }), report({ message: '   ' }), report({ type: 'navigate' }), { source: 'tendly-app', v: 2, type: 'location' }]) {
     assert.equal(readAppMessage(from(data), EXPECTED, APP), undefined, JSON.stringify(data));
   }
   // Odd values are made safe rather than trusted.
   const odd = readAppMessage(from(report({ line: 'twelve', column: -3, file: 7, stack: null, message: 'm'.repeat(5000) })), EXPECTED, APP).error;
   assert.deepEqual([odd.line, odd.column, odd.file, odd.stack, odd.message.length], [0, 0, '', '', 2000]);
-  assert.deepEqual(readAppMessage(from({ source: 'tendly-app', v: 1, type: 'location', page: '/api/hub/apps/w1/pipeline/files/index.html', fresh: true }), EXPECTED, APP), { type: 'location', page: '/api/hub/apps/w1/pipeline/files/index.html', fresh: true });
-  assert.equal(readAppMessage(from({ source: 'tendly-app', v: 1, type: 'location', page: '/x' }), EXPECTED, APP).fresh, false);
-  assert.deepEqual(readAppMessage(from({ source: 'tendly-app', v: 1, type: 'hold-reload', on: true }), EXPECTED, APP), { type: 'hold-reload', on: true });
-  assert.deepEqual(readAppMessage(from({ source: 'tendly-app', v: 1, type: 'hold-reload', on: 'yes' }), EXPECTED, APP), { type: 'hold-reload', on: false });
+  assert.deepEqual(readAppMessage(from({ source: 'tendly-app', v: 2, type: 'location', page: '/apps-run/w1/pipeline/tk9/index.html', fresh: true }), EXPECTED, APP), { type: 'location', page: '/apps-run/w1/pipeline/tk9/index.html', fresh: true });
+  assert.equal(readAppMessage(from({ source: 'tendly-app', v: 2, type: 'location', page: '/x' }), EXPECTED, APP).fresh, false);
+  assert.deepEqual(readAppMessage(from({ source: 'tendly-app', v: 2, type: 'hold-reload', on: true }), EXPECTED, APP), { type: 'hold-reload', on: true });
+  assert.deepEqual(readAppMessage(from({ source: 'tendly-app', v: 2, type: 'hold-reload', on: 'yes' }), EXPECTED, APP), { type: 'hold-reload', on: false });
 });
 
 test('an address inside the app becomes the file an agent would open', () => {
-  assert.equal(appFilesPrefix(APP), '/api/hub/apps/w1/pipeline/files/');
-  assert.equal(appFilePath('http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/js/app.js?v=2', APP), 'apps/pipeline/js/app.js');
-  assert.equal(appFilePath('/api/hub/apps/w1/pipeline/files/caf%C3%A9.js', APP), 'apps/pipeline/café.js');
+  // Whatever the token of the moment is, and the stable address that redirects there.
+  assert.equal(insideApp('/apps-run/w1/pipeline/tk9/js/app.js', APP), 'js/app.js');
+  assert.equal(insideApp('/apps-run/w1/pipeline/1800000000.abcdef/pages/deal.html?id=3#notes', APP), 'pages/deal.html?id=3#notes');
+  assert.equal(insideApp('/api/hub/apps/w1/pipeline/files/index.html', APP), 'index.html');
+  assert.equal(insideApp('/apps-run/w1/pipeline/tk9/', APP), '');
+  for (const other of ['/apps-run/w1/other/tk9/app.js', '/apps-run/w2/pipeline/tk9/app.js', '/apps-run/w1/pipeline/app.js', '/x/apps-run/w1/pipeline/tk9/app.js', 'https://evil.example/apps-run/w1/pipeline/tk9/app.js', '']) {
+    assert.equal(insideApp(other, APP), undefined, other);
+  }
+  // A slug or an id is matched as text, never as a pattern.
+  assert.equal(insideApp('/apps-run/w1/aXb/tk9/app.js', { workspace_id: 'w1', slug: 'a.b' }), undefined);
+  assert.equal(appFilePath('http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/js/app.js?v=2', APP), 'apps/pipeline/js/app.js');
+  assert.equal(appFilePath('/apps-run/w1/pipeline/tk9/caf%C3%A9.js', APP), 'apps/pipeline/café.js');
   assert.equal(appFilePath('https://cdn.jsdelivr.net/npm/lit-html@3.2.1/+esm?x=1', APP), 'https://cdn.jsdelivr.net/npm/lit-html@3.2.1/+esm');
-  assert.equal(appFilePath('/api/hub/apps/w1/other/files/app.js', APP), '/api/hub/apps/w1/other/files/app.js');
+  assert.equal(appFilePath('/apps-run/w1/other/tk9/app.js', APP), '/apps-run/w1/other/tk9/app.js');
   assert.equal(appFilePath('', APP), '');
-  assert.equal(appScreen('/api/hub/apps/w1/pipeline/files/pages/deal.html?id=3#notes', APP), 'pages/deal.html?id=3#notes');
+  assert.equal(appScreen('/apps-run/w1/pipeline/tk9/pages/deal.html?id=3#notes', APP), 'pages/deal.html?id=3#notes');
   assert.equal(appScreen('/somewhere/else', APP), '');
   assert.equal(appScreen('', APP), '');
   assert.equal(errorPlace({ file: 'apps/pipeline/app.js', line: 12, column: 4 }), 'apps/pipeline/app.js:12:4');
@@ -177,7 +189,7 @@ test('the same error is counted once more, and the list has a ceiling', () => {
 
 test('"Ask for a fix" writes the app, the screen, and each error with its file and line', () => {
   const t = (key, values = {}) => key.replace(/\{(\w+)\}/g, (_, name) => String(values[name]));
-  const stack = 'ReferenceError: x is not defined\n    at draw (http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/js/app.js:12:4)\n    at http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/index.html:40:3\n    at more (http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/js/app.js:50:1)\n    at last (http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/js/app.js:60:1)';
+  const stack = 'ReferenceError: x is not defined\n    at draw (http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/js/app.js:12:4)\n    at http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/index.html:40:3\n    at more (http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/js/app.js:50:1)\n    at last (http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/js/app.js:60:1)';
   const error = { ...readAppMessage(from(report({ message: 'ReferenceError: x is not defined\nsecond line', stack })), EXPECTED, APP).error, count: 3 };
   assert.deepEqual(stackLines(error, APP), ['at draw (apps/pipeline/js/app.js:12:4)', 'at apps/pipeline/index.html:40:3', 'at more (apps/pipeline/js/app.js:50:1)']);
   const text = fixRequest(APP, [error], 'index.html#/board', t);
@@ -186,7 +198,7 @@ test('"Ask for a fix" writes the app, the screen, and each error with its file a
   assert.ok(lines.includes('Screen open: apps/pipeline/index.html#/board'));
   assert.ok(lines.includes('1. [Error] ReferenceError: x is not defined — apps/pipeline/js/app.js:12:4 (×3)'), text);
   assert.ok(lines.includes('   at draw (apps/pipeline/js/app.js:12:4)'));
-  assert.doesNotMatch(text, /127\.0\.0\.1|\/api\/hub/, 'no address of this machine goes to the agent');
+  assert.doesNotMatch(text, /127\.0\.0\.1|\/api\/hub|apps-run|tk9/, 'no address of this machine, and no token, goes to the agent');
   // Without a screen from the app, the page an error happened on is used.
   assert.match(fixRequest(APP, [error], '', t), /Screen open: apps\/pipeline\/index\.html#\/board/);
   assert.doesNotMatch(fixRequest(APP, [{ ...error, page: '' }], '', t), /Screen open/);
@@ -202,11 +214,14 @@ test('"Ask for a fix" writes the app, the screen, and each error with its file a
 
 // ---------------------------------------------------------------- the SDK, run as an app page would run it
 
-function runSdk({ framed = true, path = '/api/hub/apps/w1/pipeline/files/index.html', hash = '' } = {}) {
+function runSdk({ framed = true, path = '/apps-run/w1/pipeline/tk9/index.html', hash = '' } = {}) {
   const posted = [], listeners = {}, logged = [];
-  const win = { addEventListener: (type, handler) => { (listeners[type] ??= []).push(handler); } };
+  const win = { addEventListener: (type, handler) => { (listeners[type] ??= []).push(handler); }, innerWidth: 400, innerHeight: 300, open: () => null, localStorage: { length: 0 }, sessionStorage: { length: 0 } };
   win.parent = framed ? { postMessage: (message, origin) => posted.push({ message: JSON.parse(JSON.stringify(message)), origin }) } : win;
-  const context = vm.createContext({ window: win, location: { pathname: path, search: '', hash, origin: 'http://127.0.0.1:28789' }, console: { error: (...args) => logged.push(args) }, fetch: async () => { throw new Error('offline'); } });
+  const document = { documentElement: { setAttribute() {} }, addEventListener() {} };
+  // As in the sandbox: the page's own origin is opaque, and only its address says where it came from.
+  const location = { pathname: path, search: '', hash, origin: 'null', protocol: 'http:', host: '127.0.0.1:28789', href: `http://127.0.0.1:28789${path}` };
+  const context = vm.createContext({ window: win, document, location, URL, setTimeout, clearTimeout, console: { error: (...args) => logged.push(args) }, fetch: async () => { throw new Error('an app never fetches'); } });
   vm.runInContext(SDK, context);
   const fire = (type, value) => { for (const handler of listeners[type] ?? []) handler(value); };
   return { posted, listeners, logged, win, context, fire, make: code => vm.runInContext(code, context) };
@@ -215,14 +230,14 @@ function runSdk({ framed = true, path = '/api/hub/apps/w1/pipeline/files/index.h
 test('the SDK tells the Tendly page that frames the app, and nobody else', () => {
   const page = runSdk();
   // The first thing a page says: where it is, freshly loaded.
-  assert.deepEqual(page.posted[0], { message: { type: 'location', page: '/api/hub/apps/w1/pipeline/files/index.html', fresh: true, source: 'tendly-app', v: 1 }, origin: 'http://127.0.0.1:28789' });
-  page.fire('error', { message: 'Uncaught ReferenceError: x is not defined', filename: 'http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/app.js', lineno: 7, colno: 3, error: page.make('new ReferenceError("x is not defined")') });
+  assert.deepEqual(page.posted[0], { message: { type: 'location', page: '/apps-run/w1/pipeline/tk9/index.html', fresh: true, source: 'tendly-app', v: 2 }, origin: 'http://127.0.0.1:28789' });
+  page.fire('error', { message: 'Uncaught ReferenceError: x is not defined', filename: 'http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/app.js', lineno: 7, colno: 3, error: page.make('new ReferenceError("x is not defined")') });
   const sent = page.posted[1];
-  assert.equal(sent.origin, 'http://127.0.0.1:28789', 'addressed to this origin only, never "*"');
+  assert.equal(sent.origin, 'http://127.0.0.1:28789', 'addressed to the origin the app was served from, never "*" and never its own "null"');
   assert.deepEqual([sent.message.type, sent.message.kind, sent.message.message, sent.message.line, sent.message.column], ['error', 'error', 'Uncaught ReferenceError: x is not defined', 7, 3]);
-  assert.match(sent.message.file, /\/files\/app\.js$/);
+  assert.match(sent.message.file, /\/tk9\/app\.js$/);
   assert.match(sent.message.stack, /ReferenceError: x is not defined/);
-  assert.equal(sent.message.page, '/api/hub/apps/w1/pipeline/files/index.html');
+  assert.equal(sent.message.page, '/apps-run/w1/pipeline/tk9/index.html');
   // A rejected promise nobody caught.
   page.fire('unhandledrejection', { reason: page.make('new Error("no network")') });
   assert.deepEqual([page.posted[2].message.kind, page.posted[2].message.message], ['unhandledrejection', 'Error: no network']);
@@ -231,12 +246,12 @@ test('the SDK tells the Tendly page that frames the app, and nobody else', () =>
   assert.equal(page.logged.length, 1, 'the real console.error ran');
   assert.deepEqual([page.posted[3].message.kind, page.posted[3].message.message], ['console', 'Could not save {"status":500}']);
   // A script of the app that did not load.
-  page.fire('error', { target: { nodeType: 1, src: 'http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/missing.js' } });
-  assert.deepEqual([page.posted[4].message.kind, page.posted[4].message.message], ['load', 'Failed to load http://127.0.0.1:28789/api/hub/apps/w1/pipeline/files/missing.js']);
+  page.fire('error', { target: { nodeType: 1, src: 'http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/missing.js' } });
+  assert.deepEqual([page.posted[4].message.kind, page.posted[4].message.message], ['load', 'Failed to load http://127.0.0.1:28789/apps-run/w1/pipeline/tk9/missing.js']);
   // Moving inside the app says where it is now, not that it loaded again.
   page.context.location.hash = '#/board';
   page.fire('hashchange', {});
-  assert.deepEqual([page.posted[5].message.type, page.posted[5].message.page, page.posted[5].message.fresh], ['location', '/api/hub/apps/w1/pipeline/files/index.html#/board', false]);
+  assert.deepEqual([page.posted[5].message.type, page.posted[5].message.page, page.posted[5].message.fresh], ['location', '/apps-run/w1/pipeline/tk9/index.html#/board', false]);
   // Holding and releasing reloads.
   assert.equal(page.win.tendly.host.framed, true);
   page.win.tendly.host.holdReload(true);
@@ -251,7 +266,7 @@ test('the SDK tells the Tendly page that frames the app, and nobody else', () =>
 
 test('the SDK stays quiet in a tab of its own, and cannot flood the page', () => {
   const alone = runSdk({ framed: false });
-  assert.deepEqual(alone.listeners, {}, 'nothing is listened to');
+  assert.deepEqual(Object.keys(alone.listeners), ['resize'], 'no errors are listened for, and no messages');
   alone.context.console.error('still prints');
   assert.equal(alone.logged.length, 1);
   alone.win.tendly.host.holdReload(true);
@@ -503,11 +518,11 @@ test('the chat beside a full-screen app is started like any quick session, and h
   assert.ok(quick.indexOf('if (detached) return session;') < quick.indexOf('canvas.value?.openBeside'), 'handed back before the canvas is touched');
   assert.match(quick, /`\$\{workspacePath\(id\)\}\/sessions`/, 'the same route "+" uses: a session, no message');
   // On the Mesa, "Ask for a fix" fills the conversation beside the app, or a new one there.
-  assert.match(shell, /onAppChatRequest\(async \(\{ workspaceId, slug, name, paneId, text \}\) => \{[\s\S]*?chatPaneFor\(openPanes\.value, sessions\.value, workspaceId, selectedPaneId\.value\)[\s\S]*?fillComposer\(session\.id, \{ attach: appAttachment\(\{ slug, name \}\), text \}\)/);
+  assert.match(shell, /onAppChatRequest\(async \(\{ workspaceId, slug, name, paneId, text, files \}\) => \{[\s\S]*?chatPaneFor\(openPanes\.value, sessions\.value, workspaceId, selectedPaneId\.value\)[\s\S]*?fillComposer\(session\.id, \{ attach: appAttachment\(\{ slug, name \}\), files, text \}\)/);
   const full = read('AppFullPage.vue');
   assert.match(full, /const session = await props\.startChat\(props\.workspaceId\);/);
   assert.match(full, /fillComposer\(session\.id, \{ attach: appAttachment\(app\.value\) \}\)/);
-  assert.match(full, /fillComposer\(id, \{ attach: app\.value \? appAttachment\(app\.value\) : undefined, text \}\)/);
+  assert.match(full, /fillComposer\(id, \{ attach: app\.value \? appAttachment\(app\.value\) : undefined, files, text \}\)/);
   // A conversation is made on a click, never because the page opened.
   assert.equal(full.match(/props\.startChat\(/g).length, 1);
   assert.match(full, /async function newChat\(\)/);
@@ -539,22 +554,24 @@ test('the socket hands every message to the apps, and the frame follows them', (
   assert.match(activity, /try \{ message = JSON\.parse\(String\(event\.data\)\); \} catch \{ return; \}\n  liveMessage\(message\);/);
   const view = read('AppView.vue');
   assert.match(view, /stopWatching = watchApp\(target, heard\);/);
-  assert.match(view, /stopReconnect = onLiveReconnect\(\(\) => void resync\(\)\);/);
+  assert.match(view, /stopReconnect = onLiveReconnect\(\(\) => \{ void resync\(\); void renew\(\); \}\);/);
   assert.match(view, /window\.addEventListener\("message", onMessage\);/);
   assert.match(view, /window\.removeEventListener\("message", onMessage\);/);
-  assert.match(view, /readAppMessage\(event, \{ origin: window\.location\.origin, frame: frame\.value\?\.contentWindow \}, current\)/);
-  // A reload keeps the page of the app that was open, when it is still inside the app.
-  assert.match(view, /frameSrc\.value = place\.value\.startsWith\(appFilesPrefix\(current\)\) \? place\.value : src\.value;/);
+  assert.match(view, /readAppMessage\(event, \{ frame: frame\.value\?\.contentWindow \}, current\)/);
+  // A reload keeps the page of the app that was open, when it is still inside the app, on a fresh address.
+  assert.match(view, /void load\(insideApp\(place\.value, current\) \?\? ""\);/);
+  assert.match(view, /frameSrc\.value = inside \? next\.base \+ inside : next\.url;/);
   // Held: the change waits; released: it is applied.
   assert.match(view, /if \(outcome === "wait"\) \{ pending\.value = change; show\(\{ kind: "waiting" \}\); return; \}/);
   assert.match(view, /if \(!message\.on && pending\.value\) apply\(pending\.value\);/);
   // Undo asks the server; it never edits files from the browser.
   assert.match(view, /await undoChange\(target, current\.change\.id\)/);
-  // The frame keeps the sandbox it had.
-  assert.match(view, /sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-downloads allow-popups"/);
+  // The frame is a page of its own: the sandbox it had, without Tendly's origin (stage C).
+  assert.match(view, /sandbox="allow-scripts allow-forms allow-modals allow-downloads allow-popups"/);
+  assert.doesNotMatch(view, /allow-same-origin"|allow-same-origin /);
   // A pane is the same view, and its "Ask for a fix" goes through the Mesa.
   const pane = read('AppPane.vue');
-  assert.match(pane, /<AppView mode="pane"[^>]*@chat="emit\('chat'\)" @fix="fix" @remove="emit\('remove'\)" \/>/);
+  assert.match(pane, /<AppView mode="pane"[^>]*@chat="emit\('chat'\)" @fix="fix" @draft="fix" @remove="emit\('remove'\)" \/>/);
   assert.match(pane, /requestAppChat\(\{ workspaceId: props\.workspace\.id, slug: slug\.value,/);
 });
 

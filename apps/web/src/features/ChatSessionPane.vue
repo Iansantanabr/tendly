@@ -47,7 +47,7 @@ import { openLightbox } from './image-lightbox';
 import { compactCount, descendants, inDock, lastLine, toolRuns, toolRunNames, toolIndicator, toolRunStatus, type ToolRun } from './tool-runs';
 import { statusLabel as chatStatusLabel, statsLine as formatStats, turnUsageLine as formatTurnUsage, turnUsageTitle as formatTurnUsageTitle } from './chat-format';
 import { mentionQuery, applyMention } from './file-mentions';
-import { openContext } from './hub/open-context';
+import { openContext, refreshedContext } from './hub/open-context';
 import { conversationChips, conversationLink, insertAt, pastedConversation, removeConversationChip, takeConversationChips, withConversations, parseConversationLink } from './hub/conversation-link';
 import { speechLang, useDictation } from './hub/dictation';
 import DictationButton from './hub/DictationButton.vue';
@@ -947,7 +947,9 @@ async function copySessionLink() {
 const dictation = useDictation({ lang: () => speechLang(locale.value), onFinal: insertIntoComposer });
 watch(() => props.session.id, () => { dictation.stop(); linkNotice.value = ''; });
 const contextSuggestions = computed(() => openContext.items.filter(item => item.workspaceId === props.session.workspace_id && !attachments.value.some(file => file.path === item.path)).slice(0, 4));
-function addContext(item: { path: string; name: string }) { attachments.value = [...attachments.value, { path: item.path, name: item.name, bytes: 0 }]; }
+function addContext(item: { path: string; name: string; note?: string }) { attachments.value = [...attachments.value, { path: item.path, name: item.name, bytes: 0, ...(item.note ? { note: item.note } : {}) }]; }
+// Fork: an attached app follows what the app says is on its screen now (hub/app-context.ts).
+watch(() => openContext.items, items => { const fresh = refreshedContext(attachments.value, items, props.session.workspace_id); if (fresh) attachments.value = fresh; }, { immediate: true });
 
 async function retryDelivery() {
   if (isPreview.value || loading.value || actionBusy.value || streamState.value !== 'connected') return;

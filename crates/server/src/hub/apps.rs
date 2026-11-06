@@ -3,19 +3,19 @@
 //! Routes live under `/api/hub/apps`.
 //!
 //! Convention: `<workspace root>/apps/<slug>/app.json` describes an app
-//! (`name`, and optionally `letter`, `color`, `description`, `entry`), the
-//! folder holds its files, and `apps/<slug>/data/<key>.json` its state, read
-//! and written only through the data API below (the files route never serves
-//! `data/`).
+//! (`name`, and optionally `letter`, `color`, `description`, `entry`,
+//! `permissions`), the folder holds its files, and
+//! `apps/<slug>/data/<key>.json` its state, read and written only through the
+//! data API below (the files are never served from `data/`).
 //!
-//! Trust: unlike a published page (`publish.rs`, sandboxed), an app is code
-//! the person's own agent wrote at the person's request, on the person's own
-//! machine, the same as any script it could run in a terminal. So app files
-//! are served same-origin, without a CSP sandbox, so that the page can call
-//! the data API with the browser's credentials (`sdk.js`). The only CSP is
-//! `frame-ancestors 'self'`: the app may be framed by Tendly itself and
-//! nothing else. Everything is below `/api/`, so the guard still demands
-//! authentication for every file and the `X-Tendly-Client` header for writes.
+//! Trust: an app is code an agent wrote, and it may pull scripts from a CDN.
+//! It does not run as Tendly. Its files are served from an address of their
+//! own with a CSP sandbox that gives the page an opaque origin (`frame.rs`),
+//! so the app cannot call the API or touch Tendly's page; it asks the page
+//! that frames it, through `postMessage` (`sdk.js`), and that page makes the
+//! request with its own credentials: the app's data, and (only with what the
+//! person allowed, `grants.rs`) Tendly's own data (`tendly.rs`). The routes
+//! under `/api/` here are therefore for Tendly's page, not for the app.
 //! What is served is confined to the app's folder: no `..`, absolute paths,
 //! backslashes, NUL, dot-files or the `data/` folder, and no symlink that
 //! leads out of the folder. Any refusal is a bare 404.
@@ -41,7 +41,10 @@ use std::{
 };
 use tendly_domain::{Workspace, WorkspaceId};
 
+pub(crate) mod frame;
+pub(crate) mod grants;
 pub(crate) mod live;
+mod tendly;
 #[cfg(test)]
 mod tests;
 
@@ -83,6 +86,9 @@ pub fn routes() -> Router<AppState> {
             "/api/hub/apps/{workspace_id}/{slug}/data/{key}",
             get(get_value_route).put(put_value_route).delete(delete_value_route),
         )
+        .merge(frame::routes())
+        .merge(grants::routes())
+        .merge(tendly::routes())
 }
 
 // ---------------------------------------------------------------------------
@@ -159,6 +165,8 @@ pub(crate) struct Manifest {
     pub color: String,
     pub description: String,
     pub entry: String,
+    /// What the app asks to be allowed (`grants.rs`), known names only.
+    pub permissions: Vec<String>,
 }
 
 /// The color an app without one gets, stable for its slug.
@@ -214,7 +222,8 @@ pub(crate) fn parse_manifest(slug: &str, text: &str) -> std::result::Result<Mani
     if clean_path(&entry).is_none() {
         return Err("\"entry\" must be a relative path inside the app folder (no dot-files, not in data/)".into());
     }
-    Ok(Manifest { name, letter, color, description, entry })
+    let permissions = grants::parse_permissions(map.get("permissions"))?;
+    Ok(Manifest { name, letter, color, description, entry, permissions })
 }
 
 /// An app found on disk.
@@ -266,6 +275,11 @@ pub(crate) struct AppEntry {
     pub color: String,
     pub description: String,
     pub entry: String,
+    /// What the app asks to be allowed; what it was allowed is `GET .../grants`.
+    pub permissions: Vec<String>,
+    /// A stable address of the entry page. It answers with a redirect to where
+    /// the app is served for now (`frame.rs`); the page that frames an app asks
+    /// `GET .../frame` for that address instead.
     pub url: String,
     pub code_path: String,
     pub updated_at: String,
@@ -300,6 +314,7 @@ fn entry_for(workspace: &Workspace, slug: &str, app: &Located) -> std::result::R
         color: m.color.clone(),
         description: m.description.clone(),
         entry: m.entry.clone(),
+        permissions: m.permissions.clone(),
         url: format!("/api/hub/apps/{}/{slug}/files/{}", workspace.id, encoded_entry.join("/")),
         code_path: format!("apps/{slug}/"),
         updated_at: rfc3339(updated),
@@ -392,19 +407,33 @@ async fn sdk_route() -> Response {
             (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
             (header::CACHE_CONTROL, "no-cache"),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            // An app page has an opaque origin and asks for its scripts with CORS (`with_cors_scripts`).
+            (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
         ],
         SDK,
     )
         .into_response()
 }
 
-async fn entry_route(State(state): State<AppState>, UrlPath((workspace, slug)): UrlPath<(String, String)>) -> Response {
-    let Ok(found) = find(&state, &workspace, &slug).await else { return not_found() };
-    let encoded: Vec<String> = found.app.manifest.entry.split('/').map(encode_segment).collect();
-    Redirect::temporary(&format!("/api/hub/apps/{}/{}/files/{}", found.workspace.id, found.slug, encoded.join("/")))
-        .into_response()
+/// Sends the browser on to where the app is served for now: a fresh address
+/// of its own (`frame.rs`), never this origin's.
+fn moved(to: String) -> Response {
+    let mut response = Redirect::temporary(&to).into_response();
+    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
 }
 
+/// The old address of an app's entry page: kept, as a redirect.
+async fn entry_route(State(state): State<AppState>, UrlPath((workspace, slug)): UrlPath<(String, String)>) -> Response {
+    let Ok(found) = find(&state, &workspace, &slug).await else { return not_found() };
+    let Ok((base, _)) = frame::issue(&state, &found).await else { return not_found() };
+    let encoded: Vec<String> = found.app.manifest.entry.split('/').map(encode_segment).collect();
+    moved(format!("{base}{}", encoded.join("/")))
+}
+
+/// The old address of an app's files (`/api/hub/apps/<ws>/<slug>/files/...`),
+/// where they used to be served as part of Tendly itself. A link kept from
+/// then still opens the app, in its sandbox: this answers with a redirect.
 async fn file_route(
     State(state): State<AppState>,
     UrlPath((workspace, slug, path)): UrlPath<(String, String, String)>,
@@ -412,12 +441,151 @@ async fn file_route(
 ) -> Response {
     let Ok(found) = find(&state, &workspace, &slug).await else { return not_found() };
     let Some(relative) = clean_path(&path) else { return not_found() };
+    let dir = found.app.dir.clone();
+    let exists = tokio::task::spawn_blocking(move || checked_file(&dir, &relative).is_some()).await.unwrap_or(false);
+    if !exists {
+        return not_found();
+    }
+    let Ok((base, _)) = frame::issue(&state, &found).await else { return not_found() };
+    let encoded: Vec<String> = path.split('/').map(encode_segment).collect();
+    let query = request.uri().query().map(|query| format!("?{query}")).unwrap_or_default();
+    moved(format!("{base}{}{query}", encoded.join("/")))
+}
+
+/// The attributes of a start tag whose text (after the tag name, up to but
+/// not including `>`) is `tag`: lowercase names with their values.
+fn attributes(tag: &str) -> Vec<(String, String)> {
+    let chars: Vec<char> = tag.chars().collect();
+    let (mut at, mut found) = (0, Vec::new());
+    while at < chars.len() {
+        while at < chars.len() && (chars[at].is_whitespace() || chars[at] == '/') {
+            at += 1;
+        }
+        let start = at;
+        while at < chars.len() && !chars[at].is_whitespace() && !matches!(chars[at], '=' | '/') {
+            at += 1;
+        }
+        if at == start {
+            at += 1;
+            continue;
+        }
+        let name: String = chars[start..at].iter().collect::<String>().to_ascii_lowercase();
+        while at < chars.len() && chars[at].is_whitespace() {
+            at += 1;
+        }
+        let mut value = String::new();
+        if at < chars.len() && chars[at] == '=' {
+            at += 1;
+            while at < chars.len() && chars[at].is_whitespace() {
+                at += 1;
+            }
+            if at < chars.len() && matches!(chars[at], '"' | '\'') {
+                let quote = chars[at];
+                at += 1;
+                let start = at;
+                while at < chars.len() && chars[at] != quote {
+                    at += 1;
+                }
+                value = chars[start..at].iter().collect();
+                at += 1;
+            } else {
+                let start = at;
+                while at < chars.len() && !chars[at].is_whitespace() {
+                    at += 1;
+                }
+                value = chars[start..at].iter().collect();
+            }
+        }
+        found.push((name, value));
+    }
+    found
+}
+
+/// An app page with `crossorigin` on the `<script src>` tags that load the
+/// app's own files (and the SDK).
+///
+/// The page has an opaque origin (`frame.rs`), so even its own script files
+/// are another origin to it, and a browser hides the errors of a script from
+/// another origin ("Script error.", no file, no line) unless it was fetched
+/// with CORS. The files are served with `Access-Control-Allow-Origin: *`; this
+/// makes the page ask that way, so "N errors" keeps saying where. Scripts from
+/// other sites are left as written: a CDN may not answer CORS at all.
+pub(crate) fn with_cors_scripts(html: &str) -> std::borrow::Cow<'_, str> {
+    const OPEN: &str = "<script";
+    let lower = html.to_ascii_lowercase();
+    let (mut out, mut copied, mut search) = (String::new(), 0, 0);
+    while let Some(found) = lower[search..].find(OPEN) {
+        let after = search + found + OPEN.len();
+        search = after;
+        // `<scripts>` or `<script-x>` is some other element.
+        if !html[after..].starts_with(|c: char| c.is_whitespace() || c == '/') {
+            continue;
+        }
+        // The end of the tag: the first `>` outside a quoted value.
+        let (mut quote, mut end) = (None, None);
+        for (offset, c) in html[after..].char_indices() {
+            match (quote, c) {
+                (Some(open), c) if c == open => quote = None,
+                (None, '"' | '\'') => quote = Some(c),
+                (None, '>') => {
+                    end = Some(after + offset);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        let Some(end) = end else { break };
+        let attributes = attributes(&html[after..end]);
+        let source = attributes.iter().find(|(name, _)| name == "src").map(|(_, value)| value.trim().to_ascii_lowercase());
+        let elsewhere = |source: &str| ["http:", "https:", "//", "data:", "blob:"].iter().any(|start| source.starts_with(start));
+        if let Some(source) = source
+            && !source.is_empty()
+            && !elsewhere(&source)
+            && !attributes.iter().any(|(name, _)| name == "crossorigin")
+        {
+            out.push_str(&html[copied..after]);
+            out.push_str(" crossorigin");
+            copied = after;
+        }
+        search = end;
+    }
+    if copied == 0 {
+        return std::borrow::Cow::Borrowed(html);
+    }
+    out.push_str(&html[copied..]);
+    std::borrow::Cow::Owned(out)
+}
+
+/// The largest page `with_cors_scripts` is applied to; a larger one is served as it is.
+const MAX_PAGE_BYTES: u64 = 2 * 1024 * 1024;
+
+/// An HTML file of the app, read whole and adjusted for its sandbox (`with_cors_scripts`).
+fn read_page(target: &Path) -> Option<String> {
+    let extension = target.extension()?.to_str()?.to_ascii_lowercase();
+    if !matches!(extension.as_str(), "html" | "htm") || fs::metadata(target).ok()?.len() > MAX_PAGE_BYTES {
+        return None;
+    }
+    Some(with_cors_scripts(&fs::read_to_string(target).ok()?).into_owned())
+}
+
+/// A file of the app, as its frame gets it: sandboxed into an origin of its own.
+async fn serve_app_file(found: Found, relative: PathBuf, request: Request) -> Response {
     let dir = found.app.dir;
     let target = tokio::task::spawn_blocking(move || checked_file(&dir, &relative)).await.ok().flatten();
     let Some(target) = target else { return not_found() };
-    let Ok(mut response) = crate::media::serve(target, false, request).await else { return not_found() };
+    let page = {
+        let target = target.clone();
+        tokio::task::spawn_blocking(move || read_page(&target)).await.ok().flatten()
+    };
+    let mut response = match page {
+        Some(page) => ([(header::CONTENT_TYPE, "text/html; charset=utf-8")], page).into_response(),
+        None => match crate::media::serve(target, false, request).await {
+            Ok(response) => response,
+            Err(_) => return not_found(),
+        },
+    };
     let headers = response.headers_mut();
-    headers.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("frame-ancestors 'self'"));
+    headers.insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(frame::POLICY));
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     // Text without a charset is read as Latin-1 by some browsers.
@@ -685,6 +853,7 @@ async fn scaffold_route(
         "color": parsed.color,
         "description": parsed.description,
         "entry": parsed.entry,
+        "permissions": parsed.permissions,
     }))
     .map_err(ApiError::internal)?;
     let workspace = crate::app::workspace(&state, id).await?;

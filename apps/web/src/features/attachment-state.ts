@@ -12,6 +12,8 @@ export interface Attachment {
   bytes: number;
   /** The full host path. */
   absolute?: string;
+  /** Fork: lines written under the path in the message (what an app says is on its screen). */
+  note?: string;
 }
 /** Matches the server's own cap, so an oversized pick fails before uploading. */
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
@@ -50,7 +52,7 @@ export function attachmentError(file: { name: string; size: number }, existing: 
 export function composeMessage(text: string, attachments: Attachment[]): string {
   const body = text.trim();
   if (!attachments.length) return body;
-  const lines = attachments.map(attachment => `- ${attachment.path}`).join('\n');
+  const lines = attachments.map(attachment => `- ${attachment.path}${attachment.note ? `\n${attachment.note.split('\n').map(line => `  ${line}`).join('\n')}` : ''}`).join('\n');
   const header = `Attached ${attachments.length === 1 ? 'file' : 'files'} in this workspace:\n${lines}`;
   return body ? `${header}\n\n${body}` : header;
 }

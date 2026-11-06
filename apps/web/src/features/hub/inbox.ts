@@ -10,6 +10,14 @@ export interface InboxItem {
   body: string;
   created_at: string;
   read_at: string | null;
+  /** A page of Tendly the entry leads to instead of a conversation: an app's notice opens the app. */
+  link?: string | null;
+}
+
+/** Where an entry with a link goes: a page of an app, and nothing else an entry could name. */
+export function inboxLink(item: Pick<InboxItem, "link">): string | undefined {
+  const link = item.link ?? "";
+  return /^\/apps\/[^/?#\\]+\/[a-z0-9][a-z0-9-]*$/.test(link) ? link : undefined;
 }
 export interface SessionActivity {
   session_id: string;
@@ -91,6 +99,7 @@ export function inboxMessage(kind: string): string {
     case "waiting": return "Is waiting for you";
     case "automation_done": return "Routine finished";
     case "automation_failed": return "Routine failed";
+    case "app": return "App notice";
     default: return "Update";
   }
 }

@@ -1,6 +1,7 @@
 /**
  * What an app tells the page that frames it (through `sdk.js`): its errors,
- * which of its pages is showing, and whether it wants reloads held back.
+ * which of its pages is showing, whether it wants reloads held back, what is
+ * on its screen, and what it asks Tendly to do (`app-bridge.ts` answers).
  * This file reads those messages, keeps the list behind "2 errors" and writes
  * the message "Ask for a fix" puts in a chat. `AppView.vue` draws it.
  */
@@ -27,16 +28,34 @@ export type AppMessage =
   | { type: "error"; error: AppError }
   /** `fresh`: a page of the app has just loaded (not a move inside one). */
   | { type: "location"; page: string; fresh: boolean }
-  | { type: "hold-reload"; on: boolean };
+  | { type: "hold-reload"; on: boolean }
+  /** `tendly.host.setContext`: what is on the app's screen, still to be bounded (`app-context.ts`). */
+  | { type: "context"; view: unknown; selection: unknown; summary: unknown }
+  /** Something the app asks Tendly to do; the answer goes back under the same `id`. */
+  | { type: "call"; id: number; method: string; args: Record<string, unknown> };
+
+/** What a sandboxed frame's messages say their origin is: it has none of its own. */
+export const FRAME_ORIGIN = "null";
 
 export const MAX_ERRORS = 50;
 const KINDS: readonly AppErrorKind[] = ["error", "unhandledrejection", "console", "load"];
 const text = (value: unknown, limit: number) => typeof value === "string" ? value.slice(0, limit) : "";
 const count = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 
-/** Where an app's files are served from. */
-export function appFilesPrefix(app: Pick<AppRef, "workspace_id" | "slug">): string {
-  return `/api/hub/apps/${encodeURIComponent(app.workspace_id)}/${encodeURIComponent(app.slug)}/files/`;
+const literal = (value: string) => encodeURIComponent(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * Where an app's files are served from: `/apps-run/<workspace>/<slug>/<token>/`
+ * (the token changes with every load), or the stable address that redirects
+ * there, `/api/hub/apps/<workspace>/<slug>/files/`.
+ */
+function filesPattern(app: Pick<AppRef, "workspace_id" | "slug">, flags = ""): RegExp {
+  const id = `${literal(app.workspace_id)}/${literal(app.slug)}`;
+  return new RegExp(`/(?:apps-run/${id}/[^/\\s]+|api/hub/apps/${id}/files)/`, flags);
+}
+/** What comes after the app's folder in an address of one of its files (still encoded), or undefined for any other address. */
+export function insideApp(address: string, app: Pick<AppRef, "workspace_id" | "slug">): string | undefined {
+  const match = filesPattern(app).exec(address);
+  return match && match.index === 0 ? address.slice(match[0].length) : undefined;
 }
 
 /**
@@ -48,9 +67,8 @@ export function appFilePath(address: string, app: Pick<AppRef, "workspace_id" | 
   if (!address) return "";
   let path = address;
   try { path = new URL(address, "http://app.invalid").pathname; } catch { /* Kept as it came. */ }
-  const prefix = appFilesPrefix(app);
-  if (path.startsWith(prefix)) {
-    let inside = path.slice(prefix.length);
+  let inside = insideApp(path, app);
+  if (inside !== undefined) {
     try { inside = decodeURIComponent(inside); } catch { /* Kept encoded. */ }
     return `apps/${app.slug}/${inside}`;
   }
@@ -59,23 +77,28 @@ export function appFilePath(address: string, app: Pick<AppRef, "workspace_id" | 
 
 /** The page of the app in view, inside its folder, with its hash: `index.html#/board`. */
 export function appScreen(page: string, app: Pick<AppRef, "workspace_id" | "slug">): string {
-  if (!page) return "";
-  const prefix = appFilesPrefix(app);
-  if (!page.startsWith(prefix)) return "";
-  const inside = page.slice(prefix.length);
+  const inside = page ? insideApp(page, app) : undefined;
+  if (inside === undefined) return "";
   try { return decodeURIComponent(inside); } catch { return inside; }
 }
 
 /**
- * A message from an app's frame, or undefined for anything else. `origin` must
- * be this page's own and the sender the frame itself: a message from any other
- * window, or shaped otherwise, is ignored.
+ * A message from an app's frame, or undefined for anything else. The sender
+ * must be the frame itself, which is what says whose message it is; its origin
+ * must be the opaque one of a sandboxed page (a page with a real origin in
+ * there is not an app Tendly served). Anything shaped otherwise is ignored.
  */
-export function readAppMessage(event: { data: unknown; origin: string; source: unknown }, expected: { origin: string; frame: unknown }, app: Pick<AppRef, "workspace_id" | "slug">): AppMessage | undefined {
-  if (event.origin !== expected.origin || !expected.frame || event.source !== expected.frame) return undefined;
+export function readAppMessage(event: { data: unknown; origin: string; source: unknown }, expected: { frame: unknown }, app: Pick<AppRef, "workspace_id" | "slug">): AppMessage | undefined {
+  if (event.origin !== FRAME_ORIGIN || !expected.frame || event.source !== expected.frame) return undefined;
   const data = event.data as Record<string, unknown> | null;
-  if (!data || typeof data !== "object" || data.source !== "tendly-app" || data.v !== 1) return undefined;
+  if (!data || typeof data !== "object" || data.source !== "tendly-app" || data.v !== 2) return undefined;
   if (data.type === "hold-reload") return { type: "hold-reload", on: data.on === true };
+  if (data.type === "context") return { type: "context", view: data.view, selection: data.selection, summary: data.summary };
+  if (data.type === "call") {
+    if (typeof data.id !== "number" || !Number.isFinite(data.id) || typeof data.method !== "string" || !data.method || data.method.length > 64) return undefined;
+    const args = data.args && typeof data.args === "object" && !Array.isArray(data.args) ? data.args as Record<string, unknown> : {};
+    return { type: "call", id: data.id, method: data.method, args };
+  }
   if (data.type === "location") return typeof data.page === "string" ? { type: "location", page: data.page.slice(0, 2000), fresh: data.fresh === true } : undefined;
   if (data.type !== "error") return undefined;
   const kind = KINDS.find(known => known === data.kind);
@@ -105,10 +128,10 @@ export function errorPlace(error: Pick<AppError, "file" | "line" | "column">): s
 
 /** The first lines of a stack that say something the message and the place do not. */
 export function stackLines(error: Pick<AppError, "stack" | "message">, app: Pick<AppRef, "workspace_id" | "slug">, limit = 3): string[] {
-  const origin = /https?:\/\/[^/\s)]+/g, prefix = appFilesPrefix(app);
+  const origin = /https?:\/\/[^/\s)]+/g, files = filesPattern(app, "g");
   return error.stack.split("\n").map(line => line.trim())
     .filter(line => line && !line.includes(error.message) && /:\d+/.test(line))
-    .map(line => line.replace(origin, "").split(prefix).join(`apps/${app.slug}/`))
+    .map(line => line.replace(origin, "").replace(files, `apps/${app.slug}/`))
     .slice(0, limit);
 }
 

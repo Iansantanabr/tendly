@@ -9,16 +9,29 @@
  * back for unsaved input. Errors the app reports (`app-errors.ts`) are counted
  * in the header, listed, and turned into a message for an agent by "Ask for a
  * fix", which only ever fills a composer.
+ *
+ * The app is not part of Tendly's page. Its frame is sandboxed without
+ * `allow-same-origin` and loads from a signed address of its own, asked for
+ * here on every load and kept alive while the frame is open (`app-bridge.ts`).
+ * What the app wants of Tendly (its data, Tendly's data, opening something on
+ * the Mesa) arrives as a message from that frame and is answered here, after
+ * the person said what the app may do (`AppPermissions.vue`).
  */
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import Icon from "../Icon.vue";
-import { errorMessage, routedUrl } from "../api";
+import { ApiError, errorMessage } from "../api";
 import { copyText } from "../clipboard";
+import { darkScheme } from "../theme";
+import { showToast } from "../toasts";
 import { useI18n } from "../../i18n";
+import AppPermissions from "./AppPermissions.vue";
 import AppTile from "./AppTile.vue";
 import { appPagePath, apps, findApp, refreshApps } from "./apps";
-import { appFilesPrefix, appScreen, errorPlace, fixRequest, kindLabel, readAppMessage, withError, type AppError } from "./app-errors";
+import { answerCall, bridgeFailure, createLimiter, decideGrants, hostMessage, loadFrame, loadGrants, renewFrame, type AppFrame, type AppGrants } from "./app-bridge";
+import { clearAppContext, contextOwner, readContext, setAppContext } from "./app-context";
+import { appScreen, errorPlace, fixRequest, insideApp, kindLabel, readAppMessage, withError, type AppError } from "./app-errors";
 import { NOTICE_MS, changeNotice, changedFiles, latestChange, onChange, onLiveReconnect, undoChange, watchApp, type AppChange } from "./app-live";
+import { openConversation } from "./start";
 
 const props = defineProps<{
   workspaceId: string;
@@ -35,6 +48,8 @@ const emit = defineEmits<{
   chat: [];
   /** "Ask for a fix": the message for a composer. */
   fix: [text: string];
+  /** The app drafted a message (`tendly.host.draftChat`): text for a composer, and files to attach. Never sent from here. */
+  draft: [text: string, files: { path: string; name: string }[]];
   mesa: [];
   /** Show the app's folder in the file panel. */
   code: [];
@@ -50,7 +65,6 @@ const name = computed(() => app.value?.name ?? props.fallback?.name ?? props.slu
 const letter = computed(() => app.value?.letter ?? props.fallback?.letter);
 const color = computed(() => app.value?.color ?? props.fallback?.color);
 const codePath = computed(() => app.value?.code_path ?? (props.slug ? `apps/${props.slug}/` : ""));
-const src = computed(() => app.value ? routedUrl(app.value.url) : undefined);
 const brokenReason = computed(() => apps.errors.find(error => error.workspace_id === props.workspaceId && error.slug === props.slug)?.message);
 /** Gone once the list has been read without it; an unreadable list is not "gone". */
 const missing = computed(() => apps.loaded && !apps.loading && !apps.error && !app.value);
@@ -59,22 +73,90 @@ const missing = computed(() => apps.loaded && !apps.loading && !apps.error && !a
 
 const frame = ref<HTMLIFrameElement>();
 const frameSrc = ref<string>(), reloads = ref(0), framing = ref(true);
+/** The signed address the frame is loaded from, and why one could not be had. */
+const address = shallowRef<AppFrame>(), frameProblem = ref("");
 /** The page of the app that is showing (its address inside the frame), as the SDK reports it. */
 const place = ref("");
 const screen = computed(() => app.value ? appScreen(place.value, app.value) : "");
-watch(src, value => { frameSrc.value = value; place.value = ""; errors.value = []; held.value = false; pending.value = undefined; framing.value = true; });
+let loads = 0, renewTimer: ReturnType<typeof setTimeout> | undefined;
+/** Points the frame at the app, on a fresh address: its entry page, or `inside` its folder. */
+async function load(inside = "") {
+  const current = app.value;
+  if (!current) return;
+  const turn = ++loads;
+  try {
+    const next = await loadFrame(current);
+    if (turn !== loads) return;
+    address.value = next; frameProblem.value = "";
+    frameSrc.value = inside ? next.base + inside : next.url;
+    framing.value = true; reloads.value++;
+    keepAlive(next.renew_after_seconds);
+  } catch (cause) { if (turn === loads) frameProblem.value = errorMessage(cause); }
+}
 /** Loads the app again where it was: the page it had open, when that is still one of its own. */
 function reload() {
   const current = app.value;
-  if (current && src.value) {
-    frameSrc.value = place.value.startsWith(appFilesPrefix(current)) ? place.value : src.value;
-    framing.value = true; reloads.value++;
+  if (current && !waitingForAnswer.value) {
     held.value = false; pending.value = undefined;
     if (notice.value?.kind === "waiting") notice.value = undefined;
+    void load(insideApp(place.value, current) ?? "");
   }
   void refreshApps();
 }
-function openTab() { if (src.value) window.open(src.value, "_blank", "noopener"); }
+/** The address lasts a few hours: while the frame is open it is renewed; once it lapsed, the app is loaded again. */
+function keepAlive(seconds: number) {
+  clearTimeout(renewTimer);
+  renewTimer = setTimeout(() => void renew(), Math.max(60, seconds) * 1000);
+}
+async function renew() {
+  const current = app.value, used = address.value;
+  if (!current || !used || !frameSrc.value) return;
+  try { keepAlive((await renewFrame(current, used.token)).renew_after_seconds); }
+  catch (cause) {
+    if (address.value !== used) return;
+    // Lapsed (the machine slept, the server restarted): further files of the app would not load.
+    if (cause instanceof ApiError && (cause.status === 410 || cause.status === 404)) { if (held.value) show({ kind: "waiting" }); else reload(); }
+    else keepAlive(60);
+  }
+}
+/** The app in a browser tab of its own: Tendly's page around it, so it keeps its data and its bridge. */
+function openTab() { if (props.slug) window.open(new URL(appPagePath({ workspace_id: props.workspaceId, slug: props.slug }), window.location.origin).href, "_blank", "noopener"); }
+
+// ---------------------------------------------------------------- what the app may do
+
+const grants = shallowRef<AppGrants>(), grantsOpen = ref(false), deciding = ref(false), grantsProblem = ref("");
+const permissionsButton = ref<HTMLButtonElement>();
+/** The first time an app that asks for something is opened, it waits for the person's answer before it loads. */
+const waitingForAnswer = computed(() => grants.value?.status === "ask" && !frameSrc.value);
+const asksAnything = computed(() => (grants.value?.requested.length ?? 0) > 0);
+async function readGrants() {
+  const current = app.value;
+  if (!current) return;
+  try { const read = await loadGrants(current); if (app.value && liveKey.value === `${current.workspace_id}/${current.slug}`) grants.value = read; }
+  catch { /* Unknown: the app loads, and the server refuses what was not allowed. */ }
+}
+/** Opening an app: what it may do first, then the app itself (unless a question waits). */
+async function begin() {
+  const current = app.value;
+  if (!current) return;
+  await readGrants();
+  if (app.value && !waitingForAnswer.value && !frameSrc.value) await load();
+}
+async function decide(granted: string[]) {
+  const current = app.value;
+  if (!current || deciding.value) return;
+  deciding.value = true; grantsProblem.value = "";
+  try {
+    grants.value = await decideGrants(current, granted);
+    grantsOpen.value = false;
+    // The app starts over with the answer: what it asked for at load now works, or says it was refused.
+    if (frameSrc.value) reload(); else await load();
+  } catch (cause) { grantsProblem.value = errorMessage(cause); }
+  finally { deciding.value = false; }
+}
+function closeGrants() { grantsOpen.value = false; permissionsButton.value?.focus(); }
+// The app's list of permissions changed (its app.json was edited): ask about what is new.
+watch(() => app.value?.permissions?.join(","), (now, before) => { if (now !== undefined && before !== undefined && now !== before) void readGrants(); });
 
 const copied = ref(false), copyProblem = ref("");
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -95,10 +177,20 @@ const errorsButton = ref<HTMLButtonElement>();
 /** The app asked not to be reloaded while it has unsaved input. */
 const held = ref(false);
 watch(() => errors.value.length, count => { if (!count) errorsOpen.value = false; });
+/** This view of the app, for the context it sets (two tabs of one app do not clear each other's). */
+const owner = contextOwner();
+const limiter = createLimiter();
+/** Says something to the app's frame. Its origin is opaque, so it cannot be named: the window is what is addressed. */
+function tell(target: Window | null | undefined, body: Record<string, unknown>) {
+  try { target?.postMessage(hostMessage(body), "*"); } catch { /* The frame is gone. */ }
+}
+/** How Tendly looks and how the app is shown, for `tendly.host.theme` and `tendly.host.pane`. */
+function tellHost() { tell(frame.value?.contentWindow, { type: "host", theme: darkScheme.value ? "dark" : "light", mode: props.mode }); }
+watch(darkScheme, tellHost);
 function onMessage(event: MessageEvent) {
   const current = app.value;
   if (!current) return;
-  const message = readAppMessage(event, { origin: window.location.origin, frame: frame.value?.contentWindow }, current);
+  const message = readAppMessage(event, { frame: frame.value?.contentWindow }, current);
   if (!message) return;
   if (message.type === "error") errors.value = withError(errors.value, message.error);
   else if (message.type === "location") {
@@ -106,7 +198,19 @@ function onMessage(event: MessageEvent) {
     if (!message.fresh) return;
     // A page that has just loaded starts clean, and already has the newest files.
     errors.value = []; held.value = false;
+    clearAppContext(liveKey.value, owner);
+    tellHost();
     if (pending.value) { const waited = pending.value; pending.value = undefined; seen.value = waited.id; show({ kind: "change", change: waited }); }
+  } else if (message.type === "context") setAppContext(liveKey.value, owner, readContext(message));
+  else if (message.type === "call") {
+    const asker = event.source as Window | null, id = message.id;
+    answerCall(message, {
+      app: current, grants: () => grants.value,
+      openConversation,
+      draft: (text, files) => emit("draft", text, files),
+      toast: text => { showToast(text, { tone: "info" }); },
+      openUrl: url => { window.open(url, "_blank", "noopener,noreferrer"); },
+    }, limiter).then(value => tell(asker, { type: "result", id, ok: true, value }), cause => tell(asker, { type: "result", id, ok: false, error: bridgeFailure(cause) }));
   } else {
     held.value = message.on;
     if (!message.on && pending.value) apply(pending.value);
@@ -178,6 +282,13 @@ const noticeView = computed(() => notice.value?.kind === "change" ? changeNotice
 
 let stopWatching: (() => void) | undefined, stopReconnect: (() => void) | undefined;
 const liveKey = computed(() => app.value ? `${app.value.workspace_id}/${app.value.slug}` : "");
+/** Another app in this view (or the first one): nothing of the one before is kept. */
+function reset() {
+  loads++; clearTimeout(renewTimer);
+  frameSrc.value = undefined; address.value = undefined; frameProblem.value = ""; framing.value = true;
+  place.value = ""; errors.value = []; held.value = false;
+  grants.value = undefined; grantsOpen.value = false; grantsProblem.value = "";
+}
 function follow() {
   stopWatching?.(); stopWatching = undefined;
   seen.value = undefined; pending.value = undefined; show(undefined);
@@ -196,18 +307,20 @@ async function resync() {
     else if (latest && latest.id !== seen.value) heard(latest);
   } catch { /* The next reconnection asks again. */ }
 }
-watch(liveKey, follow);
+watch(liveKey, (now, before) => { if (before) clearAppContext(before, owner); reset(); follow(); void begin(); });
 onMounted(() => {
   void refreshApps();
-  frameSrc.value = src.value;
   window.addEventListener("message", onMessage);
-  stopReconnect = onLiveReconnect(() => void resync());
+  // A socket that came back may mean a server that restarted: it no longer remembers the address it was keeping.
+  stopReconnect = onLiveReconnect(() => { void resync(); void renew(); });
   follow();
+  void begin();
 });
 onBeforeUnmount(() => {
   window.removeEventListener("message", onMessage);
   stopWatching?.(); stopReconnect?.();
-  clearTimeout(noticeTimer); clearTimeout(echoTimer); clearTimeout(copiedTimer);
+  loads++; clearAppContext(liveKey.value, owner);
+  clearTimeout(noticeTimer); clearTimeout(echoTimer); clearTimeout(copiedTimer); clearTimeout(renewTimer);
 });
 </script>
 
@@ -222,11 +335,12 @@ onBeforeUnmount(() => {
       </div>
       <div class="app-view-actions">
         <button v-if="errors.length" ref="errorsButton" type="button" class="small-button danger app-view-errors-button" :aria-expanded="errorsOpen" :title="t('Errors this app reported since it loaded')" @click="errorsOpen = !errorsOpen"><Icon name="info" :size="13" /><span>{{ t(errors.length === 1 ? '{count} error' : '{count} errors', { count: errors.length }) }}</span></button>
+        <button v-if="asksAnything && !waitingForAnswer" ref="permissionsButton" type="button" class="small-button app-view-permissions" :aria-expanded="grantsOpen || grants?.status === 'ask'" :aria-label="t('Permissions')" :title="t('What this app is allowed to do')" @click="grantsOpen = !grantsOpen"><Icon name="shield" :size="13" /><span class="app-view-label">{{ t('Permissions') }}</span></button>
         <button type="button" :class="['small-button', 'app-view-chat', { primary: mode === 'page' && chatOpen }]" :aria-pressed="mode === 'page' ? !!chatOpen : undefined" :aria-label="t('Chat')" :title="t('Talk to an agent about this app')" @click="emit('chat')"><Icon name="chat" :size="13" /><span class="app-view-label">{{ t('Chat') }}</span></button>
         <button v-if="mode === 'page'" type="button" class="small-button app-view-mesa" :disabled="!app" :aria-label="t('Open on the Mesa')" :title="t('Open this app in a tab on the Mesa')" @click="emit('mesa')"><Icon name="grid" :size="13" /><span class="app-view-label">{{ t('Open on the Mesa') }}</span></button>
-        <button type="button" class="icon-button" :aria-label="t('Reload')" :title="t('Reload')" :disabled="!src" @click="reload"><Icon name="refresh" :size="14" /></button>
+        <button type="button" class="icon-button" :aria-label="t('Reload')" :title="t('Reload')" :disabled="!app" @click="reload"><Icon name="refresh" :size="14" /></button>
         <button type="button" class="icon-button" :aria-label="t('Copy link')" :title="copied ? t('Link copied') : t('Copy a link to this app')" :disabled="!slug" @click="copyLink"><Icon :name="copied ? 'check' : 'clipboard'" :size="14" /></button>
-        <button type="button" class="icon-button" :aria-label="t('Open in new tab')" :title="t('Open in new tab')" :disabled="!src" @click="openTab"><Icon name="arrow" :size="14" /></button>
+        <button type="button" class="icon-button" :aria-label="t('Open in new tab')" :title="t('Open in new tab')" :disabled="!app" @click="openTab"><Icon name="arrow" :size="14" /></button>
       </div>
       <span class="sr-only" role="status">{{ copied ? t('Link copied') : copyProblem }}</span>
     </header>
@@ -247,9 +361,18 @@ onBeforeUnmount(() => {
         <button type="button" class="icon-button" :aria-label="t('Close')" :title="t('Close')" @click="closeErrors()"><Icon name="close" :size="13" /></button>
       </footer>
     </div>
+    <AppPermissions v-if="grants && frameSrc && (grantsOpen || grants.status === 'ask')" layout="strip" :name="name" :grants="grants" :busy="deciding" :problem="grantsProblem" @decide="decide" @close="closeGrants" @keydown.esc="grants?.status !== 'ask' && closeGrants()" />
     <div class="app-view-body">
-      <iframe v-if="frameSrc" ref="frame" :key="`${frameSrc}#${reloads}`" class="app-view-frame" :src="frameSrc" :title="name" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-downloads allow-popups" @load="framing = false" />
+      <!-- No allow-same-origin: the app is a page of its own, not a part of Tendly (see hub/apps/frame.rs). -->
+      <iframe v-if="frameSrc" ref="frame" :key="`${frameSrc}#${reloads}`" class="app-view-frame" :src="frameSrc" :title="name" sandbox="allow-scripts allow-forms allow-modals allow-downloads allow-popups" allow="clipboard-write" referrerpolicy="no-referrer" @load="framing = false" />
       <div v-if="frameSrc && framing" class="app-view-loading" role="status">{{ t('Loading…') }}</div>
+      <AppPermissions v-else-if="!frameSrc && grants && waitingForAnswer" layout="gate" :name="name" :grants="grants" :busy="deciding" :problem="grantsProblem" @decide="decide" />
+      <div v-else-if="!frameSrc && frameProblem" class="pane-empty">
+        <Icon name="info" :size="26" />
+        <h3>{{ t('Could not open this app') }}</h3>
+        <p>{{ frameProblem }}</p>
+        <button type="button" class="small-button" @click="reload">{{ t('Try again') }}</button>
+      </div>
       <div v-else-if="!frameSrc && missing" class="pane-empty">
         <Icon name="apps" :size="28" />
         <h3>{{ t('This app is not here anymore') }}</h3>
@@ -298,7 +421,7 @@ onBeforeUnmount(() => {
 .app-view-code > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-view-code:hover { background: var(--fill); color: var(--ink); }
 .app-view-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; max-width: 100%; margin-left: auto; }
-.app-view-chat, .app-view-mesa, .app-view-errors-button { display: inline-flex; align-items: center; gap: 5px; }
+.app-view-chat, .app-view-mesa, .app-view-errors-button, .app-view-permissions { display: inline-flex; align-items: center; gap: 5px; }
 .app-view-problem { flex: none; margin: 0; padding: 4px 12px; border-bottom: 1px solid var(--danger-line); background: var(--danger-soft); color: var(--danger-ink); font-size: var(--text-xs); }
 .app-view-errors { flex: none; display: flex; flex-direction: column; max-height: 45%; min-height: 0; border-bottom: 1px solid var(--danger-line); background: var(--surface); }
 .app-view-errors ol { flex: 1; min-height: 0; margin: 0; padding: 6px 12px; overflow: auto; list-style: none; display: grid; gap: 6px; }

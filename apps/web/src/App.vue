@@ -24,6 +24,7 @@ import { onConversationStarted, startProfiles } from "./features/hub/start";
 import AppsPage from "./features/hub/AppsPage.vue";
 import AppFullPage from "./features/hub/AppFullPage.vue";
 import { appAttachment, chatPaneFor, fillComposer, onAppChatRequest, sideChatSession } from "./features/hub/app-chat";
+import { onAppOpen } from "./features/hub/app-bridge";
 import { refreshApps, type HubApp } from "./features/hub/apps";
 import IconRail from "./features/hub/IconRail.vue";
 import { appPaneKey, mesaSidebar, openAppKeys, sidebarLayout, type RailTarget } from "./features/hub/rail";
@@ -186,14 +187,16 @@ function appSideChat(workspaceId: string) {
   return quickSession(workspaceId, provider === "terminal" ? DEFAULT_CLIENT : provider, false, undefined, false, true);
 }
 /** "Ask for a fix" on an app's tab: the errors go into the composer of the conversation open beside it, or of a new one there. Never sent from here. */
-onAppChatRequest(async ({ workspaceId, slug, name, paneId, text }) => {
+onAppChatRequest(async ({ workspaceId, slug, name, paneId, text, files }) => {
   const open = chatPaneFor(openPanes.value, sessions.value, workspaceId, selectedPaneId.value);
   const provider = lastQuickProvider();
   const session = open?.session ?? await quickSession(workspaceId, provider === "terminal" ? DEFAULT_CLIENT : provider, false, paneId, true);
   if (!session) return;
-  fillComposer(session.id, { attach: appAttachment({ slug, name }), text });
+  fillComposer(session.id, { attach: appAttachment({ slug, name }), files, text });
   if (open) { await canvas.value?.focusPane(open.pane.id); canvas.value?.focusSelected(); }
 });
+/** What an app asks to see on the Mesa (`tendly.host.openFile`, `openApp`): a file of its project, or another app. */
+onAppOpen(target => { if (target.kind === "file") openFileFromHome(target.workspaceId, target.path); else openApp(target.app); });
 /** "code in apps/<slug>/": the file panel, opened on the app's folder. */
 async function revealAppCode(app: HubApp) {
   openFiles(app.workspace_id, null);

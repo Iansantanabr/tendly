@@ -105,12 +105,16 @@ async function toggleChat() {
   void focusComposer();
 }
 async function anotherChat() { if (await newChat()) void focusComposer(); }
-/** "Ask for a fix": the errors go into the composer of the conversation beside the app (a new one if there is none). */
-async function fix(text: string) {
+/**
+ * "Ask for a fix", and a draft the app wrote (`tendly.host.draftChat`): the
+ * text goes into the composer of the conversation beside the app (a new one if
+ * there is none), with the app attached. Never sent from here.
+ */
+async function fix(text: string, files?: { path: string; name: string }[]) {
   side.open[key.value] = true;
   const id = chatSession.value?.id ?? await newChat();
   if (!id) return;
-  fillComposer(id, { attach: app.value ? appAttachment(app.value) : undefined, text });
+  fillComposer(id, { attach: app.value ? appAttachment(app.value) : undefined, files, text });
   void focusComposer();
 }
 function moveToMesa() { const session = chatSession.value; if (!session) return; closeChat(false); emit("openSession", session); }
@@ -159,7 +163,7 @@ function resizeKey(event: KeyboardEvent) {
 <template>
   <section ref="root" :class="['app-page', { 'chat-open': chatOpen, stacked, dragging }]" :aria-label="app?.name ?? slug">
     <div class="app-page-main">
-      <AppView mode="page" :workspace-id="workspaceId" :workspace-name="workspace?.name ?? ''" :slug="slug" :chat-open="chatOpen" @chat="toggleChat" @fix="fix" @mesa="app && emit('openOnMesa', app)" @code="app && emit('revealCode', app)" @catalog="emit('catalog')" />
+      <AppView mode="page" :workspace-id="workspaceId" :workspace-name="workspace?.name ?? ''" :slug="slug" :chat-open="chatOpen" @chat="toggleChat" @fix="fix" @draft="fix" @mesa="app && emit('openOnMesa', app)" @code="app && emit('revealCode', app)" @catalog="emit('catalog')" />
     </div>
     <template v-if="chatOpen">
       <div v-if="!stacked" class="app-page-resizer" role="separator" aria-orientation="vertical" tabindex="0" :aria-label="t('Resize the chat')" :aria-valuenow="width" :aria-valuemin="CHAT_MIN" :aria-valuemax="maxChatWidth(pageWidth || 1280)" :title="t('Drag to resize · arrow keys also work')" @pointerdown.prevent="resize" @keydown="resizeKey" />

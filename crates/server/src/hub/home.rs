@@ -215,6 +215,44 @@ pub(crate) async fn notify(
     super::push::dispatch(state, kind, session, &push_title, &push_detail);
 }
 
+/// An inbox entry that leads to a page of Tendly instead of a conversation:
+/// what an app tells the person (`apps/tendly.rs`). `link` is a path of the
+/// web app, such as `/apps/<workspace>/<slug>`.
+pub(crate) async fn notify_link(state: &AppState, kind: &'static str, title: String, body: String, link: String) {
+    let (push_title, push_detail, push_link) = (title.clone(), body.clone(), link.clone());
+    let result = cs(state, move |c| {
+        c.execute(
+            "INSERT INTO notifications(kind, title, body, created_at, link) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![kind, title, body, now(), link],
+        )?;
+        c.execute(
+            "DELETE FROM notifications WHERE id NOT IN (SELECT id FROM notifications ORDER BY id DESC LIMIT 500)",
+            [],
+        )
+    })
+    .await;
+    if let Err(error) = result {
+        tracing::warn!(?error, "could not record notification");
+    }
+    super::push::dispatch_link(state, kind, &push_title, &push_detail, &push_link);
+}
+
+/// Which conversations have a reply the person has not opened, and how their last turn ended.
+pub(crate) fn activity_rows(c: &rusqlite::Connection) -> rusqlite::Result<Vec<(String, Option<String>, Option<String>, bool)>> {
+    let mut stmt = c.prepare("SELECT session_id, last_turn_at, last_turn_status, seen_at FROM session_activity")?;
+    stmt.query_map([], |r| {
+        let last: Option<String> = r.get(1)?;
+        let seen: Option<String> = r.get(3)?;
+        let unread = match (&last, &seen) {
+            (Some(last), Some(seen)) => parse(last) > parse(seen),
+            (Some(_), None) => true,
+            _ => false,
+        };
+        Ok((r.get::<_, String>(0)?, last, r.get::<_, Option<String>>(2)?, unread))
+    })?
+    .collect()
+}
+
 async fn session_title(state: &AppState, id: SessionId) -> String {
     db(state, move |s| s.get_session(id))
         .await
@@ -237,7 +275,7 @@ async fn inbox(State(state): State<AppState>, Query(query): Query<InboxQuery>) -
     }
     let (items, unread) = cs(&state, |c| {
         let mut stmt = c.prepare(
-            "SELECT id, kind, session_id, title, body, created_at, read_at
+            "SELECT id, kind, session_id, title, body, created_at, read_at, link
              FROM notifications ORDER BY id DESC LIMIT 100",
         )?;
         let items = stmt
@@ -250,6 +288,7 @@ async fn inbox(State(state): State<AppState>, Query(query): Query<InboxQuery>) -
                     "body": r.get::<_, String>(4)?,
                     "created_at": r.get::<_, String>(5)?,
                     "read_at": r.get::<_, Option<String>>(6)?,
+                    "link": r.get::<_, Option<String>>(7)?,
                 }))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;

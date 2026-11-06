@@ -435,7 +435,8 @@ async fn agent_message(state: &AppState, session: SessionId) -> Option<String> {
     db(state, move |s| Ok(stored_message(s, session))).await.ok().flatten()
 }
 
-fn stored_message(store: &tendly_persistence::Store, session: SessionId) -> Option<String> {
+/// Also the one-line summary apps are given of a conversation (`apps/tendly.rs`).
+pub(super) fn stored_message(store: &tendly_persistence::Store, session: SessionId) -> Option<String> {
     let page = store.conversation_page(session, None, MESSAGE_EVENTS).ok()?;
     summary_line(&super::transcript::last_agent_text(&page.events)?)
 }

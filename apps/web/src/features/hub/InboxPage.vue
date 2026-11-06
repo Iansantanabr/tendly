@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
+import { useRouter } from "vue-router";
 import type { Session } from "@tendly/protocol";
 import PageShell from "../PageShell.vue";
 import Icon from "../Icon.vue";
 import { useI18n } from "../../i18n";
-import { inbox, inboxMessage, markInboxRead, refreshInbox, shortAgo, type InboxItem } from "./inbox";
+import { inbox, inboxLink, inboxMessage, markInboxRead, refreshInbox, shortAgo, type InboxItem } from "./inbox";
 
 /** The bell: what finished, what failed and what waits for you, newest first. */
 const props = defineProps<{ sessions: Session[] }>();
 const emit = defineEmits<{ back: []; openSession: [session: Session] }>();
 const { t } = useI18n();
+const router = useRouter();
 onMounted(refreshInbox);
 
 function open(item: InboxItem) {
   void markInboxRead([item.id]);
+  // An app's notice opens the app; everything else, its conversation.
+  const link = inboxLink(item);
+  if (link) { void router.push(link); return; }
   const session = props.sessions.find(s => s.id === item.session_id);
   if (session) emit("openSession", session);
 }
@@ -29,7 +34,7 @@ function open(item: InboxItem) {
         <li v-for="item in inbox.items" :key="item.id">
           <button type="button" :class="['inbox-item', { unread: !item.read_at }]" @click="open(item)">
             <i :class="['inbox-dot', item.kind]" />
-            <span class="inbox-text"><strong>{{ item.title || t('Conversation') }}</strong><span>{{ t(inboxMessage(item.kind)) }}<template v-if="item.body"> · {{ item.body }}</template></span></span>
+            <span class="inbox-text"><strong>{{ item.title || t(item.kind === 'app' ? 'App' : 'Conversation') }}</strong><span>{{ t(inboxMessage(item.kind)) }}<template v-if="item.body"> · {{ item.body }}</template></span></span>
             <small>{{ shortAgo(item.created_at, t) }}</small>
             <Icon name="chevron" :size="12" class="inbox-go" />
           </button>

@@ -44,6 +44,7 @@ use std::path::{Path, PathBuf};
 use tendly_domain::WorkspaceId;
 
 mod access;
+pub(super) use access::hmac_sha256;
 mod assets;
 mod markdown;
 

@@ -160,13 +160,14 @@ fn kind_text(kind: &str) -> &'static str {
         "waiting" => "Is waiting for you",
         "automation_done" => "Routine finished",
         "automation_failed" => "Routine failed",
+        "app" => "App notice",
         "test" => "Notifications are working on this device.",
         _ => "Update",
     }
 }
 
 /// Text a notification can show: no control characters, a bounded length.
-fn clean(text: &str, max: usize) -> String {
+pub(super) fn clean(text: &str, max: usize) -> String {
     let flat: String = text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let flat = flat.split_whitespace().collect::<Vec<_>>().join(" ");
     if flat.chars().count() <= max {
@@ -403,6 +404,20 @@ pub(super) fn dispatch(
         return None;
     }
     let message = Message::for_notification(kind, session, title, detail);
+    Some(tokio::spawn(send_all(state.hub.clone(), state.state_dir.clone(), message)))
+}
+
+/// The same for an entry that leads to a page (`home::notify_link`): the
+/// notification opens `link`, a path inside the web app.
+pub(super) fn dispatch_link(
+    state: &AppState,
+    kind: &str,
+    title: &str,
+    detail: &str,
+    link: &str,
+) -> Option<tokio::task::JoinHandle<Report>> {
+    let mut message = Message::for_notification(kind, None, title, detail);
+    message.url = link.to_owned();
     Some(tokio::spawn(send_all(state.hub.clone(), state.state_dir.clone(), message)))
 }
 

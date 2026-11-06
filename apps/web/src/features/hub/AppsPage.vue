@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import type { EndpointProfile, ProviderKind, Workspace } from "@tendly/protocol";
 import PageShell from "../PageShell.vue";
 import Icon from "../Icon.vue";
-import { ApiError, errorMessage, json, request, routedUrl } from "../api";
+import { ApiError, errorMessage, json, request } from "../api";
 import { providerLabel } from "../clients";
 import { PROFILE_CHOICE_REQUIRED, preferredProfileSelection } from "../profile-preferences";
 import { loadPreferences, preferenceFor } from "../preferences";
@@ -11,7 +11,7 @@ import { useI18n } from "../../i18n";
 import { inbox, loadConversationsWorkspace } from "./inbox";
 import AppTile from "./AppTile.vue";
 import AppOrderMenu from "./AppOrderMenu.vue";
-import { apps, colorFor, createPrompt, freeSlug, refreshApps, scaffoldApp, type HubApp } from "./apps";
+import { appPagePath, apps, colorFor, createPrompt, freeSlug, refreshApps, scaffoldApp, type HubApp } from "./apps";
 import { appKey, appOrder, arrangedApps, hiddenAppList, isHiddenApp, isPinnedApp } from "./app-order";
 import { loadHubSettings } from "./settings";
 
@@ -94,7 +94,8 @@ async function createBlank() {
     formError.value = cause instanceof ApiError && cause.status === 409 ? t("There is already an app in that folder. Choose another name.") : errorMessage(cause);
   } finally { busy.value = ""; }
 }
-function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noopener"); }
+/** In a browser tab of its own: Tendly's page around the app, so it keeps its data and its bridge. */
+function openTab(app: HubApp) { window.open(new URL(appPagePath(app), window.location.origin).href, "_blank", "noopener"); }
 </script>
 
 <template>

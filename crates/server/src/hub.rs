@@ -122,4 +122,12 @@ pub(crate) fn serves_public_pages(state: &AppState, path: &str, authority: &str)
         .is_some_and(|public| public.eq_ignore_ascii_case(authority))
 }
 
+/// Asked by the guard about a request it would refuse for coming from no
+/// origin it knows: whether it is an app's frame reading its own files (or the
+/// SDK). Such a frame is sandboxed into an origin of its own, with no session;
+/// the token in the address is what lets it read (`apps/frame.rs`).
+pub(crate) fn serves_app_frames(method: &axum::http::Method, path: &str) -> bool {
+    apps::frame::is_frame_request(method, path)
+}
+
 pub(crate) type SharedConnection = Mutex<rusqlite::Connection>;
