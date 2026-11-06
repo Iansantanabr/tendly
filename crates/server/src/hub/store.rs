@@ -22,6 +22,36 @@ const MIGRATIONS: &[&str] = &[
         last_turn_status TEXT,
         seen_at TEXT
     );",
+    // 2: scheduled automations and their run log
+    "CREATE TABLE automations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        kind TEXT NOT NULL CHECK (kind IN ('script', 'agent')),
+        cron TEXT NOT NULL,
+        timezone TEXT,
+        workspace_id TEXT,
+        command TEXT,
+        prompt TEXT,
+        provider TEXT CHECK (provider IS NULL OR provider IN ('claude_code', 'codex')),
+        endpoint_id TEXT,
+        model TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE automation_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        automation_id TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        status TEXT NOT NULL CHECK (status IN ('running', 'ok', 'failed', 'timeout')),
+        exit_code INTEGER,
+        output_tail TEXT NOT NULL DEFAULT '',
+        session_id TEXT,
+        trigger TEXT NOT NULL CHECK (trigger IN ('schedule', 'manual'))
+    );
+    CREATE INDEX automation_runs_by_automation ON automation_runs(automation_id, started_at);",
 ];
 
 pub struct HubStore {
@@ -80,5 +110,44 @@ mod tests {
             .unwrap();
         assert_eq!(version as usize, MIGRATIONS.len());
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn version_one_database_upgrades_to_automations() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(MIGRATIONS[0]).unwrap();
+        connection.pragma_update(None, "user_version", 1i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO notifications(kind, title, created_at) VALUES ('waiting', 'kept', 'now')",
+                [],
+            )
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let kept: String = c.query_row("SELECT title FROM notifications", [], |r| r.get(0))?;
+                assert_eq!(kept, "kept");
+                c.execute(
+                    "INSERT INTO automations(id, name, kind, cron, enabled, created_at, updated_at)
+                     VALUES ('a', 'n', 'script', '0 * * * *', 1, 'now', 'now')",
+                    [],
+                )?;
+                c.execute(
+                    "INSERT INTO automation_runs(automation_id, started_at, status, trigger)
+                     VALUES ('a', 'now', 'running', 'manual')",
+                    [],
+                )?;
+                assert!(
+                    c.execute(
+                        "INSERT INTO automations(id, name, kind, cron, enabled, created_at, updated_at)
+                         VALUES ('b', 'n', 'other', '0 * * * *', 1, 'now', 'now')",
+                        [],
+                    )
+                    .is_err()
+                );
+                Ok(())
+            })
+            .unwrap();
     }
 }

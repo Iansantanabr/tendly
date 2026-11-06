@@ -11,7 +11,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-mod automations;
+pub(crate) mod automations;
 mod catalog;
 mod home;
 mod store;
