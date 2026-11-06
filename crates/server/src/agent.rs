@@ -224,6 +224,7 @@ Tendly is the workspace this agent may be running in: a local web app that runs 
 - tendly_usage reports the quota your official account last reported.
 - tendly_canvas lists the tabs open on the canvas and closes some or all of them. Closing a tab never ends a session, except a temporary one.
 - tendly_automation_list, tendly_automation_create and tendly_automation_update manage the person's scheduled automations (Automations page): a shell command or an agent prompt run on a five-field cron schedule. A new or changed script command is confirmed by the person first.
+- tendly_read_conversation reads another Tendly conversation as plain text, by its id or a link to it (…/session/<id>). When a message asks you to read a conversation, call it instead of guessing what was said there.
 - tendly_machines lists other machines running Tendly that this one is paired with. Give tendly_list, tendly_spawn or tendly_session a `machine` to run that call there: to run tests on a Linux box, say, or to use another machine's quota. A session there works in that machine's copy of the workspace, so commit and push what it must see, or describe it in the prompt.
 - Changes that matter are confirmed by the person in the Tendly window, and a call waits up to 5 minutes for that answer. If they decline, do not retry the same change unasked.";
 
@@ -259,6 +260,7 @@ pub fn tools() -> Vec<Value> {
     tools.extend(crate::agent_canvas::tools());
     tools.push(crate::peers::tool());
     tools.extend(crate::hub::automations::tools());
+    tools.push(crate::hub::transcript::tool());
     // These run on another paired machine when the call names one.
     for tool in &mut tools {
         if matches!(
@@ -336,6 +338,7 @@ async fn call_tool(
         "tendly_automation_list" | "tendly_automation_create" | "tendly_automation_update" => {
             crate::hub::automations::call(&state, caller, &input.name, &arguments).await
         }
+        "tendly_read_conversation" => crate::hub::transcript::call(&state, &arguments).await,
         other => Err(ApiError::bad(format!("Unknown Tendly tool {other:?}"))),
     })
 }
