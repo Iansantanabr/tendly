@@ -3,6 +3,7 @@ import type { LeafPaneKind } from "@tendly/protocol/layout";
 import { AGENT_CLIENTS, clientInfo, isProviderKind } from "./clients";
 import { ICON_PALETTE } from "./icon-palette";
 import { mediaKind } from "./media-kind";
+import { appColor, appLetter } from "./hub/app-tile";
 
 const CLIENT_TABS = Object.fromEntries(AGENT_CLIENTS.map(id => [id, { color: ICON_PALETTE[clientInfo(id).iconTone], background: clientInfo(id).tabTint }])) as Record<AgentProviderKind, { color: string; background: string }>;
 export const TAB_ICON_PALETTE = {
@@ -17,10 +18,13 @@ export const TAB_ICON_PALETTE = {
   terminal: { color: ICON_PALETTE.blue, background: "#E8F1FD" },
 } as const;
 
-export type TabIconType = keyof typeof TAB_ICON_PALETTE;
+/** `app`: a custom app, drawn as its coloured letter tile from the `--app-*` tokens rather than this palette. */
+export type TabIconType = keyof typeof TAB_ICON_PALETTE | "app";
 export interface TabIconAppearance {
   type: TabIconType;
-  icon: "spark" | "git" | "file" | "image" | "play" | "terminal";
+  icon: "spark" | "git" | "file" | "image" | "play" | "terminal" | "apps";
+  /** An app tile shows this letter instead of an icon. */
+  letter?: string;
   provider?: ProviderKind;
   color: string;
   background: string;
@@ -34,7 +38,7 @@ export function tabIconProvider(metadata?: Record<string, unknown>, sessionProvi
 }
 
 export function resolveTabIcon(kind: LeafPaneKind, metadata?: Record<string, unknown>, sessionProviders?: Record<string, ProviderKind>): TabIconAppearance {
-  function appearance(type: TabIconType, icon: TabIconAppearance["icon"], provider?: ProviderKind): TabIconAppearance {
+  function appearance(type: keyof typeof TAB_ICON_PALETTE, icon: TabIconAppearance["icon"], provider?: ProviderKind): TabIconAppearance {
     return { type, icon, ...TAB_ICON_PALETTE[type], ...(provider ? { provider } : {}) };
   }
   if (kind === "agent_chat" || kind === "terminal") {
@@ -43,6 +47,10 @@ export function resolveTabIcon(kind: LeafPaneKind, metadata?: Record<string, unk
     return kind === "terminal" ? appearance("terminal", "terminal") : appearance("agent", "spark");
   }
   if (kind === "git_diff") return appearance("git", "git");
+  if (kind === "app") {
+    const color = appColor(metadata?.color), name = typeof metadata?.name === "string" ? metadata.name : "";
+    return { type: "app", icon: "apps", letter: appLetter(metadata?.letter, name || (typeof metadata?.slug === "string" ? metadata.slug : "")), color: `var(--app-${color})`, background: `var(--app-${color}-soft)` };
+  }
   const path = typeof metadata?.path === "string" ? metadata.path : "";
   const media = mediaKind(path);
   if (media === "image" || media === "converted") return appearance("image", "image");

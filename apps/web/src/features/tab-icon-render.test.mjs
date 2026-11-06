@@ -139,3 +139,12 @@ test('solid and destructive control icons inherit foreground while tab media kee
   const source = await readFile(new URL('./Icon.vue', import.meta.url), 'utf8');
   assert.match(source, /:where\(\.tab-icon,\.primary-button,[^)]*\.chat-send,[^)]*\.danger,[^)]*\) :is\(\.app-icon,\.provider-glyph\)\{--icon-color:currentColor\}/);
 });
+
+test('an app tab shows its letter on its own colour tokens', async () => {
+  const html = await render(TabIcon, { kind: 'app', metadata: { workspace_id: 'w', slug: 'crm', name: 'crm', color: 'teal' } });
+  const marker = html.match(/<span\b[^>]*data-tab-icon="app"[^>]*>/)?.[0];
+  assert.ok(marker, 'app icon is rendered');
+  assert.ok(marker.includes('color:var(--app-teal)'));
+  assert.ok(marker.includes('--tab-tint:var(--app-teal-soft)'));
+  assert.match(html, /class="tab-icon-letter"[^>]*>C<\/b>/);
+});

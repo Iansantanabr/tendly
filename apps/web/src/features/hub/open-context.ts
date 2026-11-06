@@ -16,10 +16,23 @@ const meta = (pane: PaneNode, key: string) => {
   return typeof value === "string" ? value : undefined;
 };
 
-/** Files open in editor or preview panes, in tab order, without duplicates. */
+/**
+ * Files open in editor or preview panes, and apps open in app panes, in tab
+ * order, without duplicates. An app is offered as its folder (`apps/<slug>/`),
+ * which a message names like any attached path.
+ */
 export function contextFromPanes(panes: PaneNode[]): OpenContext[] {
   const seen = new Set<string>(), items: OpenContext[] = [];
   for (const pane of panes) {
+    if (pane.kind === "app") {
+      const workspaceId = meta(pane, "workspace_id"), slug = meta(pane, "slug");
+      if (!workspaceId || !slug) continue;
+      const path = `apps/${slug}/`, key = `${workspaceId}:${path}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({ workspaceId, path, name: meta(pane, "name") || pane.title || slug });
+      continue;
+    }
     if (pane.kind !== "editor" && pane.kind !== "file_preview") continue;
     const workspaceId = meta(pane, "workspace_id"), path = meta(pane, "path");
     if (!workspaceId || !path || meta(pane, "checkout")) continue;

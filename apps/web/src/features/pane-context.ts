@@ -1,6 +1,7 @@
 import type { LayoutDocument, LayoutNode, PaneNode, Session, Workspace } from "@tendly/protocol";
 import { closePane, flattenPanes, restoreCollapsed, updatePane, validateLayout } from "../layout/layout-engine";
 import { isEphemeralSession } from "./session-list";
+import { appColor, appLetter } from "./hub/app-tile";
 
 export function paneString(pane: PaneNode, key: string): string | undefined {
   const value = pane.metadata?.[key];
@@ -48,6 +49,11 @@ export function filePane(workspaceId: string, path: string, checkout?: string | 
   return { type: "pane", id: `file-${encodeURIComponent(workspaceId)}${inTree(checkout)}:${encodeURIComponent(path)}`,
     kind: /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|mp4|webm|mov|m4v|ogv|mp3|wav|ogg|m4a|flac|pdf)$/i.test(path) ? "file_preview" : "editor",
     title: path.split("/").pop(), metadata: { workspace_id: workspaceId, path, ...(checkout ? { checkout } : {}) } };
+}
+/** A custom app on the Mesa: one tab per app, whatever else is open. */
+export function appPane(app: { workspace_id: string; slug: string; name: string; letter?: string | null; color?: string | null }): PaneNode {
+  return { type: "pane", id: `app-${encodeURIComponent(app.workspace_id)}:${encodeURIComponent(app.slug)}`, kind: "app", title: app.name,
+    metadata: { workspace_id: app.workspace_id, slug: app.slug, name: app.name, letter: appLetter(app.letter, app.name), color: appColor(app.color) } };
 }
 export function changesPane(workspaceId: string, checkout?: string | null): PaneNode {
   return { type: "pane", id: `changes-${encodeURIComponent(workspaceId)}${inTree(checkout)}`, kind: "git_diff", title: "Changes", metadata: { workspace_id: workspaceId, ...(checkout ? { checkout } : {}) } };
@@ -142,7 +148,7 @@ export function scopeLegacyLayout(document: LayoutDocument, ownerId: string, ses
 }
 
 /** The names built-in panes are shown under when they carry no title of their own. */
-const PANE_NAMES: Record<string, string> = { agent_chat: "Agent session", git_diff: "Git Changes", editor: "File editor", file_preview: "File preview", terminal: "Terminal" };
+const PANE_NAMES: Record<string, string> = { agent_chat: "Agent session", git_diff: "Git Changes", editor: "File editor", file_preview: "File preview", terminal: "Terminal", app: "App" };
 
 /**
  * What a pane is called on screen. A session's or a file's title is its own
@@ -150,7 +156,7 @@ const PANE_NAMES: Record<string, string> = { agent_chat: "Agent session", git_di
  * same in any language, are translated.
  */
 export function paneDisplayTitle(pane: PaneNode, translate: (text: string) => string): string {
-  if (pane.title && (pane.metadata?.session_id || pane.metadata?.path)) return pane.title;
+  if (pane.title && (pane.metadata?.session_id || pane.metadata?.path || (pane.kind === "app" && pane.metadata?.slug))) return pane.title;
   return translate(pane.title || PANE_NAMES[pane.kind] || pane.kind);
 }
 
@@ -158,10 +164,10 @@ export function paneDisplayTitle(pane: PaneNode, translate: (text: string) => st
  * An open pane `incoming` can take the place of: one of the same kind that
  * shows nothing yet -- no session, no file, no unsent draft -- and belongs to
  * no other workspace. Git changes are never replaced: each workspace keeps its
- * own.
+ * own, and every app is a view of its own.
  */
 export function reusablePane(open: readonly PaneNode[], incoming: PaneNode): PaneNode | undefined {
-  if (incoming.kind === "git_diff") return undefined;
+  if (incoming.kind === "git_diff" || incoming.kind === "app") return undefined;
   return open.find(candidate => candidate.kind === incoming.kind
     && !candidate.metadata?.session_id && !candidate.metadata?.remote_session_id && !candidate.metadata?.path && !candidate.metadata?.draft
     && (!candidate.metadata?.workspace_id || candidate.metadata.workspace_id === incoming.metadata?.workspace_id));

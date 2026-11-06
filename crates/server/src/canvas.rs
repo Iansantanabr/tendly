@@ -139,6 +139,21 @@ fn validate_pane(store: &Store, pane: &Value, workspaces: &mut HashSet<Workspace
             "Bound session/file and Git panes require an explicit workspace_id",
         ));
     }
+    if kind == "app" {
+        if workspace_id.is_none() {
+            return Err(ApiError::bad("App panes require an explicit workspace_id"));
+        }
+        let slug = metadata.get("slug").and_then(Value::as_str).unwrap_or("");
+        if slug.is_empty()
+            || slug.len() > 80
+            || slug.starts_with('.')
+            || !slug
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        {
+            return Err(ApiError::bad("App panes require a valid slug"));
+        }
+    }
     if let Some(path) = path {
         validate_relative_path(path)?;
     }

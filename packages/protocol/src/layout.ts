@@ -10,6 +10,8 @@ export type PaneKind =
   | "terminal"
   | "git_diff"
   | "file_preview"
+  /** A custom app (`<workspace>/apps/<slug>/`), shown in a frame. */
+  | "app"
   | "stack";
 
 export type LeafPaneKind = Exclude<PaneKind, "stack">;
