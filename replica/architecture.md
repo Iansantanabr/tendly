@@ -130,6 +130,24 @@ O link publicado usa `public_base_url` quando definido (`public_url` em cada pub
 
 Como o "antes" é guardado: `hub/apps/live.rs` mantém em memória, por app, o que cada arquivo continha na última rajada (hash do conteúdo, já salvo como versão no histórico). No fim de uma rajada compara com o disco; a diferença é a mudança. Nada disso vai para o `hub.db`: reiniciar o servidor esquece as mudanças (o histórico por arquivo continua lá).
 
+### Apps C: origem própria, ponte e permissões (feito)
+
+| método e caminho | faz | saída |
+| --- | --- | --- |
+| `GET /apps-run/{ws}/{slug}/{token}/{caminho}` (fora de `/api`) | um arquivo do app para quem tem o token; CSP `sandbox` sem `allow-same-origin`, `ACAO: *`, `CORP: cross-origin` | o arquivo; 404 seco para token errado, vencido, de outro app ou caminho proibido |
+| `GET apps/{ws}/{slug}/frame` | um endereço novo para a moldura (token de 8 h) | `{base, url, token, expires_at, renew_after_seconds}` |
+| `POST apps/{ws}/{slug}/frame/renew` | mantém vivo o endereço de uma moldura aberta | `{expires_at, renew_after_seconds}`; 410 vencido, 404 |
+| `GET apps/{ws}/{slug}/files[/…]` (já existia) | o endereço antigo: redireciona para o novo | 307 |
+| `GET apps/{ws}/{slug}/grants` | o que o app pede e o que você respondeu | `{requested, granted, refused, pending, status}` |
+| `PUT apps/{ws}/{slug}/grants` | a resposta: `granted` permitido, o resto recusado | o mesmo; 400 para o que o app não pede |
+| `GET apps/{ws}/{slug}/tendly/sessions` | lista de conversas (`sessions:read`), sem transcrição | `{sessions, total}` |
+| `GET apps/{ws}/{slug}/tendly/files` · `…/tendly/file` | pasta e arquivo de texto ≤ 1 MB do workspace do app (`files:read`), sem nada com ponto | `{path, entries}` · `{path, content, size}` |
+| `GET apps/{ws}/{slug}/tendly/automations` | automações com as últimas execuções (`automations:read`), sem comando nem saída | `{automations}` |
+| `POST apps/{ws}/{slug}/notify` | aviso no sino e push (`notify`), com link para o app | `{ok}`; 429 |
+| `GET apps/sdk.js` (já existia) | agora é público (o mesmo script para todos) e fala só por `postMessage` | JS |
+
+Quem confere o quê: o **guard** recusa tudo que vem da moldura para `/api` (origem `null` ou `sec-fetch-site: cross-site`), menos a leitura de `/apps-run/…` e do SDK; o **token** diz de qual app são os arquivos; a **página do Tendly** só ouve a janela da moldura e faz os pedidos com as credenciais dela; o **servidor** confere a permissão em cada rota `tendly/*` e no `notify`. A página decide sozinha só o que só ela pode fazer (rascunho no composer, abrir na Mesa, toast).
+
 ### Webhooks e jobs
 
 Webhooks entrando: nenhum. Webhooks saindo: Web Push (M3).
@@ -169,7 +187,7 @@ Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeir
   - o token passa a ser obrigatório. Atenção: atrás do Caddy o servidor escuta em loopback, e em loopback o Tendly **não** pede token a não ser que exista um. Por isso o `TENDLY_TOKEN` é obrigatório no arquivo de ambiente e o unit se recusa a iniciar sem ele;
   - o domínio dos publicados só serve `/p/*` (no Caddy e de novo no servidor) e não é origem aceita pela API;
   - o publicado fica fora de `/api` e com CSP sandbox;
-  - apps rodam na mesma origem e sem sandbox, aceitável com um usuário e código do próprio agente; no multiusuário passam para uma origem separada (`apps.<domínio>`);
+  - apps rodam numa moldura com origem opaca (Apps C): CSP `sandbox` sem `allow-same-origin` em `/apps-run/…`, no mesmo host, então o Caddy e o Tailscale não mudam. O token do endereço é a credencial dos arquivos daquele app (nunca `data/`); a API recusa qualquer pedido vindo da moldura. Em loopback sem token essa recusa depende de o navegador mandar `Origin` ou `Sec-Fetch-Site` (todos os atuais mandam); com token (VPS, Tailscale) o cookie `SameSite=Strict` também não acompanha;
   - o que o app manda para a página (erros, tela, `holdReload`) é só leitura de texto: a página confere a origem e a janela da moldura, corta os tamanhos e nunca executa nem navega com o que recebe. "Pedir correção" põe esse texto num composer; quem envia é a pessoa;
   - o 1Password (M5, feito só leitura) usa o CLI `op`; o token da conta de serviço fica na variável `OP_SERVICE_ACCOUNT_TOKEN` do ambiente do servidor e o Tendly não o recebe nem guarda;
   - a lista de chaves dos `.env` (M5) devolve só nomes: o valor é pulado byte a byte na leitura.

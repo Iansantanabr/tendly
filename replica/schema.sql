@@ -166,6 +166,31 @@ CREATE TABLE pinned_messages (
     pinned_at TEXT NOT NULL
 );
 
+---------------------------------------------------------------- live: 10 (Apps C, permissions and app frames)
+-- What the person allowed each app. An app asks in app.json ("permissions");
+-- one row per app and permission once the person answered (allowed 1 or 0).
+-- What an app may do = what it asks AND allowed = 1. A permission taken out of
+-- app.json has its row deleted when the grants are next read, so asking for it
+-- again is a new question. No foreign keys: the app is a folder, not a row.
+CREATE TABLE app_grants (
+    workspace_id TEXT NOT NULL,    -- soft ref to tendly.db workspaces
+    slug TEXT NOT NULL,            -- apps/<slug>/
+    permission TEXT NOT NULL,      -- sessions:read | files:read | automations:read | notify | agent:draft (checked in code)
+    allowed INTEGER NOT NULL CHECK (allowed IN (0, 1)),
+    granted_at TEXT NOT NULL,      -- when this answer was given (kept when the same answer is given again)
+    PRIMARY KEY (workspace_id, slug, permission)
+);
+-- The secret that signs the addresses app files are served from
+-- (/apps-run/<workspace>/<slug>/<expiry>.<hmac>/...), made on first use.
+-- Deleting the row invalidates every address in use; open apps load again.
+CREATE TABLE app_frame_secret (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    secret TEXT NOT NULL
+);
+-- Where an inbox entry leads when it is not about a conversation: an app's
+-- notice (kind 'app') opens /apps/<workspace>/<slug>. NULL for everything else.
+ALTER TABLE notifications ADD COLUMN link TEXT;
+
 ---------------------------------------------------------------- later (multi-user, after the VPS)
 -- Not a migration yet. Sketch so today's tables don't paint us into a corner:
 --   people(id, name, email UNIQUE, role CHECK IN ('admin','member'), created_at)

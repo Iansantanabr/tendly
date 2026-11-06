@@ -75,7 +75,7 @@ Cabeçalho do app com Conversar e Abrir na Mesa,apps,must,yes,yes,Fase 4
 API de dados para o app guardar estado,apps,must,yes,yes,Fase 4
 Apps na sidebar com tile de letra colorida,apps,should,yes,yes,Fase 4; Etapa A: lista vertical na barra e tiles no rail
 Skill que ensina o agente a criar apps,apps,must,yes,yes,Fase 4
-App responsivo em painel estreito,apps,could,yes,no,P13; responsabilidade de cada app
+App responsivo em painel estreito,apps,could,yes,partial,P13; responsabilidade de cada app; Etapa C deu tendly.host.pane / onResize (largura · altura · painel ou tela cheia); o kit com barra inferior é da Etapa E
 Versão publicada do app por commit,apps,could,yes,no,P28 Apps nas áreas
 Configurações: Contas de IA pessoais,configurações,must,yes,yes,Tendly upstream
 Configurações: Padrão do chat,configurações,should,yes,partial,Tendly Preferências
@@ -103,10 +103,13 @@ Conversar abre chat ao lado do app em tela cheia,apps,must,yes,yes,Etapa B (Apps
 App recarrega sozinho quando o agente muda o código,apps,must,yes,yes,Etapa B (AppsB); hub/apps/live.rs; 600 ms de silêncio; aviso pelo socket agent-activity; "Atualizado agora · Desfazer" (desfaz pelo histórico de arquivos; desfazer o desfazer = refazer)
 App pede para não recarregar com entrada não salva (holdReload),apps,should,no,yes,Etapa B (AppsB); tendly.host.holdReload(true/false); aviso "Tem uma versão nova pronta · Recarregar agora"
 Erros do app no cabeçalho com Pedir correção,apps,should,no,yes,Etapa B (AppsB); sdk.js avisa error · unhandledrejection · console.error · arquivo que não carregou; "N erros" → lista → preenche o composer com app · tela · arquivo:linha (nunca envia)
-Contexto do app com a tela atual (App · Quadro),apps,should,yes,partial,Etapa C; P32; hoje só o nome
-Ponte app → Mesa (abrir conversa · arquivo · app),apps,should,yes,no,Etapa C; P32 botão Abrir do card
-App lê dados do Tendly (sessões · arquivos · automações) com permissão,apps,should,yes,no,Etapa C; app Sessões (P11)
-Origem separada para apps + permissões declaradas,apps,must,no,no,Etapa C; segurança: hoje same-origin
+Contexto do app com a tela atual (App · Quadro),apps,should,yes,yes,Etapa C (AppsC); tendly.host.setContext({view · selection · summary}); o chip vira "App · view" e a mensagem leva as três linhas; não visto no navegador
+Ponte app → Mesa (abrir conversa · arquivo · app),apps,should,yes,yes,Etapa C (AppsC); tendly.host.openConversation · openFile · openApp · openUrl por postMessage; não visto no navegador
+App lê dados do Tendly (sessões · arquivos · automações) com permissão,apps,should,yes,yes,Etapa C (AppsC); tendly.sessions.list · tendly.workspace.files/read · tendly.automations.list; só leitura · conferido no servidor · sem transcrição
+Origem separada para apps + permissões declaradas,apps,must,no,yes,Etapa C (AppsC); moldura sem allow-same-origin + /apps-run/<ws>/<slug>/<token>/ com CSP sandbox (origem opaca · sem segundo host); app.json "permissions" + cartão Permitir/Recusar + app_grants
+App escreve rascunho no chat sem enviar (draftChat),apps,should,no,yes,Etapa C (AppsC); tendly.host.draftChat(text · {attach}); precisa de agent:draft; preenche o composer da conversa ao lado e nunca envia
+App avisa no sino e por push (notify) e mostra toast,apps,could,no,yes,Etapa C (AppsC); tendly.host.notify precisa de notify · 10 a cada 10 min por app · o aviso abre o app; tendly.host.toast
+App segue o tema do Tendly (claro/escuro),apps,could,no,yes,Etapa C (AppsC); tendly.host.theme / onTheme e <html data-tendly-theme>
 Coleções com registros e revisão + ao vivo,apps,should,yes,no,Etapa D; kanbans com arrastar (P30 P32)
 Subir arquivos/fotos pelo app,apps,could,yes,no,Etapa D; P31 Subir outra foto
 Criar com o agente com modelos (kanban · tabela · calendário · painel · formulário · editor),apps,must,yes,partial,Etapa E; hoje blank/issues

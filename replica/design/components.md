@@ -369,4 +369,40 @@ Coluna de conversa (Apps B, `AppFullPage.vue`)
   estados    começando ("Iniciando…"), sem conversa (texto + "Nova conversa"), não deu para começar (inline-error), conversa aberta (SessionPane comum)
 ```
 
+### Apps C (ponte e permissões)
+
+```
+Cartão de permissões (Apps C, `AppPermissions.vue`, dentro do `AppView.vue`)
+  quando     1ª abertura de um app que pede algo: no lugar do app (layout gate; o app só carrega depois da resposta)
+             a lista do app cresceu, ou botão "Permissões" do cabeçalho: faixa acima do app (layout strip, até 60% da altura, rolagem própria)
+  partes     ícone shield + título ("{app} pede a sua permissão" · "O que {app} pode fazer") · "Este app quer:" · lista · nota · botões
+             linha da lista: o que a permissão deixa fazer, em frase (--text-sm, --sunken, --border, --radius-sm);
+             depois de alguma resposta, cada linha traz o estado: Permitido (--ok-ink) · Recusado (--danger-ink) · Novo (--accent-ink)
+  botões     pergunta nova: Recusar (small-button) · Permitir (small-button primary, por último); Recusar mantém o que já estava permitido
+             já respondido: Retirar tudo · Permitir tudo (só o que mudaria algo) + fechar (icon-button); Esc fecha e devolve o foco ao botão do cabeçalho
+  gate       cartão centrado, largura máx. 480px, --elevated, --border, --radius-lg, --shadow-card; cabe em 360px (min-width 0, texto quebra)
+  estados    salvando (os dois botões desabilitados), erro ao salvar (faixa --danger-soft, role=alert)
+  toque      botões com 44px em pointer: coarse
+```
+
+```
+Botão Permissões no cabeçalho do app (Apps C, `AppView.vue`)
+  quando     só para app que pede alguma permissão, e só depois da primeira resposta
+  forma      small-button com ícone shield + "Permissões"; aria-expanded; ≤ 620px fica só o ícone (aria-label e title continuam)
+```
+
+```
+Chip de contexto do app (Apps C; `open-context.ts` + `app-context.ts`, desenhado pelo composer do upstream)
+  texto      "+ App" quando o app não disse nada; "+ App · tela" depois de tendly.host.setContext({view})
+  anexado    o chip anexado acompanha a tela do app (o nome muda sozinho); a mensagem enviada leva, embaixo de apps/<slug>/,
+             "Screen: …", "Selected: …", "Summary: …", ditas como palavras do app
+  limites    tela 80 caracteres · seleção 500 · resumo 2000; some quando o app recarrega ou fecha
+```
+
+```
+Aviso de app no sino (Apps C, `InboxPage.vue`)
+  linha      título "App: título" em negrito · "Aviso de um app · corpo" · idade; o ponto usa a cor padrão dos avisos (--accent)
+  clique     marca como lido e abre o app em tela cheia (só links /apps/<workspace>/<slug> são seguidos)
+```
+
 Fora deste sistema: modais, menus de contexto, árvore de arquivos, terminal e chat são do upstream e seguem como estão.

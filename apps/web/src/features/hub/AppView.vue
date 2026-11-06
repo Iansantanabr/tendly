@@ -139,8 +139,11 @@ async function readGrants() {
 async function begin() {
   const current = app.value;
   if (!current) return;
+  const opened = liveKey.value;
   await readGrants();
-  if (app.value && !waitingForAnswer.value && !frameSrc.value) await load();
+  // Another app took this view meanwhile: its own opening decides for it.
+  if (liveKey.value !== opened) return;
+  if (!waitingForAnswer.value && !frameSrc.value) await load();
 }
 async function decide(granted: string[]) {
   const current = app.value;
