@@ -52,6 +52,18 @@ const MIGRATIONS: &[&str] = &[
         trigger TEXT NOT NULL CHECK (trigger IN ('schedule', 'manual'))
     );
     CREATE INDEX automation_runs_by_automation ON automation_runs(automation_id, started_at);",
+    // 3: file version history (contents are blobs under <state>/history/blobs)
+    "CREATE TABLE file_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id TEXT NOT NULL,
+        path TEXT NOT NULL,
+        blob TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        author_kind TEXT NOT NULL CHECK (author_kind IN ('you', 'agent', 'unknown')),
+        session_id TEXT,
+        created_at TEXT NOT NULL
+    );
+    CREATE INDEX file_versions_by_path ON file_versions(workspace_id, path, id);",
 ];
 
 pub struct HubStore {
@@ -146,6 +158,40 @@ mod tests {
                     )
                     .is_err()
                 );
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_two_database_upgrades_to_file_history() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(MIGRATIONS[0]).unwrap();
+        connection.execute_batch(MIGRATIONS[1]).unwrap();
+        connection.pragma_update(None, "user_version", 2i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO automations(id, name, kind, cron, enabled, created_at, updated_at)
+                 VALUES ('kept', 'n', 'script', '0 * * * *', 1, 'now', 'now')",
+                [],
+            )
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let kept: String = c.query_row("SELECT id FROM automations", [], |r| r.get(0))?;
+                assert_eq!(kept, "kept");
+                let insert = |author: &str| {
+                    c.execute(
+                        "INSERT INTO file_versions(workspace_id, path, blob, size, author_kind, created_at)
+                         VALUES ('w', 'a.txt', 'h', 1, ?1, 'now')",
+                        [author],
+                    )
+                };
+                for author in ["you", "agent", "unknown"] {
+                    insert(author)?;
+                }
+                assert!(insert("robot").is_err());
                 Ok(())
             })
             .unwrap();
