@@ -11,6 +11,10 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - Rodar o fork: `tendly stop`, depois `~/tendly-src/bin/tendly-server` (mesmo `~/.tendly`). Não rodar `tendly update`.
 - O web embutido só vale se `~/.tendly/web` NÃO existir (o disco ganha do embutido).
 
+## Piloto automático
+- `~/tendly-src/autopilot/` (fora do repo): `start.sh`, `stop.sh`, `run.sh`, `rules.md` (regras de toda rodada), `prompts/M3.md`, `M4.md`, `M5.md`. Roda `claude -p` sem conectores MCP, um marco por vez; espera o limite de uso e retoma a mesma sessão (`--resume`); para se 4 rodadas seguidas não gerarem commit.
+- Progresso de cada marco em `replica/progress/<M>.md`; o marco termina quando o agente cria `replica/progress/<M>.done`. Situação atual: `cat ~/tendly-src/autopilot/state/status.txt`; log: `tail -f ~/tendly-src/autopilot/logs/autopilot.log`.
+
 ## Decisões
 - Todo código novo do servidor fica em `crates/server/src/hub.rs` + `hub/`. Banco próprio `hub.db` ao lado de `tendly.db`, com migrações numeradas em `hub/store.rs` (`MIGRATIONS`, nunca editar uma entrada já publicada).
 - Ganchos no código upstream (manter mínimos):
