@@ -50,7 +50,8 @@ async fn shared_canvas_roundtrips_multiple_projects_without_migrating_legacy_lay
         "second":{"type":"stack","kind":"stack","id":"second-stack","panes":[
             {"type":"pane","id":"second-agent","kind":"agent_chat","metadata":{"workspace_id":second_workspace.id,"session_id":second_session.id,"provider":"claude_code"}},
             {"type":"pane","id":"second-diff","kind":"git_diff","metadata":{"workspace_id":second_workspace.id}},
-            {"type":"pane","id":"second-preview","kind":"file_preview","metadata":{"workspace_id":second_workspace.id,"path":"images/not-read.png"}}
+            {"type":"pane","id":"second-preview","kind":"file_preview","metadata":{"workspace_id":second_workspace.id,"path":"images/not-read.png"}},
+            {"type":"pane","id":"second-app","kind":"app","title":"Pipeline","metadata":{"workspace_id":second_workspace.id,"slug":"pipeline","name":"Pipeline","letter":"P","color":"amber"}}
         ]}
     }});
     let (status, saved) = call(
@@ -147,6 +148,19 @@ async fn shared_canvas_rejects_unknown_owners_wrong_session_bindings_and_unsafe_
     let cases = [
         (json!({"kind":"git_diff"}), StatusCode::BAD_REQUEST),
         (json!({"kind":"file_preview"}), StatusCode::BAD_REQUEST),
+        (json!({"kind":"app","metadata":{"slug":"pipeline"}}), StatusCode::BAD_REQUEST),
+        (
+            json!({"kind":"app","metadata":{"workspace_id":workspace}}),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            json!({"kind":"app","metadata":{"workspace_id":workspace,"slug":"../escape"}}),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            json!({"kind":"app","metadata":{"workspace_id":workspace,"slug":"pipeline","session_id":session.id}}),
+            StatusCode::BAD_REQUEST,
+        ),
         (
             json!({"kind":"editor","metadata":{"path":"src/main.rs"}}),
             StatusCode::BAD_REQUEST,

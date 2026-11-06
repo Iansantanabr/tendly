@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { acceptsScopedPane, changesPane, filePane, paneSession, paneWorkspace, renameSessionPanes, scopeLegacyLayout, sessionPane } from './pane-context.ts';
+import { acceptsScopedPane, appPane, changesPane, filePane, paneDisplayTitle, reusablePane, paneSession, paneWorkspace, renameSessionPanes, scopeLegacyLayout, sessionPane } from './pane-context.ts';
 import { applyPreset, dockPane, flattenPanes, projectLayout, validateLayout } from '../layout/layout-engine.ts';
 
 const workspaces = [{id:'a',name:'A'}, {id:'b',name:'B'}];
@@ -63,4 +63,19 @@ test('cross-workspace docking, presets and responsive tabs retain all operation 
   const lookup=Object.fromEntries(panes.map(pane=>[pane.id,pane.metadata.workspace_id]));
   for(const pane of flattenPanes(projected))assert.equal(pane.metadata.workspace_id,lookup[pane.id]);
   assert.equal(flattenPanes(root).length,6);assert.equal(validateLayout({version:1,root}),true);
+});
+
+test("an app opens in a tab of its own, named after the app, and never takes another app's place", () => {
+  const pipeline = appPane({ workspace_id: 'a', slug: 'pipeline', name: 'Pipeline', letter: '', color: 'amber' });
+  const notes = appPane({ workspace_id: 'a', slug: 'notes', name: 'Notes', color: 'nope' });
+  assert.equal(pipeline.kind, 'app');
+  assert.deepEqual(pipeline.metadata, { workspace_id: 'a', slug: 'pipeline', name: 'Pipeline', letter: 'P', color: 'amber' });
+  assert.equal(notes.metadata.color, 'slate');
+  assert.notEqual(pipeline.id, notes.id);
+  assert.notEqual(pipeline.id, appPane({ workspace_id: 'b', slug: 'pipeline', name: 'Pipeline' }).id);
+  assert.equal(reusablePane([pipeline], notes), undefined);
+  assert.equal(paneDisplayTitle(pipeline, text => `t:${text}`), 'Pipeline');
+  assert.ok(validateLayout({ version: 1, root: pipeline }));
+  assert.ok(acceptsScopedPane(pipeline, workspaces, sessions));
+  assert.ok(!acceptsScopedPane(appPane({ workspace_id: 'gone', slug: 'x', name: 'X' }), workspaces, sessions));
 });

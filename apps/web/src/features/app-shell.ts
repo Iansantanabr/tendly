@@ -48,7 +48,7 @@ export function resolveReference(
 }
 
 /** The views a phone opens like a pushed page, with Back to where they came from. */
-const PUSHED_KINDS = ["git_diff", "editor", "file_preview"];
+const PUSHED_KINDS = ["git_diff", "editor", "file_preview", "app"];
 
 /** The pane history after moving from `previous` to `current`: each pane once, most recent last, at most twenty. */
 export function rememberPane(history: readonly string[], previous: string, current: string | undefined): string[] {

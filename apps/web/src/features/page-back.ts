@@ -16,6 +16,7 @@ const DESTINATIONS: Record<string, string> = {
   automations: "Back to automations",
   integrations: "Back to integrations",
   skills: "Back to skills",
+  apps: "Back to apps",
 };
 
 /** `previous` is the route name the history steps back to, or none. */

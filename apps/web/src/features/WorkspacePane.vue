@@ -9,6 +9,7 @@ import SessionPane from "./SessionPane.vue";
 import RemoteSessionPane from "./RemoteSessionPane.vue";
 import FilePane from "./FilePane.vue";
 import GitPane from "./GitPane.vue";
+import AppPane from "./hub/AppPane.vue";
 import Icon from "./Icon.vue";
 import { useI18n } from "../i18n";
 const { t } = useI18n();
@@ -24,6 +25,9 @@ const emit = defineEmits<{
   draftCreated: [paneId: string, session: Session]; closeDraft: [paneId: string];
   /** An escape-hatch terminal is done: its tab closes, which returns to its conversation. */
   leaveTerminal: [paneId: string];
+  /** A conversation about the app in this pane, opened beside it. */
+  appChat: [paneId: string, workspaceId: string];
+  closePane: [paneId: string];
 }>();
 const workspace = computed(() => paneWorkspace(props.pane, props.workspaces, props.sessions));
 const session = computed(() => paneSession(props.pane, props.sessions));
@@ -31,11 +35,11 @@ const checkout = computed(() => paneCheckout(props.pane, props.sessions));
 const place = computed(() => workspace.value ? placeKey(workspace.value.id, checkout.value) : undefined);
 /** A worktree's branch, as the sessions working there last recorded it, or its directory's name. */
 const checkoutBranch = computed(() => checkout.value ? props.sessions.find(item => item.checkout_path === checkout.value)?.checkout_branch ?? checkout.value.split(/[\\/]/).pop() : undefined);
-const invalid = computed(() => (!!paneString(props.pane, "workspace_id") && !workspace.value) || (!!paneString(props.pane, "session_id") && !session.value) || (!!paneString(props.pane, "path") && !workspace.value));
+const invalid = computed(() => (!!paneString(props.pane, "workspace_id") && !workspace.value) || (!!paneString(props.pane, "session_id") && !session.value) || (!!paneString(props.pane, "path") && !workspace.value) || (props.pane.kind === "app" && !workspace.value));
 const choices = computed(() => workspace.value ? props.sessions.filter(session => session.workspace_id === workspace.value!.id) : props.sessions);
 const isAgent = computed(() => props.pane.kind === "agent_chat" || props.pane.kind === "terminal");
 /** A file names its workspace in its own toolbar, so the bar above would say it twice. */
-const fileShown = computed(() => !invalid.value && !!workspace.value && !isAgent.value && props.pane.kind !== "git_diff" && !!paneString(props.pane, "path"));
+const fileShown = computed(() => !invalid.value && !!workspace.value && !isAgent.value && props.pane.kind !== "git_diff" && (!!paneString(props.pane, "path") || props.pane.kind === "app"));
 /** A session still being set up: a tab with the form, until Create binds it to the new session. */
 const draft = computed(() => isAgent.value && !session.value && props.pane.metadata?.draft === true);
 const draftProvider = computed(() => paneString(props.pane, "provider") as ProviderKind | undefined);
@@ -60,6 +64,7 @@ function renameSession(id: string) { emit("renameRequest", id); }
     <CreateSessionDialog v-else-if="draft && workspace" inline :workspace="workspace" :profiles="profiles" :initial-provider="draftProvider" @close="emit('closeDraft', pane.id)" @created="emit('draftCreated', pane.id, $event)" @profiles="emit('profiles')" />
     <NativeSessionPane v-else-if="isAgent" :key="`${pane.id}:${workspace?.id??''}`" :session="session" :sessions="choices" :profiles="profiles" :terminal="pane.kind==='terminal'" @changed="emit('sessionChanged')" @create="callbacks.newSession" @select="emit('openSession',$event)" @environment="emit('sessionEnvironment',$event)" @structured="emit('structuredSession',$event)" @profiles="emit('profiles')" />
     <GitPane v-else-if="pane.kind==='git_diff' && workspace" :key="`${pane.id}:${place}`" :workspace-id="workspace.id" :checkout="checkout" :refresh-token="gitRefresh[place!]??0" @changed="callbacks.gitChanged" @open-file="callbacks.openFile" />
+    <AppPane v-else-if="pane.kind==='app' && workspace" :key="`${pane.id}:${workspace.id}`" :pane="pane" :workspace="workspace" @chat="emit('appChat', pane.id, workspace.id)" @remove="emit('closePane', pane.id)" />
     <FilePane v-else-if="workspace" :key="`${pane.id}:${place}`" :workspace-id="workspace.id" :checkout="checkout" :path="paneString(pane,'path')" :workspace-name="checkoutBranch ? `${workspace.name} ⎇ ${checkoutBranch}` : workspace.name" @saved="callbacks.filesSaved" @browse="callbacks.browse" />
     <div v-else class="pane-empty"><Icon name="folder" :size="28"/><h3>{{ t('Choose a workspace source') }}</h3><p>{{ t('Open files or Git using a workspace shortcut in the sidebar.') }}</p></div>
   </section>

@@ -51,7 +51,7 @@ pub(super) fn valid_layout(layout: &Value) -> bool {
         match value.get("type").and_then(Value::as_str) {
             Some("pane") => matches!(
                 value.get("kind").and_then(Value::as_str),
-                Some("agent_chat" | "terminal" | "editor" | "file_preview" | "git_diff")
+                Some("agent_chat" | "terminal" | "editor" | "file_preview" | "git_diff" | "app")
             ),
             Some("split") => {
                 value
@@ -126,6 +126,10 @@ mod tests {
         assert!(
             !valid_layout(&split(0.5, pane("a", "browser"), pane("b", "editor"))),
             "unknown kind"
+        );
+        assert!(
+            valid_layout(&split(0.5, pane("a", "app"), pane("b", "editor"))),
+            "a custom app is a leaf kind"
         );
         assert!(
             !valid_layout(&split(0.5, pane("", "terminal"), pane("b", "editor"))),

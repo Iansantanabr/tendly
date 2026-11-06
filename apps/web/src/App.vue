@@ -19,6 +19,8 @@ import InboxPage from "./features/hub/InboxPage.vue";
 import AutomationsPage from "./features/hub/AutomationsPage.vue";
 import IntegrationsPage from "./features/hub/IntegrationsPage.vue";
 import SkillsPage from "./features/hub/SkillsPage.vue";
+import AppsPage from "./features/hub/AppsPage.vue";
+import { refreshApps, type HubApp } from "./features/hub/apps";
 import { inbox, isUnread, markSeen, refreshInbox } from "./features/hub/inbox";
 import { contextFromPanes, openContext } from "./features/hub/open-context";
 import { useRoute, useRouter } from "vue-router";
@@ -56,7 +58,7 @@ import { loadPreferences, preferenceFor } from "./features/preferences";
 import { placeKey, placeOf, placeUrl } from "./features/checkout-place";
 import { remotePane } from "./features/remote-session";
 import { openPeerWindow } from "./features/peers";
-import { paneDisplayTitle, paneString, paneWorkspace, paneSession, paneCheckout, filePane, changesPane, sessionPane, renameSessionPanes, acceptsScopedPane, ephemeralSessionIds, withoutDiscardedPanes } from "./features/pane-context";
+import { paneDisplayTitle, paneString, paneWorkspace, paneSession, paneCheckout, filePane, changesPane, appPane, sessionPane, renameSessionPanes, acceptsScopedPane, ephemeralSessionIds, withoutDiscardedPanes } from "./features/pane-context";
 import { lastQuickProvider, planQuickSession, rememberQuickProvider } from "./features/quick-session";
 import { backendCapabilities, setBackendCapabilities, type BackendHealth } from "./features/backend-capabilities";
 import { formatLatency } from "./features/host-latency";
@@ -127,13 +129,13 @@ const hostPreview = ref<{ path: string; line?: number }>();
 const route = useRoute() ?? reactive({ name: "canvas", params: {}, query: {}, fullPath: "/" });
 const router = useRouter() ?? ({ push: async () => undefined, replace: async () => undefined, back: () => undefined } as unknown as ReturnType<typeof useRouter>);
 /** Which page, if any, is drawn over the canvas. The canvas itself never unmounts. */
-const page = computed(() => route.name === "settings" || route.name === "sessions" || route.name === "system" || route.name === "usage" || route.name === "home" || route.name === "inbox" || route.name === "automations" || route.name === "integrations" || route.name === "skills" ? route.name : undefined);
+const page = computed(() => route.name === "settings" || route.name === "sessions" || route.name === "system" || route.name === "usage" || route.name === "home" || route.name === "inbox" || route.name === "automations" || route.name === "integrations" || route.name === "skills" || route.name === "apps" ? route.name : undefined);
 const settingsRouteSection = computed(() => String(route.params.section ?? "preferences") as SettingsSection);
 // Session menus are teleported out of their tabs to the body, so a page over
 // the canvas cannot cover them; the body says a page is open and they step aside.
 watch(page, value => { const body = typeof document === "undefined" ? undefined : document.body; if (!body) return; if (value) body.dataset.page = value; else delete body.dataset.page; }, { immediate: true });
 function openSettings(section: SettingsSection = "preferences") { sidebarOpen.value = false; void router.push({ name: "settings", params: { section } }); }
-function openPage(name: "sessions" | "system" | "usage" | "home" | "inbox" | "automations" | "integrations" | "skills", query?: Record<string, string>) { sidebarOpen.value = false; void router.push({ name, query }); }
+function openPage(name: "sessions" | "system" | "usage" | "home" | "inbox" | "automations" | "integrations" | "skills" | "apps", query?: Record<string, string>) { sidebarOpen.value = false; void router.push({ name, query }); }
 /** Back from a page: to wherever you came from inside the app, else the canvas. */
 function leavePage() {
   if (window.history.state?.back) router.back();
@@ -150,6 +152,19 @@ function openFileFromHome(workspaceId: string, path: string) {
   if (route.name !== "canvas") void router.push({ name: "canvas" });
   void nextTick(() => canvas.value?.openPane(filePane(workspaceId, path)));
 }
+/** A custom app, in a tab of its own on the Mesa. */
+function openApp(app: HubApp) {
+  if (!workspaces.value.some(workspace => workspace.id === app.workspace_id)) { error.value = t("Pane source unavailable"); return; }
+  sidebarOpen.value = false;
+  if (route.name !== "canvas") void router.push({ name: "canvas" });
+  void nextTick(() => canvas.value?.openPane(appPane(app)));
+}
+/** "Chat" on an app: a new conversation in the app's workspace, beside it, where the app is offered as context. */
+function appChat(paneId: string, workspaceId: string) {
+  const provider = lastQuickProvider();
+  void quickSession(workspaceId, provider === "terminal" ? DEFAULT_CLIENT : provider, false, paneId, true);
+}
+watch(page, value => { if (value === "apps") void refreshApps(); });
 const quickBusy = ref(false);
 const ephemeralIds = computed(() => ephemeralSessionIds(sessions.value));
 const historyWorkspaceId = ref<string>();
@@ -465,7 +480,8 @@ function draftCreated(paneId: string, session: Session) {
  * opening a window feel heavy. Falls back to the dialog only when an account
  * genuinely cannot be chosen for the user.
  */
-async function quickSession(id = selectedWorkspaceId.value, provider: ProviderKind = lastQuickProvider(), ephemeral = false, targetPaneId?: string) {
+/** `beside`: open in a split to the right of `targetPaneId` rather than in its stack. */
+async function quickSession(id = selectedWorkspaceId.value, provider: ProviderKind = lastQuickProvider(), ephemeral = false, targetPaneId?: string, beside = false) {
   if (!workspaces.value.some(workspace => workspace.id === id) || quickBusy.value) return;
   await loadPreferences();
   const plan = planQuickSession(provider, profiles.value, {
@@ -486,7 +502,8 @@ async function quickSession(id = selectedWorkspaceId.value, provider: ProviderKi
     sidebarOpen.value = false;
     // A "+" pressed on a tab strip opens there; the sidebar has no target and
     // falls back to the canvas's own placement.
-    canvas.value?.openPaneAt(targetPaneId, sessionPane(session));
+    if (beside) canvas.value?.openBeside(targetPaneId, sessionPane(session));
+    else canvas.value?.openPaneAt(targetPaneId, sessionPane(session));
     // Made to be used: its input takes the keys once drawn (a terminal mounts once attached).
     await nextTick(); canvas.value?.focusSelected();
   } catch (cause) { report(cause); }
@@ -646,7 +663,7 @@ async function findFile() {
   await nextTick();
   document.querySelector<HTMLInputElement>(".explorer-panel [data-explorer-filter]")?.focus();
 }
-const VIEW_ICONS: Record<string, string> = { agent_chat: "spark", terminal: "terminal", git_diff: "git", editor: "file", file_preview: "image" };
+const VIEW_ICONS: Record<string, string> = { agent_chat: "spark", terminal: "terminal", git_diff: "git", editor: "file", file_preview: "image", app: "apps" };
 const viewItems = computed<PaletteItem[]>(() => openPanes.value.map(pane => {
   const session = paneSession(pane, sessions.value);
   return { id: `view:${pane.id}`, title: paneTitle(pane), subtitle: paneDetail(pane) || undefined, group: t("Open views"), provider: session && session.provider !== "terminal" ? session.provider : undefined, icon: VIEW_ICONS[pane.kind], suggested: true,
@@ -847,7 +864,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
   <div :class="['app-shell', { 'explorer-hidden': !explorerOpen || !explorerWorkspace, 'sidebar-collapsed': sidebarCollapsed, 'is-mobile': mobile }]">
     <header class="topbar">
       <div class="brand"><button v-if="mobile && backTarget" class="icon-button mobile-menu mobile-back" :aria-label="t('Back')" @click="goBack"><Icon name="chevron" :size="22" /></button><button v-else class="icon-button mobile-menu" :aria-label="t('Toggle workspace navigation')" @click="sidebarOpen = !sidebarOpen"><Icon name="menu" /></button><button class="icon-button sidebar-toggle" :class="{selected:!sidebarCollapsed}" :aria-pressed="!sidebarCollapsed" :aria-label="t(sidebarCollapsed?'Expand workspace panel':'Collapse workspace panel')" :title="t(sidebarCollapsed?'Expand workspace panel':'Collapse workspace panel') + ' · ' + hint('sidebar')" @click="toggleSidebar"><Icon name="panelLeft"/></button><span class="brand-mark"><span /></span><strong :title="serverVersion?t('Tendly {version}',{version:serverVersion}):undefined">Tendly<span v-if="instanceLabel" class="brand-version">{{ instanceLabel }}</span></strong></div>
-      <span v-if="mobile && page" class="mobile-title mobile-page-title"><strong>{{ t(page === "settings" ? "Settings" : page === "sessions" ? "All sessions" : page === "usage" ? "Usage" : page === "home" ? "Home" : page === "inbox" ? "Notifications" : page === "automations" ? "Automations" : page === "integrations" ? "Integrations" : page === "skills" ? "Skills" : "System") }}</strong></span>
+      <span v-if="mobile && page" class="mobile-title mobile-page-title"><strong>{{ t(page === "settings" ? "Settings" : page === "sessions" ? "All sessions" : page === "usage" ? "Usage" : page === "home" ? "Home" : page === "inbox" ? "Notifications" : page === "automations" ? "Automations" : page === "integrations" ? "Integrations" : page === "skills" ? "Skills" : page === "apps" ? "Apps" : "System") }}</strong></span>
       <button v-else-if="mobile && canvasReady" class="mobile-title" type="button" :aria-label="t('Switch view')" @click="switcherOpen = true">
         <TabIcon v-if="focusedPane" :kind="focusedPane.kind" :metadata="focusedPane.metadata" :session-providers="sessionProviders" :size="16" />
         <span class="mobile-title-copy"><strong>{{ focusedPane ? paneTitle(focusedPane) : (contextWorkspace?.name || 'Tendly') }}</strong><small v-if="focusedPane && paneDetail(focusedPane)">{{ paneDetail(focusedPane) }}</small></span>
@@ -878,7 +895,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
       <button v-if="sidebarOpen" class="drawer-overlay sidebar-overlay" :aria-label="t('Close workspace navigation')" @click="sidebarOpen = false"/>
       <aside :class="['sidebar',{'drawer-open':sidebarOpen}]">
         <div v-if="sidebarRail&&!sidebarCollapsed" class="sidebar-resizer" role="separator" aria-orientation="vertical" :aria-label="t('Resize workspace panel')" :title="t('Drag to resize · double-click to reset')" @pointerdown.prevent="resizeSidebar" @dblclick="resetSidebarWidth"/>
-        <WorkspaceSidebar ref="workspaceSidebar" @reveal-session="revealSession" :workspace-branches="workspaceBranches" @branch-switched="branchSwitched" :workspaces="workspaces" :sessions="sessions" :selected-workspace-id="selectedWorkspaceId" :selected-session-id="selectedSessionId" :history-supported="backendCapabilities.nativeHistory" :storage-key="storageKey" :archive-supported="backendCapabilities.sessionArchive" :ephemeral-supported="backendCapabilities.ephemeralSessions" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" @select-workspace="selectWorkspace" @open-session="openSession" @open-remote-session="openRemoteSession" @rename-session="renameSession" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions" @session-environment="environmentSessionId=$event;sidebarOpen=false" @open-files="openFiles" @open-changes="openChanges" @new-session="newSession" @quick-session="quickSession" @load-history="loadHistory" @add-workspace="showWorkspace=true" @canvas="sidebarOpen=false;router.push({ name: 'canvas' })" @all-sessions="openPage('sessions')" @system="openPage('system')" @usage="openPage('usage')" @home="openPage('home')" @inbox="openPage('inbox')" @automations="openPage('automations')" @integrations="openPage('integrations')" @skills="openPage('skills')" :inbox-unread="inbox.unread" @machines="openSettings('machines')" @show-in-sessions="(id, archived) => openPage('sessions', { highlight: id, archive: archived ? 'archived' : 'current' })" :current-page="page ?? 'canvas'"/>
+        <WorkspaceSidebar ref="workspaceSidebar" @reveal-session="revealSession" :workspace-branches="workspaceBranches" @branch-switched="branchSwitched" :workspaces="workspaces" :sessions="sessions" :selected-workspace-id="selectedWorkspaceId" :selected-session-id="selectedSessionId" :history-supported="backendCapabilities.nativeHistory" :storage-key="storageKey" :archive-supported="backendCapabilities.sessionArchive" :ephemeral-supported="backendCapabilities.ephemeralSessions" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" @select-workspace="selectWorkspace" @open-session="openSession" @open-remote-session="openRemoteSession" @rename-session="renameSession" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions" @session-environment="environmentSessionId=$event;sidebarOpen=false" @open-files="openFiles" @open-changes="openChanges" @new-session="newSession" @quick-session="quickSession" @load-history="loadHistory" @add-workspace="showWorkspace=true" @canvas="sidebarOpen=false;router.push({ name: 'canvas' })" @all-sessions="openPage('sessions')" @system="openPage('system')" @usage="openPage('usage')" @home="openPage('home')" @inbox="openPage('inbox')" @automations="openPage('automations')" @integrations="openPage('integrations')" @skills="openPage('skills')" @apps="openPage('apps')" @open-app="openApp" :inbox-unread="inbox.unread" @machines="openSettings('machines')" @show-in-sessions="(id, archived) => openPage('sessions', { highlight: id, archive: archived ? 'archived' : 'current' })" :current-page="page ?? 'canvas'"/>
         <div v-if="!mobile" class="host-card"><span class="host-symbol"><Icon name="monitor" :size="17"/></span><div class="host-card-text"><strong>{{ t('Runs on this machine') }}</strong><small>{{ platformLabel }}</small></div><span class="host-latency" :class="hostStatus.level" :title="apiOnline ? t('Round-trip to host: {ms}', { ms: hostStatus.text }) : t('Offline')" :aria-label="apiOnline ? t('Round-trip to host: {ms}', { ms: hostStatus.text }) : t('Offline')"><i class="host-dot"/><span>{{ hostStatus.text }}</span></span></div>
       
         <div v-else class="drawer-footer">
@@ -894,17 +911,18 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
         <div v-if="localRecovery" class="canvas-compat-notice"><span>{{ t('A local recovery layout is available.') }}</span><button class="text-button" @click="restoreLocalRecovery">{{ t('Restore local layout') }}</button><button class="icon-button" :aria-label="t('Dismiss error')" @click="localRecovery=undefined"><Icon name="close" :size="13"/></button></div>
         <template v-if="workspaces.length">
           <Canvas v-if="canvasReady" ref="canvas" v-model="layout" :compact="mobile" :selected-pane-id="selectedPaneId" :default-workspace-id="contextWorkspace?.id" :accept-pane="acceptDroppedPane" :confirm-close-pane="confirmClosePane" :ephemeral-session-ids="ephemeralIds" :ephemeral-supported="backendCapabilities.ephemeralSessions" @create-session="createSessionInPane" :workspace-labels="Object.fromEntries(workspaces.map(workspace=>[workspace.id,workspace.name]))" :mixed-workspaces="new Set(flattenPanes(layout.root).map(pane=>paneString(pane,'workspace_id')).filter(Boolean)).size>1" :session-branches="Object.fromEntries(sessions.flatMap(session=>session.checkout_path&&session.checkout_branch?[[session.id,session.checkout_branch]]:[]))" :checkout-branches="Object.fromEntries(sessions.flatMap(session=>session.checkout_path&&session.checkout_branch?[[session.checkout_path,session.checkout_branch]]:[]))" :workspace-branches="workspaceBranches" :session-providers="sessionProviders" @select-pane="selectPane" @open-pane="sessionPaneDropped">
-            <template #pane="{ pane }"><WorkspacePane :key="pane.id" :pane="pane" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :git-refresh="gitRefresh" @session-changed="refreshSessions" @new-session="(id,provider)=>newSession(id??selectedWorkspaceId,provider)" @open-session="openSession" @open-remote-session="openRemoteSession" @reveal-session="revealSession" @keep-session="keepSessionById" @rename-request="requestRenameSession" @session-environment="environmentSessionId=$event" @structured-session="enableChat" @profiles="openSettings('endpoints')" @git-changed="gitChanged" @open-file="openFile" @open-reference="openReference" @files-saved="filesSaved" @browse="id=>openFiles(id??selectedWorkspaceId)" @draft-created="draftCreated" @close-draft="id=>canvas?.closePane(id)" @leave-terminal="id=>canvas?.closePane(id)"/></template>
+            <template #pane="{ pane }"><WorkspacePane :key="pane.id" :pane="pane" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :git-refresh="gitRefresh" @session-changed="refreshSessions" @new-session="(id,provider)=>newSession(id??selectedWorkspaceId,provider)" @open-session="openSession" @open-remote-session="openRemoteSession" @reveal-session="revealSession" @keep-session="keepSessionById" @rename-request="requestRenameSession" @session-environment="environmentSessionId=$event" @structured-session="enableChat" @profiles="openSettings('endpoints')" @git-changed="gitChanged" @open-file="openFile" @open-reference="openReference" @files-saved="filesSaved" @browse="id=>openFiles(id??selectedWorkspaceId)" @draft-created="draftCreated" @close-draft="id=>canvas?.closePane(id)" @leave-terminal="id=>canvas?.closePane(id)" @app-chat="appChat" @close-pane="id=>canvas?.closePane(id)"/></template>
           </Canvas>
           <div v-else class="pane-empty"><p>{{ t('Opening workspace…') }}</p></div>
         </template>
         <section v-else class="welcome-screen"><div class="welcome-composition" aria-hidden="true"><span class="welcome-tile"><Icon name="spark" :size="35"/></span><span class="welcome-tile"><Icon name="git" :size="26"/><Icon name="file" :size="26"/></span></div><div class="eyebrow">{{ t('A LITTLE SPACE. ENDLESS POSSIBILITIES.') }}</div><h1>{{ t('Your agents.') }}<br/>{{ t('Your workspace.') }}</h1><p>{{ t('Claude Code, Codex, files and Git — together on your own machine. Arrange everything the way you think.') }}</p><button class="primary-button" :disabled="loading" @click="showWorkspace=true"><Icon name="plus" :size="17"/>{{ t(loading?'Connecting to host…':'Add a workspace') }}</button><small>{{ t('Rust + Vue · host native · browser first') }}</small></section>
         <SettingsPage v-if="page==='settings'" :profiles="profiles" :section="settingsRouteSection" @back="leavePage" @navigate="section => router.replace({ name: 'settings', params: { section } })" @changed="refreshProfiles"/>
         <SessionsPage v-else-if="page==='sessions'" :workspaces="workspaces" :sessions="sessions" :selected-session-id="selectedSessionId" :archive-supported="backendCapabilities.sessionArchive" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" :initial-archive="route.query.archive === 'archived' ? 'archived' : 'current'" :highlight-id="typeof route.query.highlight === 'string' ? route.query.highlight : undefined" @back="leavePage" @open-session="openSession" @rename-request="requestRenameSession" @session-environment="environmentSessionId=$event" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions"/>
-        <HomePage v-else-if="page==='home'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @open-session="openSession" @started="homeStarted" @open-file="openFileFromHome" @open-canvas="router.push({ name: 'canvas' })"/>
+        <HomePage v-else-if="page==='home'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @open-session="openSession" @started="homeStarted" @open-file="openFileFromHome" @open-canvas="router.push({ name: 'canvas' })" @open-app="openApp" @apps="openPage('apps')"/>
         <InboxPage v-else-if="page==='inbox'" :sessions="sessions" @back="leavePage" @open-session="openSession"/>
         <AutomationsPage v-else-if="page==='automations'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" @back="leavePage" @open-session="openSession" @started="homeStarted"/>
         <IntegrationsPage v-else-if="page==='integrations'" :workspaces="workspaces" @back="leavePage"/>
+        <AppsPage v-else-if="page==='apps'" :workspaces="workspaces" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @back="leavePage" @started="homeStarted" @open-app="openApp"/>
         <SkillsPage v-else-if="page==='skills'" :workspaces="workspaces" @back="leavePage" @open-file="openFileFromHome"/>
         <SystemPage v-else-if="page==='system'" :sessions="sessions" @back="leavePage" @open-session="openSession"/>
         <UsagePage v-else-if="page==='usage'" :sessions="sessions" :workspaces="workspaces" @back="leavePage" @open-session="openSession"/>

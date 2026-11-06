@@ -185,7 +185,7 @@ function dropFromPointer(targetId: string, pane: PaneNode, position: DockPositio
   // only layout editing and must never restart an ended session.
   if (!existed && inserted?.type === "pane") emit("open-pane", inserted);
 }
-const titles: Record<LeafPaneKind, string> = { agent_chat: "Agent session", git_diff: "Changes", editor: "File editor", file_preview: "File preview", terminal: "Terminal" };
+const titles: Record<LeafPaneKind, string> = { agent_chat: "Agent session", git_diff: "Changes", editor: "File editor", file_preview: "File preview", terminal: "Terminal", app: "App" };
 function add(targetId: string, kind: LeafPaneKind) {
   let id: string;
   do { id = `pane-${kind}-${Date.now().toString(36)}-${++generatedId}`; } while (findNode(working.value.root, id));
@@ -199,6 +199,11 @@ function openPaneAt(targetId: string | undefined, pane: PaneNode) {
   if (!targetId || findNode(working.value.root, pane.id) || !findNode(working.value.root, targetId)) { openPane(pane); return; }
   drop(targetId, pane, "center");
   selectPane(pane);
+}
+/** Open beside `targetId`, in a split of its own on the right: a conversation about an app, next to the app. */
+function openBeside(targetId: string | undefined, pane: PaneNode) {
+  if (!targetId || findNode(working.value.root, pane.id) || !findNode(working.value.root, targetId)) { openPane(pane); return; }
+  drop(targetId, pane, "right");
 }
 function openPane(pane: PaneNode) {
   const existing = findNode(working.value.root, pane.id);
@@ -347,7 +352,7 @@ async function focusDirection(direction: "left" | "right" | "up" | "down") {
   else target?.element.querySelector<HTMLElement>(".dock-empty button")?.focus();
 }
 
-defineExpose({ focusDirection, splitSelected, cyclePane, openPane, openPaneAt, replaceWith, retarget, focusPane, closePane: close, maximizePane: maximize, focusSelected, focusLast, closeSelected, cycleTab, selectTab, swapSelected, nudgeSelected, nextPreset, createHere, prefixContext });
+defineExpose({ focusDirection, splitSelected, cyclePane, openPane, openPaneAt, openBeside, replaceWith, retarget, focusPane, closePane: close, maximizePane: maximize, focusSelected, focusLast, closeSelected, cycleTab, selectTab, swapSelected, nudgeSelected, nextPreset, createHere, prefixContext });
 
 /**
  * Sideways swipe between open views on a phone, in the order the view

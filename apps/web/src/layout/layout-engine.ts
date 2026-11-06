@@ -10,7 +10,7 @@ export const MIN_PANE_WIDTH = 280;
 export const MIN_PANE_HEIGHT = 180;
 export type DockPosition = "center" | "left" | "right" | "top" | "bottom";
 export type LayoutPreset = "1:1" | "2x2" | "1:2:1";
-const LEAF_KINDS: readonly LeafPaneKind[] = ["agent_chat", "editor", "terminal", "git_diff", "file_preview"];
+const LEAF_KINDS: readonly LeafPaneKind[] = ["agent_chat", "editor", "terminal", "git_diff", "file_preview", "app"];
 
 export function createPane(id: string, kind: LeafPaneKind, title?: string, metadata?: Record<string, unknown>): PaneNode {
   return { type: "pane", id, kind, ...(title ? { title } : {}), ...(metadata ? { metadata: { ...metadata } } : {}) };

@@ -53,3 +53,14 @@ test('resolved appearance is a separate value, not a mutable palette entry', () 
   const icon = resolveTabIcon('git_diff');icon.color = '#000000';
   assert.equal(resolveTabIcon('git_diff').color, TAB_ICON_PALETTE.git.color);
 });
+
+test('a custom app tab is its coloured letter tile, drawn from the app tokens', () => {
+  const icon = resolveTabIcon('app', { workspace_id: 'w', slug: 'pipeline', name: 'pipeline', color: 'violet' });
+  assert.equal(icon.type, 'app');
+  assert.equal(icon.letter, 'P');
+  assert.equal(icon.color, 'var(--app-violet)');
+  assert.equal(icon.background, 'var(--app-violet-soft)');
+  assert.equal(resolveTabIcon('app', { slug: 'x', name: 'Notes', letter: 'z', color: '#ff0000' }).color, 'var(--app-slate)', 'an unknown colour never reaches a style');
+  assert.equal(resolveTabIcon('app', { slug: 'x', name: 'Notes', letter: 'z' }).letter, 'Z');
+  assert.ok(!Object.hasOwn(TAB_ICON_PALETTE, 'app'), 'apps keep their colours in styles.css, not in the hex palette');
+});

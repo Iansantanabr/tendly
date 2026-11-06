@@ -18,6 +18,8 @@ import MenuFlyout from "./MenuFlyout.vue";
 import OtherMachines from "./OtherMachines.vue";
 import ConversationsBar from "./hub/ConversationsBar.vue";
 import { inbox } from "./hub/inbox";
+import AppTile from "./hub/AppTile.vue";
+import { apps, refreshApps, type HubApp } from "./hub/apps";
 
 const props = withDefaults(defineProps<{
   workspaces: Workspace[];
@@ -60,6 +62,10 @@ const emit = defineEmits<{
   automations: [];
   integrations: [];
   skills: [];
+  /** The Apps page. */
+  apps: [];
+  /** An app, opened on the Mesa. */
+  openApp: [app: HubApp];
   /** A session the workspace groups do not list (archived, temporary): find it in the library page. */
   showInSessions: [id: string, archived: boolean];
   canvas: [];
@@ -168,6 +174,9 @@ async function revealSession(id: string): Promise<boolean> {
 /** Which list the sidebar shows; remembered in this browser. */
 const SIDEBAR_VIEW = "tendly.hub.sidebar-view";
 const sidebarView = ref<"workspaces" | "conversations">((() => { try { return localStorage.getItem(SIDEBAR_VIEW) === "conversations" ? "conversations" : "workspaces"; } catch { return "workspaces"; } })());
+/** A few apps, one click from anywhere: the latest changed first. */
+const sidebarApps = computed(() => [...apps.list].sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")).slice(0, 8));
+onMounted(() => { if (!apps.loaded) void refreshApps(); });
 function setSidebarView(view: "workspaces" | "conversations") { sidebarView.value = view; try { localStorage.setItem(SIDEBAR_VIEW, view); } catch { /* Fine without it. */ } }
 defineExpose({ revealSession });
 </script>
@@ -184,7 +193,12 @@ defineExpose({ revealSession });
       <button :class="['nav-item', { current: currentPage === 'automations' }]" :aria-current="currentPage === 'automations' ? 'page' : undefined" @click="emit('automations')"><Icon name="timer" :size="16" /><span>{{ t('Automations') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'integrations' }]" :aria-current="currentPage === 'integrations' ? 'page' : undefined" @click="emit('integrations')"><Icon name="plug" :size="16" /><span>{{ t('Integrations') }}</span></button>
       <button :class="['nav-item', { current: currentPage === 'skills' }]" :aria-current="currentPage === 'skills' ? 'page' : undefined" @click="emit('skills')"><Icon name="sparkles" :size="16" /><span>{{ t('Skills') }}</span></button>
+      <button :class="['nav-item', { current: currentPage === 'apps' }]" :aria-current="currentPage === 'apps' ? 'page' : undefined" @click="emit('apps')"><Icon name="apps" :size="16" /><span>{{ t('Apps') }}</span></button>
     </nav>
+    <section v-if="sidebarApps.length" class="sidebar-apps" :aria-label="t('Apps')">
+      <button v-for="app in sidebarApps" :key="app.workspace_id + app.slug" type="button" class="sidebar-app" :title="app.description ? `${app.name}\n${app.description}` : app.name" @click="emit('openApp', app)"><AppTile :name="app.name" :letter="app.letter" :color="app.color" :size="18" /><span>{{ app.name }}</span></button>
+      <button type="button" class="sidebar-app sidebar-app-new" :aria-label="t('New app')" :title="t('New app')" @click="emit('apps')"><Icon name="plus" :size="14" /></button>
+    </section>
     <div class="sidebar-view-switch" role="tablist" :aria-label="t('Sidebar view')">
       <button type="button" role="tab" :aria-selected="sidebarView === 'workspaces'" :class="{ current: sidebarView === 'workspaces' }" @click="setSidebarView('workspaces')"><Icon name="folder" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Workspaces') }}</span></button>
       <button type="button" role="tab" :aria-selected="sidebarView === 'conversations'" :class="{ current: sidebarView === 'conversations' }" @click="setSidebarView('conversations')"><Icon name="chat" :size="14" class="switch-icon" /><span class="switch-label">{{ t('Conversations') }}</span></button>
@@ -276,4 +290,10 @@ defineExpose({ revealSession });
 .unread-badge { background: var(--accent); color: var(--on-accent); }
 .switch-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .switch-icon { flex: none; }
+.sidebar-apps { display: flex; flex-wrap: wrap; gap: 2px 4px; padding: 6px 4px 8px; border-bottom: 1px solid var(--fill-hover); flex-shrink: 0; max-height: 120px; overflow: auto; }
+.sidebar-app { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; min-height: 28px; padding: 3px 8px 3px 4px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--ink-soft); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.sidebar-app > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+.sidebar-app:hover { background: var(--fill); color: var(--ink); }
+.sidebar-app-new { padding: 3px 7px; color: var(--muted); }
+@media (pointer: coarse) { .sidebar-app { min-height: 40px; } }
 </style>

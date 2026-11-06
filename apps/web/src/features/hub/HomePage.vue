@@ -9,13 +9,15 @@ import Icon from "../Icon.vue";
 import ProviderIcon from "../ProviderIcon.vue";
 import { useI18n } from "../../i18n";
 import { inbox, isUnread, loadConversationsWorkspace, shortAgo } from "./inbox";
+import AppTile from "./AppTile.vue";
+import { apps, refreshApps, type HubApp } from "./apps";
 
 /**
  * Início: where a day starts. A box to ask for something new, what is running,
  * what changed lately and the latest conversations, each one click from the Mesa.
  */
 const props = defineProps<{ workspaces: Workspace[]; sessions: Session[]; profiles: EndpointProfile[]; selectedWorkspaceId?: string }>();
-const emit = defineEmits<{ openSession: [session: Session]; started: [id: string]; openFile: [workspaceId: string, path: string]; openCanvas: [] }>();
+const emit = defineEmits<{ openSession: [session: Session]; started: [id: string]; openFile: [workspaceId: string, path: string]; openCanvas: []; openApp: [app: HubApp]; apps: [] }>();
 const { t } = useI18n();
 
 const STORAGE = "tendly.hub.home";
@@ -48,7 +50,8 @@ async function loadRecent() {
   try { recent.value = (await request<{ files: typeof recent.value }>("/hub/recent-files?limit=6")).files; }
   catch { recent.value = []; }
 }
-onMounted(() => { void loadRecent(); void loadConversationsWorkspace(); });
+onMounted(() => { void loadRecent(); void loadConversationsWorkspace(); void refreshApps(); });
+const homeApps = computed(() => [...apps.list].sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")).slice(0, 8));
 
 async function send() {
   const text = prompt.value.trim();
@@ -130,6 +133,16 @@ const suggestions = computed(() => [
         </article>
 
         <article class="home-card">
+          <header><h2>{{ t('Apps') }}</h2><button type="button" class="link-button" @click="emit('apps')">+ {{ t('New') }}</button></header>
+          <p v-if="!homeApps.length" class="home-empty">{{ t('No apps yet. Ask an agent to build one for you.') }}</p>
+          <div v-else class="home-apps">
+            <button v-for="app in homeApps" :key="app.workspace_id + app.slug" type="button" class="home-app" :title="app.description || app.name" @click="emit('openApp', app)">
+              <AppTile :name="app.name" :letter="app.letter" :color="app.color" :size="36" /><span>{{ app.name }}</span>
+            </button>
+          </div>
+        </article>
+
+        <article class="home-card">
           <header><h2>{{ t('Your latest conversations') }}</h2></header>
           <p v-if="!latest.length" class="home-empty">{{ t('No conversations yet.') }}</p>
           <button v-for="s in latest" :key="s.id" type="button" :class="['home-row', { unread: isUnread(s.id) }]" @click="emit('openSession', s)">
@@ -172,6 +185,10 @@ const suggestions = computed(() => [
 .home-row-meta { color: var(--muted); white-space: nowrap; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
 .home-state { padding: 1px 8px; border-radius: 999px; background: var(--fill-hover); }
 .home-state.waiting { background: var(--warn-soft); color: var(--warn-ink); }
+.home-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
+.home-app { display: grid; justify-items: center; gap: 6px; padding: 8px 4px; border: 0; border-radius: var(--radius-md); background: none; color: var(--ink); font: inherit; font-size: var(--text-xs); cursor: pointer; min-width: 0; }
+.home-app > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-app:hover { background: var(--fill-hover); }
 .home-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 @media (max-width: 640px) { .home-inner { padding: 24px 16px 48px; } .home-header h1 { font-size: 1.6rem; } }
 </style>
