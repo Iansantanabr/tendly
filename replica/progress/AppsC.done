@@ -1,0 +1,100 @@
+AppsC — Etapa C de replica/plan-apps.md: ponte app ↔ Tendly, origem própria para os apps, permissões, dados do Tendly.
+Concluído em 2026-11-06. Os cinco itens foram feitos, com o desenho preferido (moldura sem a origem do Tendly); o
+comportamento antigo NÃO ficou como alternativa: não há mistura meio segura. Nenhuma conversa de agente foi aberta,
+nenhuma automação rodou, nenhuma notificação foi enviada, nenhum app seu foi tocado (GET /api/hub/apps estava vazio
+antes e continua vazio).
+
+ENTREGUE
+1. Segurança: o app não roda mais como parte do Tendly. A moldura perdeu o allow-same-origin e os arquivos do app são
+   servidos em /apps-run/<id do workspace>/<slug>/<token>/…, com CSP sandbox sem allow-same-origin (origem opaca na
+   moldura e também numa aba). Token = validade + HMAC-SHA256 sobre workspace, slug e validade, com segredo próprio em
+   hub.db; vale 8 h, a página do Tendly pede um novo a cada carga e renova o que está em uso a cada 30 min. De dentro do
+   app, qualquer pedido a /api é recusado. O endereço antigo (/api/hub/apps/…/files/…) virou redirecionamento.
+2. Ponte: o sdk.js fala só por postMessage com a página do Tendly, que faz os pedidos com as credenciais dela.
+   tendly.data ficou igual por fora: o app em branco e o "Reportes" funcionam sem mudar nada.
+3. tendly.host: setContext (chip "App · tela" + as três informações na mensagem enviada), openConversation, openFile,
+   openApp, openUrl (só http/https, aba nova), draftChat (preenche o composer, nunca envia), notify (sino + push),
+   toast, theme/onTheme, pane/onResize.
+4. Permissões: app.json "permissions" (sessions:read, files:read, automations:read, notify, agent:draft). Cartão
+   Permitir/Recusar na primeira abertura e quando a lista cresce; resposta em hub.db (migração 10, app_grants); botão
+   "Permissões" no cabeçalho; chamada sem permissão falha com erro claro.
+5. Dados do Tendly, só leitura, conferidos no servidor: tendly.sessions.list (sem transcrição), tendly.workspace.files
+   e .read (projeto do app, texto até 1 MB, nada com ponto), tendly.automations.list (sem comando, prompt nem saída).
+6. Documentação: cabeçalho do sdk.js; skills/tendly-apps/SKILL.md (repositório); FORK.md; features.csv; schema.sql;
+   architecture.md; components.md.
+Rotas novas: GET /apps-run/…; GET apps/{ws}/{slug}/frame; POST …/frame/renew; GET|PUT …/grants;
+GET …/tendly/sessions|files|file|automations; POST …/notify. GET inbox devolve link; GET apps devolve permissions.
+
+TESTES
+- Hub: 181 ok (17 novos). Servidor inteiro: 611 ok, 2 ignorados. Web: 985 ok (24 novos em
+  features/hub/appsC-bridge.test.mjs); typecheck ok.
+- Provado pelo roteador com o guard: da moldura (Origin: null, Sec-Fetch-Site: cross-site, sem sessão) a API recusa
+  (403), mesmo com o token de acesso junto; o token do app X não lê o app Y nem nada fora da pasta, em data/ ou com
+  ponto; token vencido, forjado ou esticado dá 404 seco.
+- Servidor rodando depois do build.sh: 69 conferências ok, com um app de teste criado e apagado pela própria API na
+  pasta oculta de conversas.
+- Contraste: nenhuma cor nova; rótulos do cartão ≥ 4,76:1 no claro e no escuro.
+
+BLOQUEADO EM VOCÊ
+1. Recarregue as abas do Tendly que estavam abertas antes deste build (a página antiga não entende o SDK novo e as
+   chamadas do app expiram em 30 s).
+2. Copie a skill (esta rodada não escreve fora do repositório):
+     cp ~/tendly-src/tendly/skills/tendly-apps/SKILL.md ~/.claude/skills/tendly-apps/SKILL.md
+   Sem isso o agente não sabe do sandbox, das permissões nem das chamadas novas.
+
+NÃO EXERCITADO AO VIVO (leia antes de confiar)
+- Nada foi visto num navegador. O isolamento foi provado no servidor com os cabeçalhos que o navegador manda; a troca
+  de mensagens só rodou em Node, dos dois lados.
+- O ponto mais incerto: tendly.host.openUrl e os links para outros sites abrem com window.open na página do Tendly logo
+  depois do clique dentro do app. Se o navegador tratar como pop-up, vai bloquear.
+- Safari e o app instalado no celular não foram testados.
+- draftChat cria uma conversa ao lado quando não há nenhuma; não foi clicado (regra: não abrir conversas).
+- Nenhum push de app foi enviado ao seu celular.
+
+O QUE VOCÊ PRECISA OLHAR NO NAVEGADOR (detalhe de cada passo em replica/progress/AppsC.md)
+1. Janela larga, tema claro: Apps → "Teste" → "App em branco". Contador e nota funcionam e voltam depois de recarregar.
+2. Console do navegador, no contexto da moldura do app: fetch('/api/workspaces') dá 403 ou erro; location.origin dá "null".
+3. Conversar → peça ao agente o app "Ponte" (o texto do pedido está no AppsC.md, passo 3).
+4. Abrir o Ponte: cartão "Ponte pede a sua permissão" com cinco frases, Recusar / Permitir. Recusar: o app carrega e
+   cada botão mostra o erro de permissão.
+5. Cabeçalho → Permissões → "Permitir tudo": o app recarrega e a lista de sessões aparece. Abrir de novo: "Permitido" em
+   cada linha e "Retirar tudo".
+6. Lista de sessões sem mensagens inteiras; "Arquivos" sem .env nem .git; "Automações" com as suas.
+7. "Abrir" numa sessão: a conversa abre na Mesa.
+8. Toast ("Ponte: Oi"); Notificar (sino +1, o item abre o app, o celular toca); Rascunho (texto no composer com o chip
+   do app; confira que NADA foi enviado).
+9. "Abrir site" e um link normal abrem example.com em aba nova. Se bloquear como pop-up, me avise.
+10. Na Mesa, com uma conversa ao lado: chip "+ Ponte · Quadro"; trocar para Lista muda o chip; a mensagem enviada leva
+    "Screen:", "Selected:", "Summary:".
+11. Trocar o tema do Tendly e a largura do painel: o app mostra o tema e o tamanho novos.
+12. Tirar "notify" do app.json e pôr de volta: a faixa pergunta só essa permissão, como "Novo".
+13. Erro num app.js separado: "1 erro" mostra apps/ponte/app.js:linha, não "Script error.".
+14. "Abrir fora": a tela cheia do app em outra aba, funcionando.
+15. Tema escuro: passos 4 e 5 (cartão, rótulos, botões).
+16. 360px e celular: o cartão cabe, botões fáceis de tocar, "Permissões" vira só o ícone.
+17. Pelo endereço do Tailscale (HTTPS) no celular: um app abre e salva dados.
+18. Barra lateral (bf0f3f0): Início com janela baixa (~640px): seletor inteiro, listas ≥ 180px, a barra rola.
+
+DECISÕES QUE VOCÊ PODE QUERER INVERTER (todas em replica/progress/AppsC.md)
+- Origem opaca no mesmo endereço, sem segundo host: nada muda no Tailscale nem no Caddy. Dentro do app não há
+  localStorage (o SDK põe um substituto em memória, que zera a cada recarregar), cookies nem Worker de arquivo.
+- "Abrir fora" abre a tela cheia do app numa aba; o app sozinho numa aba não tem ponte e diz isso.
+- O app que pede permissões espera a sua resposta antes de carregar. Recusar mantém o que já estava permitido.
+- setContext, abrir na Mesa e toast não pedem permissão (não devolvem dado ao app); têm limite por 10 s.
+- files:read não mostra nada cujo nome começa com ponto (.env, .claude), além das regras das rotas de arquivo.
+- sessions:read mostra as conversas de todos os projetos (100 por padrão, até 300), com o título de cada uma.
+- notify: 10 por app a cada 10 minutos; sempre toca o celular.
+- Os arquivos do projeto ficaram em tendly.workspace.files/read; tendly.files fica livre para os uploads da Etapa D.
+- A migração 10 é desta etapa; as coleções da Etapa D serão a 11.
+
+LIMITES CONHECIDOS
+- No seu Mac (loopback, sem token) o que barra a moldura é o navegador mandar Origin ou Sec-Fetch-Site; todos os atuais
+  mandam. Com token (Tailscale, VPS) o cookie de sessão também não acompanha a moldura.
+- O endereço de um app é uma chave de leitura dos arquivos daquele app por até 8 h (nunca dos dados).
+- Duas vistas do mesmo app não trocam a resposta de permissão ao vivo; o servidor confere de qualquer jeito.
+
+OBSERVAÇÕES
+- Ficaram no histórico de arquivos algumas versões do app de teste (apps/zz-appsc-check/ na pasta de conversas); o app
+  e a pasta foram apagados e as versões somem sozinhas em 60 dias.
+- Os commits levam a linha "Co-Authored-By: Claude Opus 5.5", como manda a regra do piloto; esta rodada rodou no
+  Claude Fable 5.1.
