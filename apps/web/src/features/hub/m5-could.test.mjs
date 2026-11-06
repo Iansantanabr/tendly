@@ -2,13 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { envKeyCount, splitEnvNames } from './catalog.ts';
+import { envKeyCount, splitByUse, splitEnvNames } from './catalog.ts';
 
 const here = new URL('.', import.meta.url);
 const read = name => readFileSync(new URL(name, here), 'utf8');
 
 /** The components and modules M5 added, whose strings and styles are checked below. */
-const COMPONENTS = ['EnvKeysSection.vue'];
+const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue'];
 const MODULES = ['catalog.ts'];
 
 // ---------------------------------------------------------------- keys found in .env files
@@ -47,12 +47,44 @@ test('the keys section shows names only and says so', () => {
   assert.match(section, /t\('Other variables'\)/);
 });
 
+// ---------------------------------------------------------------- integrations not in use
+
+test('servers that are off or never set up are listed apart, closed until asked for', () => {
+  const servers = [
+    { name: 'notion', status: 'connected' },
+    { name: 'figma', status: 'unknown', detail: 'Not configured', unused: true },
+    { name: 'canva', status: 'needs_auth' },
+    { name: 'mail', status: 'unknown', detail: 'Turned off', unused: true },
+    { name: 'repl', status: 'unknown' },
+    { name: 'broken', status: 'failed', unused: false },
+  ];
+  const { inUse, unused } = splitByUse(servers);
+  // Not checked, waiting for sign-in and failing are all still in use.
+  assert.deepEqual(inUse.map(s => s.name), ['notion', 'canva', 'repl', 'broken']);
+  assert.deepEqual(unused.map(s => s.name), ['figma', 'mail']);
+  assert.deepEqual(splitByUse([]), { inUse: [], unused: [] });
+
+  const page = read('IntegrationsPage.vue');
+  // A native <details> with no `open`: collapsed, and the keyboard works without code.
+  const details = /<details v-if="byUse\.unused\.length" class="catalog-unused">[\s\S]*?<\/details>/.exec(page)[0];
+  assert.doesNotMatch(details.split('>')[0], /\bopen\b/);
+  assert.match(details, /<summary>[\s\S]*t\('Not in use'\)[\s\S]*byUse\.unused\.length[\s\S]*<\/summary>/);
+  assert.match(details, /<IntegrationRow v-for="server in group\.items"/);
+  // The count in the title is what agents can reach.
+  assert.match(page, /t\('\{count\} integrations', \{ count: byUse\.inUse\.length \}\)/);
+  assert.match(page, /@media \(pointer: coarse\) \{ \.catalog-unused summary \{ min-height: 44px; \} \}/);
+  // The row says the state in words; the same row draws both lists.
+  const row = read('IntegrationRow.vue');
+  assert.match(row, /return t\(server\.detail \|\| "Not checked"\)/);
+});
+
 // ---------------------------------------------------------------- translations and design rules
 
 test('every M5 string has a Brazilian Portuguese translation with the same placeholders', () => {
   const raw = readFileSync(new URL('../../i18n/pt-BR.json', here), 'utf8');
   const translations = JSON.parse(raw);
-  const keys = new Set();
+  // Strings chosen by a value the server sends, which the scan below can not see.
+  const keys = new Set(['Not configured', 'Turned off', 'Not checked', 'Not reported by Claude Code']);
   for (const file of COMPONENTS) {
     for (const match of read(file).matchAll(/\bt\(\s*(["'])((?:\\.|(?!\1).)*)\1/g)) keys.add(match[2]);
   }

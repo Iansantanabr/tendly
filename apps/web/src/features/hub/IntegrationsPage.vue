@@ -6,7 +6,8 @@ import Icon from "../Icon.vue";
 import { useI18n } from "../../i18n";
 import { shortAgo } from "./inbox";
 import EnvKeysSection from "./EnvKeysSection.vue";
-import { CLAUDE_CONNECTORS_URL, authorizeInClaudeAi, groupBy, loadIntegrations, type Integration, type IntegrationList } from "./catalog";
+import IntegrationRow from "./IntegrationRow.vue";
+import { groupBy, loadIntegrations, splitByUse, type Integration, type IntegrationList } from "./catalog";
 
 /** MCP servers the agents on this machine can reach. Read only. */
 const props = defineProps<{ workspaces: Workspace[] }>();
@@ -34,20 +35,26 @@ const ORDER = ["claude_account", "claude_user", "claude_project", "workspace", "
 function workspaceName(server: Integration) {
   return props.workspaces.find(w => w.id === server.workspace_id)?.name ?? server.workspace_name ?? server.workspace_id ?? "";
 }
-const groups = computed(() => {
-  const servers = [...(list.value?.servers ?? [])].sort((a, b) =>
+/** Servers by where they come from, in page order. */
+function grouped(servers: Integration[]) {
+  const sorted = [...servers].sort((a, b) =>
     ORDER.indexOf(a.source) - ORDER.indexOf(b.source)
     || Number(Boolean(a.plugin)) - Number(Boolean(b.plugin))
     || (a.plugin ?? "").localeCompare(b.plugin ?? "")
     || a.name.localeCompare(b.name));
-  return groupBy(servers, server => {
+  return groupBy(sorted, server => {
     if (server.source === "claude_account") return { key: "account", label: "Your Claude account" };
     if (server.source === "claude_user") return { key: "user", label: "Installed by you" };
     if (server.source === "codex") return { key: "codex", label: "Codex" };
     const name = workspaceName(server);
     return { key: `workspace:${server.workspace_id}`, label: "From the project {name}", values: { name } };
   });
-});
+}
+const byUse = computed(() => splitByUse(list.value?.servers ?? []));
+const groups = computed(() => grouped(byUse.value.inUse));
+/** Turned off or never set up: listed apart, closed until asked for. */
+const unusedGroups = computed(() => grouped(byUse.value.unused));
+const rowKey = (server: Integration) => `${server.source}:${server.workspace_id ?? ""}:${server.plugin ?? ""}:${server.name}`;
 
 const checkedAgo = computed(() => {
   if (!list.value?.checked_at) return "";
@@ -55,20 +62,10 @@ const checkedAgo = computed(() => {
   const seconds = (Date.now() - new Date(list.value.checked_at).getTime()) / 1000;
   return seconds < 60 ? t("Checked just now") : t("Checked {time} ago", { time: shortAgo(list.value.checked_at, t) });
 });
-
-function statusLabel(server: Integration) {
-  if (server.status === "connected") return t("Connected");
-  if (server.status === "needs_auth") return t("Needs authorization");
-  if (server.status === "failed") return t("Failed");
-  return t(server.detail || "Not checked");
-}
-function transportLabel(server: Integration) {
-  return server.transport === "unknown" ? "" : server.transport.toUpperCase();
-}
 </script>
 
 <template>
-  <PageShell :title="t('Integrations')" :subtitle="list ? t('{count} integrations', { count: list.servers.length }) : undefined" @back="emit('back')">
+  <PageShell :title="t('Integrations')" :subtitle="list ? t('{count} integrations', { count: byUse.inUse.length }) : undefined" @back="emit('back')">
     <div class="catalog-page">
       <div class="catalog-actions">
         <small v-if="checkedAgo" class="catalog-muted">{{ checkedAgo }}</small>
@@ -80,30 +77,29 @@ function transportLabel(server: Integration) {
       <p v-for="(error, index) in list?.errors ?? []" :key="index" class="inline-notice">{{ t(error.message, { path: error.path ?? '' }) }}</p>
       <p v-if="!list && loading" class="catalog-muted">{{ t('Checking your integrations… This can take a few seconds.') }}</p>
       <p v-else-if="list && !list.servers.length" class="catalog-muted">{{ t('No integrations found on this computer.') }}</p>
+      <p v-else-if="list && !byUse.inUse.length" class="catalog-muted">{{ t('No integration is in use. The ones below are turned off or were never set up.') }}</p>
 
       <section v-for="group in groups" :key="group.key" class="catalog-group">
         <h2>{{ t(group.label, group.values) }}</h2>
         <ul class="catalog-list">
-          <li v-for="server in group.items" :key="`${server.source}:${server.plugin ?? ''}:${server.name}`" class="catalog-row">
-            <Icon name="plug" :size="16" class="catalog-icon" />
-            <div class="catalog-text">
-              <div class="catalog-title">
-                <strong>{{ server.name }}</strong>
-                <span v-if="server.plugin" class="catalog-tag">{{ t('plugin {name}', { name: server.plugin }) }}</span>
-              </div>
-              <span v-if="server.target || transportLabel(server)" class="catalog-target" :title="server.target">
-                <template v-if="transportLabel(server)">{{ transportLabel(server) }}</template><template v-if="transportLabel(server) && server.target"> · </template>{{ server.target }}
-              </span>
-              <span v-if="server.status === 'needs_auth'" class="catalog-hint">
-                {{ t('Authorize it in claude.ai or run /mcp in Claude Code') }}
-                <a v-if="authorizeInClaudeAi(server)" class="catalog-authorize" :href="CLAUDE_CONNECTORS_URL" target="_blank" rel="noopener" :aria-label="t('Authorize {name} in claude.ai (opens in a new tab)', { name: server.name })">{{ t('Authorize in claude.ai') }} <span aria-hidden="true">↗</span></a>
-              </span>
-              <span v-else-if="server.status === 'failed' && server.detail" class="catalog-failure">{{ server.detail }}</span>
-            </div>
-            <span :class="['catalog-pill', server.status]">{{ statusLabel(server) }}</span>
-          </li>
+          <IntegrationRow v-for="server in group.items" :key="rowKey(server)" :server="server" />
         </ul>
       </section>
+
+      <details v-if="byUse.unused.length" class="catalog-unused">
+        <summary>
+          <Icon name="chevron" :size="14" class="catalog-chevron" />
+          <span>{{ t('Not in use') }}</span>
+          <span class="catalog-count">{{ byUse.unused.length }}</span>
+        </summary>
+        <p class="catalog-muted catalog-unused-note">{{ t('Configured, but turned off or never set up. Agents can not reach these until you turn them on or finish their setup.') }}</p>
+        <section v-for="group in unusedGroups" :key="group.key" class="catalog-group">
+          <h2>{{ t(group.label, group.values) }}</h2>
+          <ul class="catalog-list">
+            <IntegrationRow v-for="server in group.items" :key="rowKey(server)" :server="server" />
+          </ul>
+        </section>
+      </details>
 
       <EnvKeysSection :workspaces="workspaces" />
     </div>
@@ -120,20 +116,15 @@ function transportLabel(server: Integration) {
 .catalog-group { display: grid; gap: 6px; }
 .catalog-group h2 { margin: 6px 0 0; font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
 .catalog-list { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
-.catalog-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 14px; min-width: 0; }
-.catalog-row + .catalog-row { border-top: 1px solid var(--line); }
-.catalog-icon { flex: none; margin-top: 2px; color: var(--muted); }
-.catalog-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.catalog-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.catalog-title strong { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-tag { flex: none; padding: 0 6px; border-radius: var(--radius-full); background: var(--fill); color: var(--muted); font-size: var(--text-xs); }
-.catalog-target { color: var(--faint); font-size: var(--text-xs); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-hint { color: var(--warn-ink); font-size: var(--text-xs); }
-.catalog-authorize { margin-left: 6px; color: var(--accent); font-weight: 600; white-space: nowrap; text-decoration: underline; text-underline-offset: 2px; }
-.catalog-authorize:hover { color: var(--accent-hover); }
-.catalog-failure { color: var(--danger); font-size: var(--text-xs); overflow-wrap: anywhere; }
-.catalog-pill { flex: none; padding: 2px 10px; border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 550; background: var(--fill); color: var(--muted); white-space: nowrap; }
-.catalog-pill.connected { background: var(--ok-soft); color: var(--ok); }
-.catalog-pill.needs_auth { background: var(--warn-soft); color: var(--warn-ink); box-shadow: inset 0 0 0 1px var(--warn); }
-.catalog-pill.failed { background: var(--danger-soft); color: var(--danger); }
+.catalog-unused { display: grid; gap: 8px; }
+.catalog-unused summary { display: flex; align-items: center; gap: 8px; width: fit-content; min-height: 28px; padding: 2px 8px 2px 4px; border-radius: var(--radius-sm); color: var(--muted); font-size: var(--text-sm); font-weight: 600; cursor: pointer; list-style: none; }
+.catalog-unused summary::-webkit-details-marker { display: none; }
+.catalog-unused summary:hover { background: var(--fill-hover); color: var(--ink); }
+.catalog-chevron { flex: none; transition: transform var(--duration-fast) var(--ease-out); }
+.catalog-unused[open] .catalog-chevron { transform: rotate(90deg); }
+.catalog-count { padding: 0 7px; border-radius: var(--radius-full); background: var(--fill); color: var(--muted); font-size: var(--text-xs); font-weight: 600; }
+.catalog-unused-note { margin: 0; font-size: var(--text-sm); }
+.catalog-unused .catalog-group { margin-top: 6px; }
+@media (pointer: coarse) { .catalog-unused summary { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .catalog-chevron { transition: none; } }
 </style>

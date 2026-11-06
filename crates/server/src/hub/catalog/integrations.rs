@@ -24,6 +24,8 @@ const FRESH_FOR: Duration = Duration::from_secs(10 * 60);
 /// A failed check is retried sooner than a good one.
 const FAILURE_FRESH_FOR: Duration = Duration::from_secs(60);
 const CONFIG_LIMIT: u64 = 4 * 1024 * 1024;
+/// What the page shows for a server its configuration switches off.
+const TURNED_OFF: &str = "Turned off";
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub(super) struct Server {
@@ -41,6 +43,10 @@ pub(super) struct Server {
     status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     detail: Option<String>,
+    /// Configured but not in use: turned off, or never set up. Such a server
+    /// is listed apart, so what the agents can really reach stays readable.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    unused: bool,
 }
 
 impl Server {
@@ -55,6 +61,7 @@ impl Server {
             target,
             status: "unknown",
             detail: None,
+            unused: false,
         }
     }
 }
@@ -250,6 +257,16 @@ pub(super) fn parse_list_line(line: &str) -> Option<Server> {
     let mut server = Server::new(&name, source, transport, target);
     server.plugin = plugin;
     server.status = status;
+    if status == "unknown" {
+        if lower.starts_with("not configured") {
+            server.unused = true;
+        } else if lower.starts_with("disabled") || lower.starts_with("turned off") {
+            server.unused = true;
+            // One wording for a server that is off, whoever reports it.
+            server.detail = Some(TURNED_OFF.to_owned());
+            return Some(server);
+        }
+    }
     server.detail = detail;
     Some(server)
 }
@@ -283,7 +300,8 @@ pub(super) fn from_config(name: &str, source: &'static str, entry: &Value) -> Se
     if entry.get("enabled").and_then(Value::as_bool) == Some(false)
         || entry.get("disabled").and_then(Value::as_bool) == Some(true)
     {
-        server.detail = Some("Turned off".to_owned());
+        server.detail = Some(TURNED_OFF.to_owned());
+        server.unused = true;
     }
     server
 }
@@ -342,8 +360,17 @@ fn file_sources(
                     else {
                         continue;
                     };
+                    let off: HashSet<&str> = project
+                        .get("disabledMcpServers")
+                        .and_then(Value::as_array)
+                        .map(|names| names.iter().filter_map(Value::as_str).collect())
+                        .unwrap_or_default();
                     for (name, entry) in servers_in(project, "mcpServers") {
                         let mut server = from_config(&name, "claude_project", &entry);
+                        if off.contains(name.as_str()) {
+                            server.detail = Some(TURNED_OFF.to_owned());
+                            server.unused = true;
+                        }
                         server.workspace_id = Some(id.clone());
                         server.workspace_name = Some(workspace_name.clone());
                         servers.push(server);
@@ -414,6 +441,50 @@ mod tests {
         assert_eq!(server.target, "");
         assert_eq!(server.status, "unknown");
         assert_eq!(server.detail.as_deref(), Some("Not configured"));
+        assert!(server.unused);
+    }
+
+    #[test]
+    fn hub_catalog_marks_servers_that_are_off_or_never_set_up_as_unused() {
+        let unused = |line: &str| parse_list_line(line).unwrap().unused;
+        assert!(unused("plugin:design:figma:  (HTTP) - - Not configured"));
+        let off = parse_list_line("notes: npx notes-mcp - ⚠ Disabled").unwrap();
+        assert_eq!((off.status, off.detail.as_deref(), off.unused), ("unknown", Some("Turned off"), true));
+        // In use, whatever its health: connected, waiting for sign-in, failing, or simply not checked.
+        assert!(!unused("claude.ai Notion: https://mcp.notion.com/mcp - ✔ Connected"));
+        assert!(!unused("plugin:marketing:canva: https://mcp.canva.com/mcp (HTTP) - ! Needs authentication"));
+        assert!(!unused("x: https://x.example/mcp (HTTP) - ✘ Failed to connect"));
+        assert!(!unused("y: node y.js - - Pending approval"));
+        // From a config file: `enabled = false` (Codex) or `disabled: true`.
+        assert!(from_config("a", "codex", &json!({ "command": "a", "enabled": false })).unused);
+        assert!(from_config("b", "workspace", &json!({ "command": "b", "disabled": true })).unused);
+        let on = from_config("c", "workspace", &json!({ "command": "c", "enabled": true }));
+        assert!(!on.unused);
+        // The field is only sent when it says something.
+        assert!(!serde_json::to_string(&on).unwrap().contains("unused"));
+        let sent = serde_json::to_value(from_config("a", "codex", &json!({ "command": "a", "enabled": false }))).unwrap();
+        assert_eq!((sent["unused"].clone(), sent["detail"].clone()), (json!(true), json!("Turned off")));
+    }
+
+    #[test]
+    fn hub_catalog_servers_switched_off_in_a_project_are_unused() {
+        let dir = std::env::temp_dir().join(format!("tendly-catalog-off-{}", uuid::Uuid::new_v4()));
+        let home = dir.join("home");
+        let project = dir.join("project");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        let config = json!({ "projects": { project.display().to_string(): {
+            "mcpServers": { "db": { "command": "db-mcp" }, "mail": { "command": "mail-mcp" } },
+            "disabledMcpServers": ["mail", "gone"],
+        } } });
+        std::fs::write(home.join(".claude.json"), config.to_string()).unwrap();
+        let workspaces = vec![("w1".to_owned(), "Proj".to_owned(), project.display().to_string())];
+        let (servers, errors) = file_sources(Some(&home), &workspaces, &HashSet::new(), true);
+        assert!(errors.is_empty());
+        let seen: Vec<(&str, bool, Option<&str>)> =
+            servers.iter().map(|s| (s.name.as_str(), s.unused, s.detail.as_deref())).collect();
+        assert_eq!(seen, vec![("db", false, None), ("mail", true, Some("Turned off"))]);
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -2759,5 +2759,8 @@
  "No .env file with variables was found in your projects.": "Nenhum arquivo .env com variáveis foi encontrado nos seus projetos.",
  "Keys": "Chaves",
  "Other variables": "Outras variáveis",
- "This project has more .env files than are shown here.": "Este projeto tem mais arquivos .env do que os mostrados aqui."
+ "This project has more .env files than are shown here.": "Este projeto tem mais arquivos .env do que os mostrados aqui.",
+ "Not in use": "Fora de uso",
+ "Configured, but turned off or never set up. Agents can not reach these until you turn them on or finish their setup.": "Configuradas, mas desativadas ou nunca terminadas de configurar. Os agentes só alcançam estas depois que você ativar ou concluir a configuração.",
+ "No integration is in use. The ones below are turned off or were never set up.": "Nenhuma integração em uso. As de baixo estão desativadas ou nunca foram configuradas."
 }

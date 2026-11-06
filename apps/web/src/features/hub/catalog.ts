@@ -16,6 +16,8 @@ export interface Integration {
   target: string;
   status: IntegrationStatus;
   detail?: string;
+  /** Configured but turned off, or never set up: listed apart, under "Not in use". */
+  unused?: boolean;
 }
 
 /** A fixed English sentence (translated in the page); `path` fills `{path}`. */
@@ -65,6 +67,11 @@ export interface Skill {
   path: string;
   /** Relative to the workspace, for workspace skills. */
   rel_path?: string;
+}
+
+/** The servers agents can reach (whatever their health) and the ones that are off or never set up. */
+export function splitByUse<T extends Pick<Integration, "unused">>(servers: T[]): { inUse: T[]; unused: T[] } {
+  return { inUse: servers.filter(server => !server.unused), unused: servers.filter(server => server.unused) };
 }
 
 export function loadIntegrations(refresh = false) {
