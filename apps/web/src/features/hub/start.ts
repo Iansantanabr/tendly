@@ -14,6 +14,8 @@ import { loadConversationsWorkspace } from "./inbox";
 export const startProfiles = shallowRef<EndpointProfile[]>([]);
 let opened: ((sessionId: string) => void) | undefined;
 export function onConversationStarted(handler: (sessionId: string) => void) { opened = handler; }
+/** Opens an existing conversation on the Mesa, the way a started one opens. */
+export function openConversation(sessionId: string) { opened?.(sessionId); }
 
 export const ACCOUNT_REQUIRED = "This host has several accounts and none is the default. Choose one in Settings → Preferences, then send again.";
 

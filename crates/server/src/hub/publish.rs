@@ -38,6 +38,7 @@ use tendly_domain::WorkspaceId;
 
 mod access;
 mod assets;
+mod markdown;
 
 #[cfg(test)]
 mod tests;
@@ -684,7 +685,7 @@ async fn try_serve(
         let name = Path::new(&p.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let bytes = tokio::fs::read(&target).await.map_err(|_| ApiError::missing("File"))?;
         let mut response = notice(StatusCode::OK, access::markdown_page(&name, &String::from_utf8_lossy(&bytes)));
-        response.headers_mut().insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'self'"));
+        response.headers_mut().insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; frame-ancestors 'self'"));
         cache(&mut response, protected);
         return Ok(response);
     }
