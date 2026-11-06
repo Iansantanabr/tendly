@@ -20,6 +20,7 @@ import ConversationsBar from "./hub/ConversationsBar.vue";
 import { inbox } from "./hub/inbox";
 import AppTile from "./hub/AppTile.vue";
 import { apps, refreshApps, type HubApp } from "./hub/apps";
+import ReportProblem from "./hub/ReportProblem.vue";
 
 const props = withDefaults(defineProps<{
   workspaces: Workspace[];
@@ -256,6 +257,7 @@ defineExpose({ revealSession });
       <OtherMachines :query="query" @settings="emit('machines')" @open-session="(machine, session) => emit('openRemoteSession', machine, session)" />
     </nav>
     </template>
+    <ReportProblem :workspaces="projectWorkspaces" @open-app="emit('openApp', $event)" />
   </div>
 </template>
 

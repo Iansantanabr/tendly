@@ -5,12 +5,14 @@ import { readFileSync } from 'node:fs';
 import { envKeyCount, splitByUse, splitEnvNames, vaultState } from './catalog.ts';
 import { JOB_SOURCE_LABEL, groupJobs } from './automations.ts';
 import { isPinned, pinHasMore, pinPreview, pins } from './pins.ts';
+import { REPORT_SLUG, existingReportApp, openReportApp } from './report.ts';
+import { ApiError } from '../api.ts';
 
 const here = new URL('.', import.meta.url);
 const read = name => readFileSync(new URL(name, here), 'utf8');
 
 /** The components and modules M5 added, whose strings and styles are checked below. */
-const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue', 'VaultSection.vue', 'ServerJobs.vue', 'PinnedMessageBar.vue', 'PinMessageButton.vue'];
+const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue', 'VaultSection.vue', 'ServerJobs.vue', 'PinnedMessageBar.vue', 'PinMessageButton.vue', 'ReportProblem.vue', 'report.ts'];
 const MODULES = ['catalog.ts'];
 
 // ---------------------------------------------------------------- keys found in .env files
@@ -175,6 +177,74 @@ test('the chat pane gains the bar and the button, and nothing else changes in it
   // The server reads the text from the conversation: the browser sends only which message.
   assert.match(read('pins.ts'), /json\("PUT", \{ message_id: messageId \}\)/);
   assert.match(readFileSync(new URL('../Icon.vue', here), 'utf8'), /\n  pin: "/);
+});
+
+// ---------------------------------------------------------------- report a problem
+
+const tr = (source, values = {}) => source.replace(/\{(\w+)\}/g, (_, key) => String(values[key] ?? `{${key}}`));
+const reportApp = workspace_id => ({ workspace_id, slug: REPORT_SLUG, name: 'Problem reports' });
+
+test('the reports app is made once, in the first project, and only opened after that', async () => {
+  // Nothing there yet: one scaffold, in the first project, with the issues page.
+  let calls = [];
+  let list = [{ workspace_id: 'p1', slug: 'crm' }];
+  const deps = {
+    refresh: async () => { calls.push('refresh'); },
+    list: () => list,
+    scaffold: async (workspaceId, body) => { calls.push(['scaffold', workspaceId, body]); const app = reportApp(workspaceId); list = [...list, app]; return app; },
+  };
+  const made = await openReportApp(['p1', 'p2'], tr, deps);
+  assert.equal(made.workspace_id, 'p1');
+  assert.deepEqual(calls, ['refresh', ['scaffold', 'p1', {
+    slug: 'reportes', name: 'Problem reports', description: 'Problems and ideas noted while using Tendly.', color: 'rose', template: 'issues',
+  }]]);
+
+  // Asked again: looked for, found, opened. Nothing is created.
+  calls = [];
+  assert.equal((await openReportApp(['p1', 'p2'], tr, deps)).workspace_id, 'p1');
+  assert.deepEqual(calls, ['refresh']);
+
+  // It already lives in another project (the list was reordered): that one is opened.
+  calls = [];
+  list = [reportApp('p2')];
+  assert.equal((await openReportApp(['p1', 'p2'], tr, deps)).workspace_id, 'p2');
+  assert.deepEqual(calls, ['refresh']);
+  assert.equal(existingReportApp([reportApp('p2'), reportApp('p1')], ['p1', 'p2']).workspace_id, 'p1');
+  // An app of that name in the hidden conversations folder is not a project's.
+  assert.equal(existingReportApp([reportApp('hidden')], ['p1']), undefined);
+
+  // Made by another window between the look and the request: the conflict is not an error.
+  calls = [];
+  list = [];
+  const raced = { ...deps, scaffold: async () => { list = [reportApp('p1')]; throw new ApiError('apps/reportes already exists', 409); } };
+  assert.equal((await openReportApp(['p1'], tr, raced)).workspace_id, 'p1');
+  assert.deepEqual(calls, ['refresh', 'refresh']);
+  // Any other failure is shown, and so is a conflict that leaves no app behind.
+  list = [];
+  await assert.rejects(openReportApp(['p1'], tr, { ...deps, scaffold: async () => { throw new ApiError('disk full', 500); } }), /disk full/);
+  await assert.rejects(openReportApp(['p1'], tr, { ...deps, scaffold: async () => { throw new ApiError('apps/reportes already exists', 409); } }), /already exists/);
+
+  // No project: nothing is asked of the server at all.
+  calls = [];
+  await assert.rejects(openReportApp([], tr, deps), /Add a project first/);
+  assert.deepEqual(calls, []);
+});
+
+test('the sidebar footer creates the app on a click and never by itself', () => {
+  const footer = read('ReportProblem.vue');
+  const sidebar = readFileSync(new URL('../WorkspaceSidebar.vue', here), 'utf8');
+  assert.match(sidebar, /<ReportProblem :workspaces="projectWorkspaces" @open-app="emit\('openApp', \$event\)" \/>\n  <\/div>\n<\/template>/);
+  // The only way in is the button's click: no mount hook, no watcher, no timer.
+  assert.doesNotMatch(footer, /onMounted|watch\(|watchEffect|setTimeout|setInterval/);
+  assert.equal(footer.match(/openReportApp\(/g).length, 1);
+  assert.match(footer, /@click="report"/);
+  assert.match(footer, /<footer class="report-foot">/);
+  assert.match(footer, /role="alert"/);
+  // It goes through the scaffold endpoint that already exists, and starts no conversation.
+  const logic = read('report.ts');
+  assert.match(logic, /deps\.scaffold\(projectIds\[0\], \{/);
+  assert.doesNotMatch(logic + footer, /startConversation|\/hub\/start/);
+  assert.match(read('apps.ts'), /`\/hub\/apps\/\$\{encodeURIComponent\(workspaceId\)\}\/scaffold`/);
 });
 
 // ---------------------------------------------------------------- translations and design rules

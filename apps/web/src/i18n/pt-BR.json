@@ -2799,5 +2799,10 @@
  "Unpinning…": "Desafixando…",
  "Unpin": "Desafixar",
  "Could not pin this message": "Não foi possível fixar esta mensagem",
- "Pin to the top of the conversation": "Fixar no topo da conversa"
+ "Pin to the top of the conversation": "Fixar no topo da conversa",
+ "Report a problem": "Reportar um problema",
+ "Opens your list of problems. The first time, it creates the app apps/reportes in your first project.": "Abre a sua lista de problemas. Na primeira vez, cria o app apps/reportes no seu primeiro projeto.",
+ "Add a project first: the list of problems is kept in a project folder.": "Adicione um projeto primeiro: a lista de problemas fica guardada na pasta de um projeto.",
+ "Problem reports": "Problemas reportados",
+ "Problems and ideas noted while using Tendly.": "Problemas e ideias anotados durante o uso do Tendly."
 }

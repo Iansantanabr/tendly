@@ -66,8 +66,8 @@ export function colorFor(name: string): AppColor {
   return APP_COLORS[hash % APP_COLORS.length];
 }
 
-/** A blank app (app.json + index.html) made by the host. */
-export async function scaffoldApp(workspaceId: string, body: { slug: string; name: string; description?: string; color?: AppColor }): Promise<HubApp> {
+/** A new app (app.json + index.html) made by the host: blank, or the list of problems (`issues`). */
+export async function scaffoldApp(workspaceId: string, body: { slug: string; name: string; description?: string; color?: AppColor; template?: "blank" | "issues" }): Promise<HubApp> {
   const app = await request<HubApp>(`/hub/apps/${encodeURIComponent(workspaceId)}/scaffold`, json("POST", body));
   apps.list = [...apps.list.filter(item => !(item.workspace_id === app.workspace_id && item.slug === app.slug)), app];
   return app;

@@ -43,6 +43,8 @@ mod tests;
 
 const SDK: &str = include_str!("apps/sdk.js");
 const TEMPLATE: &str = include_str!("apps/template.html");
+/// The page of the "issues" template: a short list of reported problems kept with `tendly.data`.
+const ISSUES_TEMPLATE: &str = include_str!("apps/issues.html");
 
 /// The colors an app may ask for, with the accent the blank app uses for each.
 pub(crate) const COLORS: &[(&str, &str)] = &[
@@ -611,6 +613,9 @@ struct ScaffoldBody {
     description: Option<String>,
     #[serde(default)]
     color: Option<String>,
+    /// Which page the new app starts with: `blank` (the default) or `issues`.
+    #[serde(default)]
+    template: Option<String>,
 }
 
 fn escape_html(text: &str) -> String {
@@ -628,7 +633,21 @@ pub(crate) fn blank_page(manifest: &Manifest) -> String {
     } else {
         &manifest.description
     };
-    TEMPLATE
+    filled(TEMPLATE, manifest, description)
+}
+
+/// The page of an app that keeps a list of reported problems.
+pub(crate) fn issues_page(manifest: &Manifest) -> String {
+    let description = if manifest.description.is_empty() {
+        "Problems and ideas noted while using Tendly."
+    } else {
+        &manifest.description
+    };
+    filled(ISSUES_TEMPLATE, manifest, description)
+}
+
+fn filled(template: &str, manifest: &Manifest, description: &str) -> String {
+    template
         .replace("{{NAME}}", &escape_html(&manifest.name))
         .replace("{{LETTER}}", &escape_html(&manifest.letter))
         .replace("{{DESCRIPTION}}", &escape_html(description))
@@ -664,7 +683,11 @@ async fn scaffold_route(
     .map_err(ApiError::internal)?;
     let workspace = crate::app::workspace(&state, id).await?;
     let root = crate::app::root(&state, id).await?;
-    let page = blank_page(&parsed);
+    let page = match body.template.as_deref().map(str::trim) {
+        None | Some("" | "blank") => blank_page(&parsed),
+        Some("issues") => issues_page(&parsed),
+        Some(_) => return Err(ApiError::bad("Unknown template: use blank or issues")),
+    };
     let name = slug.clone();
     let app = tokio::task::spawn_blocking(move || -> Result<Located> {
         let apps = root.join("apps");

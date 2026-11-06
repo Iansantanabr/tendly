@@ -422,6 +422,52 @@ async fn hub_apps_scaffold_creates_a_blank_app_once() {
 }
 
 #[tokio::test]
+async fn hub_apps_scaffold_issues_template_is_a_list_kept_with_the_data_api() {
+    let f = fixture();
+    let url = format!("/api/hub/apps/{}/scaffold", f.workspace);
+    let body = json!({ "slug": "reportes", "name": "Problemas <reportados>", "color": "rose", "template": "issues" });
+    let created = f.send("POST", &url, body.to_string(), true).await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.text());
+    let entry = created.json();
+    assert_eq!(entry["code_path"], "apps/reportes/");
+    assert_eq!(entry["color"], "rose");
+    let page = f.get(entry["url"].as_str().unwrap()).await;
+    assert_eq!(page.status, StatusCode::OK);
+    let html = page.text();
+    // The name is escaped, nothing of the template is left unfilled, and the list lives in tendly.data.
+    assert!(html.contains("<h1>Problemas &lt;reportados&gt;</h1>"), "{html}");
+    assert!(!html.contains("{{"));
+    assert!(html.contains("/api/hub/apps/sdk.js"));
+    assert!(html.contains("const KEY = 'issues';"));
+    assert!(html.contains("tendly.data.get(KEY, [])") && html.contains("tendly.data.set(KEY, issues)"));
+    // What a person types is shown as text, never as markup; removal is confirmed in the page.
+    assert!(!html.contains("innerHTML") && !html.contains("confirm("));
+    assert!(html.contains("prefers-color-scheme") && html.contains("pointer: coarse"));
+    // It is not the blank app.
+    assert!(!html.contains("id=\"plus\""));
+    assert!(f.repo.join("apps/reportes/app.json").is_file());
+
+    // The list the page writes is an ordinary value of the app.
+    let data = format!("/api/hub/apps/{}/reportes/data/issues", f.workspace);
+    let issues = json!([{ "id": "1", "title": "Bell does not clear", "details": "", "created_at": "2026-11-06T12:00:00Z", "done_at": null }]);
+    assert_eq!(f.send("PUT", &data, issues.to_string(), true).await.status, StatusCode::OK);
+    assert_eq!(f.get(&data).await.json(), issues);
+    assert!(f.repo.join("apps/reportes/data/issues.json").is_file());
+
+    // Only once: a second request does not touch what is there.
+    assert_eq!(f.send("POST", &url, body.to_string(), true).await.status, StatusCode::CONFLICT);
+    assert_eq!(f.get(&data).await.json(), issues);
+
+    // The default is still the blank app, and an unknown template creates nothing.
+    let blank = f.send("POST", &url, json!({ "slug": "plain", "name": "Plain", "template": "blank" }).to_string(), true).await;
+    assert_eq!(blank.status, StatusCode::CREATED);
+    assert!(f.get(blank.json()["url"].as_str().unwrap()).await.text().contains("id=\"plus\""));
+    let unknown = f.send("POST", &url, json!({ "slug": "odd", "name": "Odd", "template": "crm" }).to_string(), true).await;
+    assert_eq!(unknown.status, StatusCode::BAD_REQUEST);
+    assert!(!f.repo.join("apps/odd").exists());
+}
+
+#[tokio::test]
 async fn hub_apps_sdk_is_served_as_javascript() {
     let f = fixture();
     let reply = f.get("/api/hub/apps/sdk.js").await;
