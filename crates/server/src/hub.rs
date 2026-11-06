@@ -17,6 +17,8 @@ mod catalog;
 mod history;
 mod home;
 mod publish;
+mod spaces;
+mod transcript;
 mod store;
 
 pub use store::HubStore;
@@ -55,6 +57,8 @@ pub fn routes() -> Router<AppState> {
         .merge(catalog::routes())
         .merge(history::routes())
         .merge(publish::routes())
+        .merge(spaces::routes())
+        .merge(transcript::routes())
         .merge(apps::routes())
 }
 
