@@ -7,6 +7,7 @@ const paths: Record<string, string> = {
   home: "M3 10.5 12 3l9 7.5 M5 9v11h5v-6h4v6h5V9",
   bell: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 20a2 2 0 0 0 4 0",
   chat: "M4 5h16v11H9l-5 4z",
+  mic: "M9 5a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z M19 10v1a7 7 0 0 1-14 0v-1 M12 18v3 M8 21h8",
   arrowUp: "M12 19V5 M6 11l6-6 6 6",
   plug: "M9 3v5 M15 3v5 M7 8h10v4a5 5 0 0 1-10 0z M12 17v4",
   sparkles: "M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8z M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z",

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import type { EndpointProfile, ProviderKind, Session, Workspace } from "@tendly/protocol";
 import { PROFILE_CHOICE_REQUIRED, isProfileSelectionValid, preferredProfileSelection } from "../profile-preferences";
 import { loadPreferences, preferenceFor } from "../preferences";
@@ -16,6 +16,11 @@ import { startConversation } from "./start";
 import { continueTarget, effortOptions, keepOffered, modelOptions, permissionOptions, readHomeMemory, usageText, type AgentChoice } from "./home";
 import AppTile from "./AppTile.vue";
 import { apps, refreshApps, type HubApp } from "./apps";
+import { conversationChips, insertAt, parseConversationLink, pastedConversation, removeConversationChip, restoreConversationChips, takeConversationChips, withConversations } from "./conversation-link";
+import { speechLang, useDictation } from "./dictation";
+import DictationButton from "./DictationButton.vue";
+import DictationStatus from "./DictationStatus.vue";
+import ConversationChips from "./ConversationChips.vue";
 
 /**
  * Início: where a day starts. A box to ask for something new, what is running,
@@ -23,7 +28,7 @@ import { apps, refreshApps, type HubApp } from "./apps";
  */
 const props = defineProps<{ workspaces: Workspace[]; sessions: Session[]; profiles: EndpointProfile[]; selectedWorkspaceId?: string }>();
 const emit = defineEmits<{ openSession: [session: Session]; started: [id: string]; openFile: [workspaceId: string, path: string]; openCanvas: []; openApp: [app: HubApp]; apps: [] }>();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const STORAGE = "tendly.hub.home";
 const saved = (() => { try { return readHomeMemory(localStorage.getItem(STORAGE)); } catch { return readHomeMemory(null); } })();
@@ -99,14 +104,40 @@ onMounted(async () => {
 });
 const homeApps = computed(() => [...apps.list].sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? "")).slice(0, 8));
 
+/** The composer's key for conversation chips. */
+const CHIPS = "home";
+const linked = computed(() => conversationChips(CHIPS));
+const input = ref<HTMLTextAreaElement>();
+function insertIntoPrompt(text: string) {
+  const el = input.value, value = prompt.value;
+  const start = el?.selectionStart ?? value.length, end = el?.selectionEnd ?? start;
+  const next = insertAt(value, start, end, text);
+  prompt.value = next.value;
+  void nextTick(() => input.value?.setSelectionRange(next.caret, next.caret));
+}
+/** A pasted Tendly conversation link becomes a chip instead of the raw URL. */
+async function paste(event: ClipboardEvent) {
+  const text = event.clipboardData?.getData("text/plain") ?? "";
+  if (!parseConversationLink(text, location.origin)) return;
+  event.preventDefault();
+  const outcome = await pastedConversation(text, {
+    origin: location.origin, key: CHIPS,
+    lookup: async id => props.sessions.find(s => s.id === id)?.title ?? (await request<Session>(`/sessions/${id}`).then(s => s.title, () => undefined)),
+  });
+  if (outcome.kind === "unknown") insertIntoPrompt(text.trim());
+}
+const dictation = useDictation({ lang: () => speechLang(locale.value), onFinal: insertIntoPrompt });
+
 async function send() {
   const text = prompt.value.trim();
   if (!text || !workspaceId.value || busy.value) return;
   if (endpoint.value === PROFILE_CHOICE_REQUIRED) { error.value = t("Choose an account for this conversation, then send again."); return; }
   busy.value = true; error.value = "";
+  dictation.stop();
+  const refs = takeConversationChips(CHIPS);
   try {
     const id = await startConversation({
-      prompt: text,
+      prompt: withConversations(text, refs),
       workspaceId: workspaceId.value,
       provider: provider.value,
       endpointId: endpoint.value || null,
@@ -118,11 +149,12 @@ async function send() {
     });
     prompt.value = "";
     emit("started", id);
-  } catch (cause) { error.value = errorMessage(cause); }
+  } catch (cause) { restoreConversationChips(CHIPS, refs); error.value = errorMessage(cause); }
   finally { busy.value = false; }
 }
 function keydown(event: KeyboardEvent) {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); void send(); }
+  else if (event.key === "Escape" && dictation.listening.value) { event.preventDefault(); dictation.stop(); }
   else if (event.key === "Escape") (event.target as HTMLElement).blur();
 }
 const suggestions = computed(() => [
@@ -145,7 +177,9 @@ const suggestions = computed(() => [
       </header>
 
       <form class="home-composer" @submit.prevent="send">
-        <textarea v-model="prompt" rows="2" :placeholder="t('What do we do now?')" :aria-label="t('What do we do now?')" :disabled="busy" @keydown="keydown" />
+        <textarea ref="input" v-model="prompt" rows="2" :placeholder="t('What do we do now?')" :aria-label="t('What do we do now?')" :disabled="busy" @keydown="keydown" @paste="paste" />
+        <DictationStatus :dictation="dictation" />
+        <ConversationChips :items="linked" @remove="id => removeConversationChip(CHIPS, id)" />
         <div class="home-composer-bar">
           <label class="home-chip"><ProviderIcon :provider="provider" :size="14" />
             <select v-model="provider" :aria-label="t('Agent')">
@@ -185,6 +219,7 @@ const suggestions = computed(() => [
             </select>
           </label>
           <span class="flex-spacer" />
+          <DictationButton :dictation="dictation" :disabled="busy" />
           <button class="home-send" type="submit" :disabled="busy || !prompt.trim() || !workspaceId" :aria-label="t('Send')"><Icon name="arrowUp" :size="16" /></button>
         </div>
         <p v-if="!workspaces.length && !inbox.conversationsWorkspaceId" class="inline-notice">{{ t('Add a workspace first: it is the folder the agent works in.') }}</p>

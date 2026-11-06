@@ -161,6 +161,7 @@ async fn agent_tools_know_their_caller_and_a_session_token_opens_nothing_else() 
         .map(|tool| tool["name"].as_str().unwrap())
         .collect();
     assert!(names.contains(&"tendly_status") && names.contains(&"tendly_list"));
+    assert!(names.contains(&"tendly_read_conversation"));
 
     let (code, result) = agent_request(
         f.app(),
@@ -834,4 +835,77 @@ async fn a_pending_approval_marks_the_session_waiting_until_the_last_is_resolved
             "after {event}"
         );
     }
+}
+
+#[tokio::test]
+async fn hub_transcript_route_and_tool_read_a_stored_conversation() {
+    let f = Fixture::new("127.0.0.1:8787".parse().unwrap(), None);
+    let workspace = f
+        .state
+        .store
+        .create_workspace("talk", f.path.join("repo").to_str().unwrap())
+        .unwrap();
+    let session = f
+        .state
+        .store
+        .create_session(workspace.id, ProviderKind::ClaudeCode, "Pricing talk")
+        .unwrap();
+    for event in [
+        json!({"type":"message","id":"u1","role":"user","text":"What should we charge?","delta":false}),
+        json!({"type":"tool","id":"t1","name":"Read","status":"running","text":"{\"file_path\":\"prices.csv\"}"}),
+        json!({"type":"tool","id":"t1","name":"Read","status":"completed","text":"a,b,c"}),
+        json!({"type":"message","id":"a1","role":"assistant","text":"About R$ 90.","delta":false}),
+    ] {
+        f.state
+            .store
+            .append_conversation_event(session.id, event)
+            .unwrap();
+    }
+    let (status, body) = call(
+        f.app(),
+        "GET",
+        &format!("/api/hub/sessions/{}/transcript", session.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // The first message names the session.
+    assert_eq!(body["title"], "What should we charge?");
+    assert_eq!(body["session_id"], session.id.to_string());
+    assert_eq!(body["workspace_id"], workspace.id.to_string());
+    assert_eq!(body["truncated"], false);
+    assert_eq!(
+        body["text"],
+        "You:\nWhat should we charge?\n\n[Tool: Read — prices.csv]\n\nAgent:\nAbout R$ 90."
+    );
+
+    let (status, _) = call(
+        f.app(),
+        "GET",
+        &format!("/api/hub/sessions/{}/transcript", uuid::Uuid::new_v4()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let link = format!("http://127.0.0.1:8787/session/{}", session.id);
+    let (status, result) = call(
+        f.app(),
+        "POST",
+        "/api/agent/call",
+        json!({"name":"tendly_read_conversation","arguments":{"session":link,"max_chars":200}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(tool_text(&result)["session_id"], session.id.to_string());
+
+    let (_, result) = call(
+        f.app(),
+        "POST",
+        "/api/agent/call",
+        json!({"name":"tendly_read_conversation","arguments":{"session":"nothing here"}}),
+    )
+    .await;
+    assert_eq!(result["isError"], true);
 }

@@ -18,7 +18,7 @@ mod history;
 mod home;
 mod publish;
 mod spaces;
-mod transcript;
+pub(crate) mod transcript;
 mod store;
 
 pub use store::HubStore;
