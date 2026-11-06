@@ -1,0 +1,94 @@
+AppsB — Etapa B de replica/plan-apps.md: app em tela cheia, Conversar ao lado, recarregar sozinho, erros do app.
+Concluído em 2026-11-06. Os cinco itens foram feitos. Nenhuma conversa de agente foi aberta, nenhuma automação
+rodou, nenhum app seu foi tocado (GET /api/hub/apps estava vazio antes e continua vazio).
+
+ENTREGUE
+1. Tela cheia em /apps/<id do workspace>/<slug>: rail sozinho à esquerda (tile do app destacado), cabeçalho fino
+   (tile + nome, "código em apps/<slug>/" que mostra a pasta no painel de arquivos, Conversar, Abrir na Mesa,
+   recarregar, copiar link, abrir fora) e o app no resto. Abrem a tela cheia: o cartão do catálogo, os tiles do
+   rail, a lista de apps da barra e o cartão Apps do Início. Arrastar um tile, "Abrir na Mesa" e "Reportar um
+   problema" continuam abrindo painel. O painel ficou como era e ganhou copiar link.
+2. Conversar em tela cheia: coluna de conversa à direita, redimensionável (arrastar ou ← →), Esc fecha. É uma
+   conversa comum do projeto do app, criada como o "+" da barra cria; o composer vem com o app como chip.
+   Nada é enviado sozinho. Cada app lembra a sua conversa neste navegador.
+3. Recarregar sozinho: 600 ms depois da última mudança em apps/<slug>/ (nunca data/), todo painel e a tela cheia
+   daquele app recarregam e mostram "Atualizado agora · Desfazer". Desfazer volta os arquivos para antes daquela
+   rajada pelo histórico de arquivos (hub/apps/live.rs, alimentado pelo observador do histórico; aviso pelo
+   socket agent-activity). Desfazer o desfazer é o refazer.
+4. Erros do app: o sdk.js avisa a página do Tendly (só ela, conferindo a origem) de error, unhandledrejection,
+   console.error e arquivo que não carregou. Cabeçalho: "N erros" → lista → "Pedir correção", que preenche a
+   conversa ao lado com app, tela e cada erro com arquivo:linha. Nunca envia.
+5. tendly.host.holdReload(true/false): o app com algo não salvo faz o recarregar esperar ("Tem uma versão nova
+   pronta · Recarregar agora"). Documentado na skill.
+Rotas novas: GET /api/hub/apps/{ws}/{slug}/changes e POST /api/hub/apps/{ws}/{slug}/changes/{id}/undo.
+Sem migração no hub.db (o estado das mudanças é memória).
+
+TESTES
+- Web: 961 ok (29 novos em features/hub/appsB-live.test.mjs); typecheck ok.
+- Hub: 164 ok (8 novos). Servidor inteiro: 594 ok, 2 ignorados.
+- Servidor rodando depois do build.sh, 28 conferências ok, com um app de teste criado e apagado pela própria API
+  na pasta oculta de conversas: mudança → aviso no socket 0,62 s depois, com os arquivos certos e sem data/;
+  desfazer → arquivo editado igual ao original, arquivo criado removido, dado do app intacto; desfazer sem o
+  cabeçalho web → 403; mudança antiga → 409; desconhecida → 404; /apps/<ws>/<slug> serve a interface.
+- Contraste: nenhuma cor nova.
+
+BLOQUEADO EM VOCÊ (1 comando)
+A skill atualizada está só no repositório; a instalada continua a antiga, porque esta rodada não pode escrever
+fora do repositório. Copie:
+  cp ~/tendly-src/tendly/skills/tendly-apps/SKILL.md ~/.claude/skills/tendly-apps/SKILL.md
+(ou peça na próxima etapa para manter as duas iguais). Sem isso o agente ainda manda "aperte recarregar" e não
+sabe do holdReload nem do "Pedir correção".
+
+NÃO EXERCITADO AO VIVO (leia antes de confiar)
+- Nada foi visto num navegador: layout da tela cheia, coluna de conversa, divisória, aviso, lista de erros, foco.
+- Conversar e "Pedir correção" criam uma sessão no clique; isso não foi clicado (regra: não abrir conversas).
+  Testado: a função que preenche o composer (nunca marca envio) e a fiação.
+- postMessage entre o app e a página, e o holdReload, só rodaram numa página de mentira (Node), não numa moldura.
+
+O QUE VOCÊ PRECISA OLHAR NO NAVEGADOR
+Antes: copie a skill (acima) e crie um app (Apps → nome "Teste" → "App em branco").
+1. Janela larga (≥ 1250px), tema claro: o app abre em /apps/…/teste com o rail à esquerda (tile "T" destacado),
+   sem o painel Workspaces/Conversas; cabeçalho com tile, nome, "código em apps/teste/", Conversar, Abrir na Mesa
+   e três ícones. Passe o mouse em cada botão.
+2. Entradas: cartão Apps do Início, cartão na página Apps e tile do rail na Mesa abrem a tela cheia. "Abrir na
+   Mesa" (página Apps e cabeçalho) e arrastar o tile abrem aba.
+3. "código em apps/teste/": o painel de arquivos abre na pasta do app. Copiar link: o ícone vira ✓; cole em
+   outra aba. Abrir fora: o app sozinho. Na aba da Mesa, o painel tem os mesmos ícones (com copiar link).
+4. Conversar: a coluna abre à direita, o composer já tem o chip "Teste" e o cursor; confira que NADA foi
+   enviado. Arraste a divisória; com ela em foco, ← →. Esc (fora do composer) fecha e o foco volta para
+   Conversar. Abrir de novo traz a mesma conversa; "+" começa outra; o ícone de grade leva para a Mesa.
+5. Recarregar sozinho: peça "troque o título para Olá". O app recarrega e aparece "Atualizado agora · Desfazer"
+   no canto inferior esquerdo. Desfazer → o título volta ("Mudança desfeita · Refazer"). Refazer. Com o mesmo
+   app também numa aba da Mesa, os dois recarregam.
+6. Erros: peça "adicione um botão que chama uma função que não existe" e clique nele. "1 erro" no cabeçalho;
+   a lista mostra a mensagem e apps/teste/index.html:linha. "Pedir correção" preenche o composer; confira que
+   NÃO enviou. Envie você: o app recarrega e o "1 erro" some.
+7. O mesmo do 6 numa aba da Mesa: sem conversa aberta, abre uma ao lado preenchida; com uma do mesmo projeto
+   aberta, usa essa.
+8. holdReload: peça "um campo de texto que chama tendly.host.holdReload(true) ao digitar e um botão Salvar que
+   chama holdReload(false)". Digite, peça outra mudança: aparece "Tem uma versão nova pronta · Recarregar
+   agora" e o texto continua. Salvar → recarrega.
+9. Tema escuro: repita 1, 4 e 6 olhando o cabeçalho, o selo "N erros", os cartões de erro e a pílula do aviso.
+10. 900px de largura com a coluna aberta: os rótulos do cabeçalho viram só ícones quando o app fica estreito.
+    640px, 360px e o celular: sem rail (gaveta), cabeçalho em duas linhas sem cortar, Conversar cobre o app e o
+    × volta; botões fáceis de tocar.
+11. /apps/<id>/nao-existe: "Este app não está mais aqui" com "Ver todos os apps".
+12. Barra lateral (correção do bf0f3f0): Início com janela baixa (~640px de altura): seletor
+    Workspaces/Conversas inteiro, listas com pelo menos 180px, a barra rolando.
+
+DECISÕES QUE VOCÊ PODE QUERER INVERTER (detalhes em replica/progress/AppsB.md)
+- Clicar num tile do rail agora sai da Mesa para a tela cheia (o plano pede); para aba: arrastar, ou "Abrir na Mesa".
+- Em tela cheia a barra é sempre o rail, mesmo com a preferência "Expandida"; sem botão Voltar no cabeçalho.
+- Conversar cria a conversa no clique (sessão vazia, como o "+"); abrir a página nunca cria.
+- Desfazer: só a última mudança do app, por até 1 h, e some se o servidor reiniciar. Arquivo criado na rajada é
+  removido (o conteúdo fica no histórico); imagem e arquivo > 1 MB ficam como estão; app.json nunca é removido.
+- O servidor grava no histórico uma versão "Fora do Tendly" de cada arquivo de app no start, quando o conteúdo
+  ainda não estava lá: é o que deixa desfazer a primeira mudança.
+- console.error conta como erro do app; a lista zera a cada recarregar; "Pedir correção" leva os 5 mais recentes.
+- O aviso "Atualizado agora" some em 60 s.
+
+OBSERVAÇÕES
+- Ficaram no histórico de arquivos algumas versões do app de teste (apps/zz-appsb-check/ na pasta de conversas);
+  o app e a pasta foram apagados e as versões somem sozinhas em 60 dias.
+- Os commits levam a linha "Co-Authored-By: Claude Opus 5.5", como manda a regra do piloto; esta rodada rodou
+  no Claude Fable 5.1.

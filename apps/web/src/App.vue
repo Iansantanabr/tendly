@@ -23,7 +23,7 @@ import DesignPage from "./features/hub/DesignPage.vue";
 import { onConversationStarted, startProfiles } from "./features/hub/start";
 import AppsPage from "./features/hub/AppsPage.vue";
 import AppFullPage from "./features/hub/AppFullPage.vue";
-import { appAttachment, chatPaneFor, fillComposer, onAppChatRequest } from "./features/hub/app-chat";
+import { appAttachment, chatPaneFor, fillComposer, onAppChatRequest, sideChatSession } from "./features/hub/app-chat";
 import { refreshApps, type HubApp } from "./features/hub/apps";
 import IconRail from "./features/hub/IconRail.vue";
 import { appPaneKey, mesaSidebar, openAppKeys, sidebarLayout, type RailTarget } from "./features/hub/rail";
@@ -151,9 +151,11 @@ function leavePage() {
   if (window.history.state?.back) router.back();
   else void router.push({ name: "canvas" });
 }
+/** The conversation in front of the person: the focused tab of the Mesa, or the chat beside a full-screen app. Under any other page, none. */
+const viewedSessionId = computed(() => page.value === "app" ? sideChatSession.value : page.value ? undefined : selectedSessionId.value);
 /** A conversation on screen, in a visible tab, has been read. */
-function seeFocused() { const id = selectedSessionId.value; if (id && !page.value && !document.hidden && isUnread(id)) void markSeen(id); }
-watch(() => selectedSessionId.value, id => { if (id && !page.value) void markSeen(id); });
+function seeFocused() { const id = viewedSessionId.value; if (id && !document.hidden && isUnread(id)) void markSeen(id); }
+watch([() => selectedSessionId.value, sideChatSession], () => { const id = viewedSessionId.value; if (id) void markSeen(id); });
 onConversationStarted(id => void homeStarted(id));
 watch(profiles, value => { startProfiles.value = value; }, { immediate: true });
 async function homeStarted(id: string) {
@@ -913,7 +915,7 @@ async function pingHost() {
 onMounted(() => {
   void bootstrap();
   void pingHost();
-  pollTimer = setInterval(() => { if (!document.hidden && !showAuth.value) { void refreshSessions(); void pingHost(); for (const id of trackedPlaces()) void refreshGit(id); void refreshInbox(presentSession(selectedSessionId.value, !!page.value)).then(seeFocused); } }, 5000);
+  pollTimer = setInterval(() => { if (!document.hidden && !showAuth.value) { void refreshSessions(); void pingHost(); for (const id of trackedPlaces()) void refreshGit(id); void refreshInbox(presentSession(viewedSessionId.value, false)).then(seeFocused); } }, 5000);
   void refreshInbox();
   window.addEventListener("beforeunload", beforeUnload); window.addEventListener("resize", adaptDrawers);
   stopPageReturn = onPageReturn(stale => fileWatch.wake(stale));

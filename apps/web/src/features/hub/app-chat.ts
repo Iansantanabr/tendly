@@ -5,7 +5,7 @@
  * context chip, and for "Ask for a fix" the errors as text. Sending is always
  * the person's click.
  */
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 import type { PaneNode, Session } from "@tendly/protocol";
 import { chatDrafts } from "../chat-model";
 
@@ -39,6 +39,13 @@ export function readSideChats(storage: Store = local()): SideChats {
 export function writeSideChats(state: SideChats, storage: Store = local()): void {
   try { storage?.setItem(STORAGE, JSON.stringify({ width: state.width, chats: state.chats, open: state.open })); } catch { /* Fine without it. */ }
 }
+
+/**
+ * The conversation showing in the chat column of the full-screen view, if any.
+ * App.vue reads it to know which conversation is in front of the person: that
+ * one is read, and does not ring a phone, like the focused tab of the Mesa.
+ */
+export const sideChatSession = ref<string>();
 
 /** The app as the chip a composer attaches: its folder, named like the app. */
 export function appAttachment(app: { slug: string; name: string }): { path: string; name: string } {

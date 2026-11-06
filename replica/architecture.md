@@ -118,6 +118,18 @@ O link publicado usa `public_base_url` quando definido (`public_url` em cada pub
 | `GET\|PUT\|DELETE sessions/{id}/pin` | a mensagem fixada no topo da conversa (`PUT {message_id}`) | `{pin: null \| {message_id, text, pinned_at}}` |
 | `POST apps/{ws}/scaffold` (já existia) | aceita `template: blank \| issues` | app (201) |
 
+### Apps B: tela cheia, recarregar sozinho, erros do app (feito)
+
+| método e caminho | faz | saída |
+| --- | --- | --- |
+| web `/apps/{ws}/{slug}` | o app na página inteira, com o rail; Conversar abre uma coluna de chat ao lado | página |
+| `GET apps/{ws}/{slug}/changes` | a mudança mais recente do app (e indexa o app, para a próxima poder ser desfeita) | `{latest: null \| {id, at, paths, count, undoable, undo_of, redo}, quiet_ms}` |
+| `POST apps/{ws}/{slug}/changes/{id}/undo` | volta os arquivos do app para antes daquela mudança, pelo histórico de arquivos; só a mais recente | `{undone, restored, removed, skipped:[{path, reason}]}`; 404, 409 |
+| socket `agent-activity/ws` (já existia) | mensagem nova `{type:"hub", event:"app-changed", workspace_id, slug, change}` 600 ms depois da última escrita em `apps/<slug>/` (fora de `data/`) | — |
+| `GET apps/sdk.js` (já existia) | passa a avisar erros e a página em vista para a página que emoldura o app, e ganha `tendly.host.holdReload` | JS |
+
+Como o "antes" é guardado: `hub/apps/live.rs` mantém em memória, por app, o que cada arquivo continha na última rajada (hash do conteúdo, já salvo como versão no histórico). No fim de uma rajada compara com o disco; a diferença é a mudança. Nada disso vai para o `hub.db`: reiniciar o servidor esquece as mudanças (o histórico por arquivo continua lá).
+
 ### Webhooks e jobs
 
 Webhooks entrando: nenhum. Webhooks saindo: Web Push (M3).
@@ -158,6 +170,7 @@ Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeir
   - o domínio dos publicados só serve `/p/*` (no Caddy e de novo no servidor) e não é origem aceita pela API;
   - o publicado fica fora de `/api` e com CSP sandbox;
   - apps rodam na mesma origem e sem sandbox, aceitável com um usuário e código do próprio agente; no multiusuário passam para uma origem separada (`apps.<domínio>`);
+  - o que o app manda para a página (erros, tela, `holdReload`) é só leitura de texto: a página confere a origem e a janela da moldura, corta os tamanhos e nunca executa nem navega com o que recebe. "Pedir correção" põe esse texto num composer; quem envia é a pessoa;
   - o 1Password (M5, feito só leitura) usa o CLI `op`; o token da conta de serviço fica na variável `OP_SERVICE_ACCOUNT_TOKEN` do ambiente do servidor e o Tendly não o recebe nem guarda;
   - a lista de chaves dos `.env` (M5) devolve só nomes: o valor é pulado byte a byte na leitura.
 - **Privacidade do ditado:** a Web Speech API do Chrome manda o áudio para o Google. Mostrar isso na primeira vez e deixar desligar. Um Whisper local fica para quando houver VPS com CPU sobrando.

@@ -329,4 +329,44 @@ Barra lateral na Mesa (Apps A, cartão em `AddressesPanel.vue`)
   atalhos    rail → Mais → "Mostrar a barra completa aqui"; pé da barra expandida na Mesa → "Mostrar só ícones aqui" (escondido na gaveta do celular)
 ```
 
+```
+Cabeçalho de app (Apps B, `AppView.vue`; no painel da Mesa e na tela cheia)
+  partes     tile + nome · caminho do código · [N erros] · Conversar · [Abrir na Mesa] · recarregar · copiar link · abrir fora
+             tela cheia: tile 24px, nome --text-md, 44px de altura, o caminho é o botão "código em apps/<slug>/" (mostra a pasta no painel de arquivos)
+             painel: tile 20px, nome --text-sm, 34px, o caminho é texto em --mono; sem "Abrir na Mesa"
+  botões     Conversar e Abrir na Mesa = small-button com ícone + rótulo; os demais = icon-button; todos com aria-label e title
+             Conversar em tela cheia: aria-pressed + variante primary enquanto a coluna está aberta
+             copiar link: vira "check" por 2,5 s e anuncia "Link copiado" (role=status); falha → faixa --danger-soft com o motivo
+  estreito   o cabeçalho é um container (`app-view`): ≤ 620px os rótulos somem (ficam nome acessível e title), ≤ 420px o caminho some;
+             as ações quebram para uma segunda linha em vez de serem cortadas (360px); toque: alvos de 44px
+  estados    carregando ("Carregando…" sobre a moldura), app sumiu (painel: Remover aba · tela cheia: Ver todos os apps; + Tentar de novo),
+             app.json quebrado (o motivo do servidor), lista de apps ilegível (erro + Tentar de novo)
+```
+
+```
+Aviso de atualização (Apps B, dentro do `AppView.vue`)
+  onde       pílula no canto inferior esquerdo da moldura (--elevated, --line, --shadow-md, --radius-full, --text-sm), role=status aria-live=polite
+  variantes  "Atualizado agora · Desfazer" (some em 60 s) · "Voltando os arquivos…" · "Mudança desfeita · Refazer" (+ "alguns arquivos ficaram como estão", com a lista no title)
+             · "Tem uma versão nova pronta · Recarregar agora" (o app segurou o recarregar; fica até recarregar) · erro do desfazer em --danger-ink
+  ações      text-button; "×" dispensa; o title do texto lista os arquivos mudados; sem animação com prefers-reduced-motion
+```
+
+```
+Erros do app (Apps B, dentro do `AppView.vue`)
+  selo       botão "N erros" (small-button danger, ícone info) no cabeçalho, só quando há erro; aria-expanded
+  lista      faixa abaixo do cabeçalho, até 45% da altura, rolagem própria; cada erro: tipo (Erro · Promise rejeitada · console.error · Arquivo não carregou) ×n,
+             mensagem (pre-wrap, até ~6 linhas), arquivo:linha:coluna em --mono; cartões --danger-soft / --danger-line
+  rodapé     "Nada é enviado até você apertar enviar na conversa." · Limpar · Pedir correção (primary) · fechar; Esc fecha e devolve o foco ao selo
+  regra      a lista zera quando uma página do app carrega de novo; no máximo 50 erros, repetido conta no mesmo
+```
+
+```
+Coluna de conversa (Apps B, `AppFullPage.vue`)
+  o que é    a conversa sobre o app, à direita do app em tela cheia; largura 320px até (página − 360px), padrão 420px, lembrada no navegador
+  barra      44px: ícone + título da conversa · Nova conversa sobre este app (+) · Levar para a Mesa · Fechar (Esc)
+  divisória  role=separator vertical, focável: arrastar, ou ← → (24px), Home/End; 7px de alvo (15px em toque); durante o arrasto a moldura não recebe o ponteiro
+  estreito   página < 680px: a conversa cobre o app (position absolute) e não há divisória; fechar mostra o app de novo
+  estados    começando ("Iniciando…"), sem conversa (texto + "Nova conversa"), não deu para começar (inline-error), conversa aberta (SessionPane comum)
+```
+
 Fora deste sistema: modais, menus de contexto, árvore de arquivos, terminal e chat são do upstream e seguem como estão.

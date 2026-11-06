@@ -98,10 +98,11 @@ Rail de ícones na Mesa (nav + tiles dos apps + sino),shell,must,yes,yes,Etapa A
 Barra expandida com lista vertical de apps + Ver todos + criar,shell,should,yes,yes,Etapa A (AppsA); SidebarApps.vue; até 8 apps · Apps › · + · Ver todos
 Arrastar tile do app para a Mesa,apps,could,yes,yes,Etapa A (AppsA); reusa o arrastar de abas (application/tendly-pane); não visto no navegador
 Ordem dos apps: fixar · mover · ocultar,apps,should,no,yes,Etapa A (AppsA); hub_settings.app_order; vale no rail · barra · Início · página Apps
-App em tela cheia com cabeçalho (Conversar · Abrir na Mesa · recarregar · link · abrir fora),apps,must,yes,no,Etapa B; P29 P31; hoje só como painel
-Conversar abre chat ao lado do app em tela cheia,apps,must,yes,partial,Etapa B; hoje só divide no painel
-App recarrega sozinho quando o agente muda o código,apps,must,yes,no,Etapa B; transcrição "eu recarrego aqui o aplicativo"
-Erros do app no cabeçalho com Pedir correção,apps,should,no,no,Etapa B; ideia nossa para o loop do construtor
+App em tela cheia com cabeçalho (Conversar · Abrir na Mesa · recarregar · link · abrir fora),apps,must,yes,yes,Etapa B (AppsB); /apps/<workspace>/<slug>; AppView.vue + AppFullPage.vue; rail sozinho à esquerda; "código em apps/<slug>/" mostra a pasta no painel de arquivos; não visto no navegador
+Conversar abre chat ao lado do app em tela cheia,apps,must,yes,yes,Etapa B (AppsB); coluna redimensionável · Esc fecha · app como chip no composer · nada é enviado sozinho; no painel da Mesa continua dividindo ao lado
+App recarrega sozinho quando o agente muda o código,apps,must,yes,yes,Etapa B (AppsB); hub/apps/live.rs; 600 ms de silêncio; aviso pelo socket agent-activity; "Atualizado agora · Desfazer" (desfaz pelo histórico de arquivos; desfazer o desfazer = refazer)
+App pede para não recarregar com entrada não salva (holdReload),apps,should,no,yes,Etapa B (AppsB); tendly.host.holdReload(true/false); aviso "Tem uma versão nova pronta · Recarregar agora"
+Erros do app no cabeçalho com Pedir correção,apps,should,no,yes,Etapa B (AppsB); sdk.js avisa error · unhandledrejection · console.error · arquivo que não carregou; "N erros" → lista → preenche o composer com app · tela · arquivo:linha (nunca envia)
 Contexto do app com a tela atual (App · Quadro),apps,should,yes,partial,Etapa C; P32; hoje só o nome
 Ponte app → Mesa (abrir conversa · arquivo · app),apps,should,yes,no,Etapa C; P32 botão Abrir do card
 App lê dados do Tendly (sessões · arquivos · automações) com permissão,apps,should,yes,no,Etapa C; app Sessões (P11)

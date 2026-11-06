@@ -18,7 +18,7 @@ import { errorMessage } from "../api";
 import { useI18n } from "../../i18n";
 import AppView from "./AppView.vue";
 import { findApp, type HubApp } from "./apps";
-import { APP_MIN, CHAT_MIN, appAttachment, clampChatWidth, fillComposer, maxChatWidth, readSideChats, writeSideChats } from "./app-chat";
+import { APP_MIN, CHAT_MIN, appAttachment, clampChatWidth, fillComposer, maxChatWidth, readSideChats, sideChatSession, writeSideChats } from "./app-chat";
 import { setPageContext } from "./open-context";
 
 const props = defineProps<{
@@ -64,6 +64,9 @@ const chatSession = computed(() => { const id = side.chats[key.value]; return id
 const choices = computed(() => props.sessions.filter(session => session.workspace_id === props.workspaceId));
 const starting = ref(false), chatProblem = ref("");
 const root = ref<HTMLElement>(), column = ref<HTMLElement>();
+// The conversation on screen here is in front of the person, as a focused tab of the Mesa is.
+watch([chatOpen, chatSession], () => { sideChatSession.value = chatOpen.value ? chatSession.value?.id : undefined; }, { immediate: true });
+onBeforeUnmount(() => { sideChatSession.value = undefined; });
 
 async function focusComposer() {
   // The conversation draws its input a frame or a few after it mounts.

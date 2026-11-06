@@ -5,7 +5,7 @@ description: Build, change or fix a custom app inside Tendly (a mini-app, dashbo
 
 # Tendly apps
 
-A Tendly app is a folder of static files (HTML, CSS, JS) inside a workspace. Tendly lists it in the Apps page and sidebar, opens it on the Mesa in a pane, and stores its state through a small data API. There is no server code and no build step.
+A Tendly app is a folder of static files (HTML, CSS, JS) inside a workspace. Tendly lists it in the Apps page, the sidebar and the icon rail, opens it in full screen (`/apps/<workspace id>/<slug>`) or as a pane on the Mesa, reloads it by itself when you change its files, and stores its state through a small data API. There is no server code and no build step.
 
 ## Folder convention
 
@@ -50,16 +50,69 @@ It exposes `window.tendly` (every call returns a Promise and throws an `Error` w
 - `await tendly.data.set(key, value)` stores any JSON value up to 1 MB and returns `{ key, size, updated_at }`.
 - `await tendly.data.list()` returns `[{ key, size, updated_at }]`.
 - `await tendly.data.remove(key)` deletes a key.
+- `tendly.host.holdReload(true | false)` and `tendly.host.framed`: see "The app reloads on its own" below.
 
 Keys are letters, digits, `_` and `-`, up to 64 characters. Each key is saved as `data/<key>.json`. Prefer a few keys holding whole documents (`leads`, `settings`) over one key per item; debounce saves from text inputs.
 
 While the app is open, do not edit files in `data/` by hand: the app may overwrite your change or read a half-written file. To change stored data, change the app (or ask the person to close it first).
 
+## The app reloads on its own
+
+Tendly watches `apps/<slug>/`. About 600 ms after your last write, every open view of the app (panes and full screen) reloads, on the page of the app that was showing, and the person sees "Updated just now · Undo". So:
+
+- Do not tell the person to press reload. Say what changed; they are already looking at it.
+- Finish a change in one go where you can. Each pause longer than about half a second between writes is a separate reload, and the app may be seen half-edited in between.
+- Writes to `data/` never reload the app (that is the app saving its own state).
+- **Undo** puts the app's files back as they were before that burst of writes, from Tendly's file history: edited files are restored, files you deleted come back, files you created are removed. Binary files (images) and files over 1 MB are not in the history, so they stay as you left them. If the person says they undid your change, read the files again before continuing: they are not what you last wrote.
+- A reload starts the page from scratch. Anything the person should not lose must be saved with `tendly.data` as they go, not kept only in memory.
+
+### Unsaved input: `tendly.host.holdReload`
+
+If the app has input the person has not saved yet (a form being typed, an editor with unsaved changes), ask Tendly to wait:
+
+```js
+editor.addEventListener('input', () => { dirty = true; tendly.host.holdReload(true); });
+async function save() {
+  await tendly.data.set('doc', read());
+  dirty = false;
+  tendly.host.holdReload(false);   // if a new version was waiting, the app reloads now
+}
+```
+
+While held, Tendly shows "A new version is ready · Reload now" instead of reloading, and the person decides. Rules:
+
+- Call `holdReload(true)` only while there really is unsaved input, and always release it with `holdReload(false)` after saving or discarding. An app that holds forever never shows your fixes.
+- Apps that save every change at once (debounced `tendly.data.set`) do not need it.
+- A page load clears the hold, so there is nothing to reset on start.
+- `tendly.host.framed` is `true` inside Tendly and `false` when the app is opened in a browser tab of its own (there `holdReload` does nothing).
+
+## Errors and "Ask for a fix"
+
+With the SDK included **before the app's own scripts**, Tendly's header shows "N errors" when the app has any of:
+
+- an uncaught error (`window` `error` event), with file, line and column;
+- an unhandled promise rejection;
+- a call to `console.error(...)`;
+- a script, stylesheet or image of the app that failed to load.
+
+The person can open the list and press **Ask for a fix**, which writes a message in a chat (never sent without them) with the app, the screen that was open (for example `apps/crm/index.html#/board`) and each error with its `apps/<slug>/file.js:line:column`. When you receive such a message:
+
+- Open the named file at that line first. Paths are relative to the workspace.
+- Fix the cause, not the report: do not wrap code in an empty `try/catch` or remove a `console.error` just to make the count go away.
+- After your fix the app reloads by itself and the count starts from zero for the new page load.
+
+To make that list useful:
+
+- Use `console.error` for real failures only (a save that failed, data that could not be read). Use `console.warn` or `console.log` for the rest: they are not reported.
+- Let unexpected errors surface instead of swallowing them. Still show the person a readable message in the page; the header's count is for getting it fixed, not a replacement for an error state.
+- If a page of the app does not include the SDK, its errors are not seen by Tendly.
+
 ## Delivering
 
-- After creating an app, tell the person to find it in the Apps page or the sidebar and open it on the Mesa.
-- To change an existing app, edit its files in `apps/<slug>/`, then tell the person to press reload in the app's header to see the new version.
-- When fixing a bug, read the app's files first; check `app.json` if the app does not appear at all.
+- After creating an app, tell the person it is under Apps (the Apps page, the sidebar, the icon rail): one click opens it in full screen, and "Open on the Mesa" puts it in a pane beside their conversations.
+- To change an existing app, edit its files in `apps/<slug>/`. It reloads by itself; say what changed and what to look at.
+- When fixing a bug, read the app's files first; check `app.json` if the app does not appear at all (the Apps page says why an app could not be read).
+- "Chat" in the app's header opens a conversation with the app attached as context (`apps/<slug>/`): when a message arrives with that folder attached and no other detail, it is about that app.
 
 ## Complete example
 

@@ -522,6 +522,17 @@ test('the chat beside a full-screen app is started like any quick session, and h
   assert.doesNotMatch(/<SessionPane[^>]*>/.exec(full)[0], /pane-id/);
 });
 
+test('the conversation in the chat column counts as the one in front of you', () => {
+  const shell = read('../../App.vue');
+  assert.match(shell, /const viewedSessionId = computed\(\(\) => page\.value === "app" \? sideChatSession\.value : page\.value \? undefined : selectedSessionId\.value\);/);
+  // It is marked read, and the server is told it is on screen (so a phone does not ring for it).
+  assert.match(shell, /function seeFocused\(\) \{ const id = viewedSessionId\.value;/);
+  assert.match(shell, /refreshInbox\(presentSession\(viewedSessionId\.value, false\)\)\.then\(seeFocused\)/);
+  const full = read('AppFullPage.vue');
+  assert.match(full, /sideChatSession\.value = chatOpen\.value \? chatSession\.value\?\.id : undefined;/);
+  assert.match(full, /onBeforeUnmount\(\(\) => \{ sideChatSession\.value = undefined; \}\);/);
+});
+
 test('the socket hands every message to the apps, and the frame follows them', () => {
   const activity = read('../AgentActivity.vue');
   assert.match(activity, /import \{ liveMessage \} from "\.\/hub\/app-live";/);

@@ -91,6 +91,7 @@ export function appConvention(slug: string): string {
     `- \`apps/${slug}/index.html\` is the page. Static files only (HTML, CSS, JavaScript, images): no build step, no server of its own, no package installs. Relative links between its files work.`,
     "- Include `<script src=\"/api/hub/apps/sdk.js\"></script>` and keep whatever the app needs to remember with `await tendly.data.get(key, fallback)`, `await tendly.data.set(key, value)`, `await tendly.data.list()` and `await tendly.data.remove(key)` (JSON values). It is stored in `apps/" + slug + "/data/`; do not use localStorage for data that matters.",
     "- It runs in a frame inside Tendly: make it responsive down to about 360px wide, and follow light and dark mode (`prefers-color-scheme`).",
+    "- Tendly reloads the open app by itself a moment after its files change (never for `data/`), so there is no reload to ask for. If the app holds input the person has not saved, call `tendly.host.holdReload(true)` while that is so and `tendly.host.holdReload(false)` once it is saved. Errors (uncaught, unhandled rejections, `console.error`) are shown to the person in the app's header: use `console.error` for real failures only.",
   ].join("\n");
 }
 
