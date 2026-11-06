@@ -16,21 +16,27 @@
  * What the app wants of Tendly (its data, Tendly's data, opening something on
  * the Mesa) arrives as a message from that frame and is answered here, after
  * the person said what the app may do (`AppPermissions.vue`).
+ *
+ * Writes to the app's collections, by any pane or by an agent, are passed on
+ * to the frame when the app subscribed to that collection (`app-records.ts`).
+ * The "…" of the header exports and imports a collection (`AppDataPanel.vue`).
  */
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import Icon from "../Icon.vue";
 import { ApiError, errorMessage } from "../api";
 import { copyText } from "../clipboard";
 import { darkScheme } from "../theme";
 import { showToast } from "../toasts";
 import { useI18n } from "../../i18n";
+import AppDataPanel from "./AppDataPanel.vue";
 import AppPermissions from "./AppPermissions.vue";
 import AppTile from "./AppTile.vue";
 import { appPagePath, apps, findApp, refreshApps } from "./apps";
 import { answerCall, bridgeFailure, createLimiter, decideGrants, hostMessage, loadFrame, loadGrants, renewFrame, type AppFrame, type AppGrants } from "./app-bridge";
 import { clearAppContext, contextOwner, readContext, setAppContext } from "./app-context";
 import { appScreen, errorPlace, fixRequest, insideApp, kindLabel, readAppMessage, withError, type AppError } from "./app-errors";
-import { NOTICE_MS, changeNotice, changedFiles, latestChange, onChange, onLiveReconnect, undoChange, watchApp, type AppChange } from "./app-live";
+import { NOTICE_MS, changeNotice, changedFiles, latestChange, onChange, onLiveReconnect, undoChange, watchApp, watchRecords, type AppChange, type RecordEvent } from "./app-live";
+import { changeFor, createSubscriptions, readRecord } from "./app-records";
 import { openConversation } from "./start";
 
 const props = defineProps<{
@@ -200,7 +206,7 @@ function onMessage(event: MessageEvent) {
     place.value = message.page;
     if (!message.fresh) return;
     // A page that has just loaded starts clean, and already has the newest files.
-    errors.value = []; held.value = false;
+    errors.value = []; held.value = false; subscriptions.clear();
     clearAppContext(liveKey.value, owner);
     tellHost();
     if (pending.value) { const waited = pending.value; pending.value = undefined; seen.value = waited.id; show({ kind: "change", change: waited }); }
@@ -213,6 +219,7 @@ function onMessage(event: MessageEvent) {
       draft: (text, files) => emit("draft", text, files),
       toast: text => { showToast(text, { tone: "info" }); },
       openUrl: url => { window.open(url, "_blank", "noopener,noreferrer"); },
+      subscribe: (collection, on) => subscriptions.set(collection, on),
     }, limiter).then(value => tell(asker, { type: "result", id, ok: true, value }), cause => tell(asker, { type: "result", id, ok: false, error: bridgeFailure(cause) }));
   } else {
     held.value = message.on;
@@ -231,6 +238,63 @@ function closeErrors(event?: KeyboardEvent) {
   event?.preventDefault(); event?.stopPropagation();
   errorsOpen.value = false;
   errorsButton.value?.focus();
+}
+
+// ---------------------------------------------------------------- its records, live
+
+/** The collections the page in the frame asked to hear about (`collection.subscribe`). */
+const subscriptions = createSubscriptions();
+/** A write to one of this app's collections, by any pane or by an agent: passed on if the app is listening. */
+async function relay(event: RecordEvent) {
+  const current = app.value, target = frame.value?.contentWindow;
+  if (!current || !target) return;
+  const change = await changeFor(event, subscriptions, (collection, id) => readRecord(current, collection, id));
+  // The frame may have loaded another page (or another app) while a large record was read.
+  if (change && frame.value?.contentWindow === target) tell(target, { type: "records", collection: event.collection, change });
+}
+/** The socket came back: writes made meanwhile were not heard, so whoever listens reads again. */
+function resyncRecords() {
+  for (const collection of subscriptions.list()) tell(frame.value?.contentWindow, { type: "records", collection, change: { type: "reset", id: null, rev: null, record: null } });
+}
+
+// ---------------------------------------------------------------- the "…" menu: export and import
+
+const moreOpen = ref(false), moreButton = ref<HTMLButtonElement>(), moreMenu = ref<HTMLElement>();
+/** Which of the two the panel above the app is doing, when it is open. */
+const dataMode = ref<"export" | "import">();
+const moreItems = () => Array.from(moreMenu.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+function openMore() {
+  moreOpen.value = true;
+  document.addEventListener("pointerdown", outsideMore, true);
+  void nextTick(() => moreItems()[0]?.focus());
+}
+function closeMore(refocus = false) {
+  if (!moreOpen.value) return;
+  moreOpen.value = false;
+  document.removeEventListener("pointerdown", outsideMore, true);
+  if (refocus) moreButton.value?.focus();
+}
+function toggleMore() { if (moreOpen.value) closeMore(); else openMore(); }
+function outsideMore(event: Event) {
+  const target = event.target as Node | null;
+  if (target && (moreMenu.value?.contains(target) || moreButton.value?.contains(target))) return;
+  closeMore();
+}
+function moreKey(event: KeyboardEvent) {
+  if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeMore(true); return; }
+  if (event.key === "Tab") { closeMore(); return; }
+  const list = moreItems(), index = list.indexOf(document.activeElement as HTMLButtonElement);
+  const next = event.key === "ArrowDown" ? (index + 1) % list.length : event.key === "ArrowUp" ? (index - 1 + list.length) % list.length : event.key === "Home" ? 0 : event.key === "End" ? list.length - 1 : -1;
+  if (next < 0 || !list.length) return;
+  event.preventDefault();
+  list[next]?.focus();
+}
+function openData(mode: "export" | "import") { closeMore(); grantsOpen.value = false; dataMode.value = mode; }
+function closeData() { dataMode.value = undefined; moreButton.value?.focus(); }
+/** Records were imported. An app that listens was told to read again; one that does not is loaded again, unless it holds unsaved input. */
+function imported() {
+  if (subscriptions.size || !frameSrc.value) return;
+  if (held.value) show({ kind: "waiting" }); else reload();
 }
 
 // ---------------------------------------------------------------- reload on its own
@@ -283,21 +347,24 @@ async function undo() {
 }
 const noticeView = computed(() => notice.value?.kind === "change" ? changeNotice(notice.value.change) : undefined);
 
-let stopWatching: (() => void) | undefined, stopReconnect: (() => void) | undefined;
+let stopWatching: (() => void) | undefined, stopRecords: (() => void) | undefined, stopReconnect: (() => void) | undefined;
 const liveKey = computed(() => app.value ? `${app.value.workspace_id}/${app.value.slug}` : "");
 /** Another app in this view (or the first one): nothing of the one before is kept. */
 function reset() {
   loads++; clearTimeout(renewTimer);
   frameSrc.value = undefined; address.value = undefined; frameProblem.value = ""; framing.value = true;
-  place.value = ""; errors.value = []; held.value = false;
+  place.value = ""; errors.value = []; held.value = false; subscriptions.clear();
   grants.value = undefined; grantsOpen.value = false; grantsProblem.value = "";
+  closeMore(); dataMode.value = undefined;
 }
 function follow() {
   stopWatching?.(); stopWatching = undefined;
+  stopRecords?.(); stopRecords = undefined;
   seen.value = undefined; pending.value = undefined; show(undefined);
   const target = app.value;
   if (!target) return;
   stopWatching = watchApp(target, heard);
+  stopRecords = watchRecords(target, event => { void relay(event); });
   // Which change the files just loaded already hold. Asking also has the server index the app, so its next change can be undone.
   latestChange(target).then(latest => { if (seen.value === undefined && liveKey.value === `${target.workspace_id}/${target.slug}`) seen.value = latest?.id ?? ""; }).catch(() => { /* Reloading by hand still works. */ });
 }
@@ -315,13 +382,14 @@ onMounted(() => {
   void refreshApps();
   window.addEventListener("message", onMessage);
   // A socket that came back may mean a server that restarted: it no longer remembers the address it was keeping.
-  stopReconnect = onLiveReconnect(() => { void resync(); void renew(); });
+  stopReconnect = onLiveReconnect(() => { void resync(); void renew(); resyncRecords(); });
   follow();
   void begin();
 });
 onBeforeUnmount(() => {
   window.removeEventListener("message", onMessage);
-  stopWatching?.(); stopReconnect?.();
+  document.removeEventListener("pointerdown", outsideMore, true);
+  stopWatching?.(); stopRecords?.(); stopReconnect?.();
   loads++; clearAppContext(liveKey.value, owner);
   clearTimeout(noticeTimer); clearTimeout(echoTimer); clearTimeout(copiedTimer); clearTimeout(renewTimer);
 });
@@ -344,6 +412,13 @@ onBeforeUnmount(() => {
         <button type="button" class="icon-button" :aria-label="t('Reload')" :title="t('Reload')" :disabled="!app" @click="reload"><Icon name="refresh" :size="14" /></button>
         <button type="button" class="icon-button" :aria-label="t('Copy link')" :title="copied ? t('Link copied') : t('Copy a link to this app')" :disabled="!slug" @click="copyLink"><Icon :name="copied ? 'check' : 'clipboard'" :size="14" /></button>
         <button type="button" class="icon-button" :aria-label="t('Open in new tab')" :title="t('Open in new tab')" :disabled="!app" @click="openTab"><Icon name="arrow" :size="14" /></button>
+        <span class="app-view-more-anchor">
+          <button ref="moreButton" type="button" class="icon-button" aria-haspopup="menu" :aria-expanded="moreOpen" :aria-label="t('More')" :title="t('More')" :disabled="!app" @click="toggleMore" @keydown.down.prevent="openMore"><Icon name="more" :size="14" /></button>
+          <div v-if="moreOpen" ref="moreMenu" class="app-view-more" role="menu" :aria-label="t('More')" @keydown="moreKey">
+            <button type="button" role="menuitem" @click="openData('export')"><Icon name="download" :size="14" /><span>{{ t('Export data…') }}</span></button>
+            <button type="button" role="menuitem" @click="openData('import')"><Icon name="upload" :size="14" /><span>{{ t('Import data…') }}</span></button>
+          </div>
+        </span>
       </div>
       <span class="sr-only" role="status">{{ copied ? t('Link copied') : copyProblem }}</span>
     </header>
@@ -365,6 +440,7 @@ onBeforeUnmount(() => {
       </footer>
     </div>
     <AppPermissions v-if="grants && frameSrc && (grantsOpen || grants.status === 'ask')" layout="strip" :name="name" :grants="grants" :busy="deciding" :problem="grantsProblem" @decide="decide" @close="closeGrants" @keydown.esc="grants?.status !== 'ask' && closeGrants()" />
+    <AppDataPanel v-if="app && dataMode" :app="app" :mode="dataMode" @close="closeData" @imported="imported" @keydown.esc.stop="closeData" />
     <div class="app-view-body">
       <!-- No allow-same-origin: the app is a page of its own, not a part of Tendly (see hub/apps/frame.rs). -->
       <iframe v-if="frameSrc" ref="frame" :key="`${frameSrc}#${reloads}`" class="app-view-frame" :src="frameSrc" :title="name" sandbox="allow-scripts allow-forms allow-modals allow-downloads allow-popups" allow="clipboard-write" referrerpolicy="no-referrer" @load="framing = false" />
@@ -425,6 +501,13 @@ onBeforeUnmount(() => {
 .app-view-code:hover { background: var(--fill); color: var(--ink); }
 .app-view-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; max-width: 100%; margin-left: auto; }
 .app-view-chat, .app-view-mesa, .app-view-errors-button, .app-view-permissions { display: inline-flex; align-items: center; gap: 5px; }
+.app-view-more-anchor { position: relative; display: inline-flex; }
+.app-view-more { position: absolute; top: calc(100% + 4px); right: 0; z-index: 6; display: grid; gap: 1px; width: max-content; min-width: 180px; max-width: min(260px, 80vw); padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--elevated); box-shadow: var(--shadow-md); }
+.app-view-more > button { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--ink-soft); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }
+.app-view-more > button > span { min-width: 0; overflow-wrap: anywhere; }
+.app-view-more > button > svg { flex: none; color: var(--muted); }
+.app-view-more > button:hover { background: var(--fill); color: var(--ink); }
+.app-view-more > button:focus-visible { outline-offset: -2px; }
 .app-view-problem { flex: none; margin: 0; padding: 4px 12px; border-bottom: 1px solid var(--danger-line); background: var(--danger-soft); color: var(--danger-ink); font-size: var(--text-xs); }
 .app-view-errors { flex: none; display: flex; flex-direction: column; max-height: 45%; min-height: 0; border-bottom: 1px solid var(--danger-line); background: var(--surface); }
 .app-view-errors ol { flex: 1; min-height: 0; margin: 0; padding: 6px 12px; overflow: auto; list-style: none; display: grid; gap: 6px; }
@@ -453,5 +536,6 @@ onBeforeUnmount(() => {
   .app-view-bar .icon-button, .app-view-errors .icon-button, .app-view-notice .icon-button { width: 44px; height: 44px; }
   .app-view-bar .small-button, .app-view-errors .small-button, .app-view-code { min-height: 44px; min-width: 44px; }
   .app-view-notice .text-button { min-height: 44px; padding: 0 6px; }
+  .app-view-more > button { min-height: 44px; }
 }
 </style>

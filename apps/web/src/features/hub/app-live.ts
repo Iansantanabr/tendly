@@ -5,6 +5,10 @@
  * `liveMessage`). A pane or the full-screen view showing that app reloads its
  * frame and offers to undo the change.
  *
+ * The same socket carries the writes to an app's collections (records kept
+ * in Tendly's database): a view of that app passes them on to the app's frame
+ * (`app-records.ts`), so two panes of one app keep up with each other.
+ *
  * This file is the listening, the two calls to the server and the small
  * decisions; `AppView.vue` draws the notice.
  */
@@ -29,17 +33,39 @@ type AppId = { workspace_id: string; slug: string };
 /** How long "Updated just now" stays up. */
 export const NOTICE_MS = 60_000;
 
+/** One write to a collection of an app, as the server tells it (`hub/apps/records.rs::announce`). */
+export interface RecordEvent {
+  collection: string;
+  /** `reset`: many records at once (an import, the collection emptied). */
+  op: "insert" | "update" | "remove" | "reset";
+  id: string | null;
+  rev: number | null;
+  /** The record after the write; null for a removal, a reset, or a record too large to send along (`large`). */
+  record: { id: string; rev: number; created_at: string; updated_at: string; data: Record<string, unknown> } | null;
+  large: boolean;
+}
+
 const key = (app: AppId) => `${app.workspace_id}/${app.slug}`;
 const listeners = new Map<string, Set<(change: AppChange) => void>>();
+const recordListeners = new Map<string, Set<(event: RecordEvent) => void>>();
 const reconnected = new Set<() => void>();
+
+function listen<T>(all: Map<string, Set<(value: T) => void>>, id: string, listener: (value: T) => void): () => void {
+  let set = all.get(id);
+  if (!set) { set = new Set(); all.set(id, set); }
+  const mine = set;
+  mine.add(listener);
+  return () => { mine.delete(listener); if (!mine.size && all.get(id) === mine) all.delete(id); };
+}
+
+/** Hears every write to the collections of one app until the returned function is called. */
+export function watchRecords(app: AppId, listener: (event: RecordEvent) => void): () => void {
+  return listen(recordListeners, key(app), listener);
+}
 
 /** Hears every change of one app until the returned function is called. */
 export function watchApp(app: AppId, listener: (change: AppChange) => void): () => void {
-  const id = key(app);
-  let set = listeners.get(id);
-  if (!set) { set = new Set(); listeners.set(id, set); }
-  set.add(listener);
-  return () => { set.delete(listener); if (!set.size && listeners.get(id) === set) listeners.delete(id); };
+  return listen(listeners, key(app), listener);
 }
 
 /** Called each time the socket (re)connects: whatever was said meanwhile was missed. */
@@ -59,16 +85,38 @@ function asChange(value: unknown): AppChange | undefined {
   };
 }
 
+const OPS: readonly RecordEvent["op"][] = ["insert", "update", "remove", "reset"];
+function asRecordEvent(collection: unknown, value: unknown): RecordEvent | undefined {
+  const change = value as Record<string, unknown> | null;
+  if (typeof collection !== "string" || !collection || !change || typeof change !== "object") return undefined;
+  const op = OPS.find(known => known === change.op);
+  if (!op) return undefined;
+  const record = change.record as RecordEvent["record"];
+  const whole = !!record && typeof record === "object" && typeof record.id === "string" && typeof record.rev === "number" && !!record.data && typeof record.data === "object";
+  return {
+    collection, op, id: typeof change.id === "string" ? change.id : null, rev: typeof change.rev === "number" ? change.rev : null,
+    record: whole ? record : null, large: change.large === true,
+  };
+}
+
 /**
- * A message from the agent-activity socket. Only two concern apps: the
- * snapshot the server sends on every (re)connection, and an app that changed.
- * A listener that throws does not stop the others, nor the socket's own work.
+ * A message from the agent-activity socket. Three concern apps: the snapshot
+ * the server sends on every (re)connection, an app whose files changed, and a
+ * write to one of an app's collections. A listener that throws does not stop
+ * the others, nor the socket's own work.
  */
 export function liveMessage(message: unknown): void {
-  const data = message as { type?: unknown; event?: unknown; workspace_id?: unknown; slug?: unknown; change?: unknown } | null;
+  const data = message as { type?: unknown; event?: unknown; workspace_id?: unknown; slug?: unknown; change?: unknown; collection?: unknown } | null;
   if (!data || typeof data !== "object") return;
   if (data.type === "snapshot") { for (const listener of [...reconnected]) { try { listener(); } catch { /* The next one still hears. */ } } return; }
-  if (data.type !== "hub" || data.event !== "app-changed" || typeof data.workspace_id !== "string" || typeof data.slug !== "string") return;
+  if (data.type !== "hub" || typeof data.workspace_id !== "string" || typeof data.slug !== "string") return;
+  if (data.event === "app-records") {
+    const event = asRecordEvent(data.collection, data.change);
+    if (!event) return;
+    for (const listener of [...(recordListeners.get(`${data.workspace_id}/${data.slug}`) ?? [])]) { try { listener(event); } catch { /* The next one still hears. */ } }
+    return;
+  }
+  if (data.event !== "app-changed") return;
   const change = asChange(data.change);
   if (!change) return;
   for (const listener of [...(listeners.get(`${data.workspace_id}/${data.slug}`) ?? [])]) { try { listener(change); } catch { /* The next one still hears. */ } }

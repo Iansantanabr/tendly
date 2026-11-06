@@ -130,4 +130,19 @@ pub(crate) fn serves_app_frames(method: &axum::http::Method, path: &str) -> bool
     apps::frame::is_frame_request(method, path)
 }
 
+/// The tools an agent gets for the records of an app's collections
+/// (`apps/records/tools.rs`), listed and dispatched by `agent.rs`.
+pub(crate) fn app_record_tools() -> Vec<serde_json::Value> {
+    apps::records::tools::tools()
+}
+
+pub(crate) async fn call_app_record_tool(
+    state: &AppState,
+    caller: crate::agent::Caller,
+    name: &str,
+    arguments: &serde_json::Value,
+) -> Result<serde_json::Value> {
+    apps::records::tools::call(state, caller, name, arguments).await
+}
+
 pub(crate) type SharedConnection = Mutex<rusqlite::Connection>;

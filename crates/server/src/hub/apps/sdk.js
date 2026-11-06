@@ -11,7 +11,8 @@
  * Everything below is a message to the Tendly page that frames the app, which
  * does the work with its own credentials and answers. Every call that returns
  * a Promise rejects with an Error carrying the message, `status` (the HTTP
- * status, when there is one) and `code` ("permission", "outside", "timeout").
+ * status, when there is one) and `code` ("permission", "outside", "timeout",
+ * "conflict").
  * In a browser tab of its own (`tendly.host.framed === false`) there is no
  * Tendly page to ask, and those calls reject with code "outside".
  *
@@ -24,6 +25,41 @@
  *   tendly.data.list()             [{ key, size, updated_at }]
  *   tendly.data.remove(key)        deletes the value
  *   Keys are letters, digits, "_" and "-", up to 64 characters.
+ *
+ * ITS RECORDS (no permission needed; kept in Tendly's database, not in the app's folder)
+ *   For a list of things that change one at a time: leads, cards, tasks. Two panes of the app,
+ *   or the app and an agent, can write at once without one overwriting the other. Keep
+ *   tendly.data for small settings and single documents.
+ *   var leads = tendly.db.collection('leads')    names like keys
+ *   A record is { id, rev, created_at, updated_at, data }: data is your object (up to 5 MB), rev
+ *   counts its writes. A collection holds up to 50,000 records.
+ *   leads.list({ where, order, limit, offset })  [records], with .total (how many match)
+ *       where: { stage: 'new' } compares top-level fields of data with a text, a number, true,
+ *       false or null (null also finds records without the field); { stage: { in: ['new', 'won'] } }
+ *       takes any of a list. order: 'created_at' (default), 'updated_at' or a field name, with '-'
+ *       in front for descending. limit: 1000 by default, 5000 at most.
+ *   leads.count(where)                 how many match
+ *   leads.get(id)                      the record, or null
+ *   leads.insert(doc, { id })          the new record (rev 1); the id is made for you unless given
+ *   leads.update(id, patch, { rev })   changes the top-level fields in patch and returns the record.
+ *       With rev, only if the record is still at that revision: otherwise it rejects with
+ *       error.code "conflict" and error.current, the record as it is now (merge and try again).
+ *       { replace: true } makes data exactly `patch`.
+ *   leads.remove(id, { rev })          true if there was one; the same conflict rule with rev
+ *   leads.subscribe(fn)                fn({ type: 'insert' | 'update' | 'remove' | 'reset', id, rev, record })
+ *       on every change, whoever made it: another pane, an agent, this page. 'reset' means many
+ *       records changed at once: list again. Returns a function that stops it.
+ *   tendly.db.collections()            [{ name, count, updated_at }]
+ *
+ * ITS FILES (no permission needed; what a person adds, kept in apps/<slug>/files/)
+ *   tendly.files.upload(file, { name })  a File or Blob: PNG, JPEG, GIF, WebP, AVIF or PDF, up to 20 MB
+ *                                      -> { path, name, size, type, updated_at, url }. Tendly picks a safe
+ *                                      name and never overwrites; keep `path` (in a record, say).
+ *   tendly.files.url(path)             an address for <img src> or <a href download>. It changes with
+ *                                      every load of the app: store the path, ask for the url when drawing.
+ *   tendly.files.list()                [{ path, name, size, type, updated_at, url }]
+ *   tendly.files.remove(path)          true if there was one
+ *   tendly.files.open(path)            opens the file on the Mesa (to read a PDF, say)
  *
  * THE TENDLY AROUND IT (no permission needed, except where said)
  *   tendly.host.framed             true inside Tendly, false in a tab of its own
@@ -81,6 +117,7 @@
   var framed = !!match && !!window.parent && window.parent !== window;
   var MAX_REPORTS = 50, reports = 0, lastReport = '';
   var CALL_TIMEOUT = 30000, calls = {}, nextCall = 0;
+  var UPLOAD_TIMEOUT = 300000, MAX_UPLOAD = 20 * 1024 * 1024;
 
   function post(message) {
     if (!framed) return;
@@ -95,7 +132,7 @@
     return error;
   }
   /** Asks the Tendly page to do something and resolves with its answer. */
-  function call(method, args) {
+  function call(method, args, patience) {
     if (!match) return Promise.reject(fail('tendly: this page is not being served as a Tendly app', 'outside'));
     if (!framed) {
       return Promise.reject(fail('tendly: this app is open outside Tendly, so it cannot reach Tendly or its own data. Open it from the Apps page.', 'outside'));
@@ -105,7 +142,7 @@
       var timer = setTimeout(function () {
         delete calls[id];
         reject(fail('tendly: Tendly did not answer "' + method + '"', 'timeout'));
-      }, CALL_TIMEOUT);
+      }, patience || CALL_TIMEOUT);
       calls[id] = { resolve: resolve, reject: reject, timer: timer };
       post({ type: 'call', id: id, method: method, args: args === undefined ? {} : args });
     });
@@ -142,7 +179,7 @@
   var themeQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   var theme = themeQuery && themeQuery.matches ? 'dark' : 'light';
   var mode = framed ? 'pane' : 'tab';
-  var themeWatchers = [], sizeWatchers = [];
+  var themeWatchers = [], sizeWatchers = [], recordWatchers = Object.create(null);
   function pane() { return { width: window.innerWidth || 0, height: window.innerHeight || 0, mode: mode }; }
   function tell(watchers, value) {
     watchers.slice().forEach(function (watcher) {
@@ -172,8 +209,14 @@
         if (data.ok) waiting.resolve(data.value);
         else {
           var problem = data.error || {};
-          waiting.reject(fail(String(problem.message || 'Tendly refused this'), problem.code, problem.status));
+          var refusal = fail(String(problem.message || 'Tendly refused this'), problem.code, problem.status);
+          // On a conflict: the record as it is now.
+          if (problem.current !== undefined) refusal.current = problem.current;
+          waiting.reject(refusal);
         }
+      } else if (data.type === 'records') {
+        // A record of a collection this page subscribed to changed (in any pane, or by an agent).
+        tell(recordWatchers[data.collection] || [], data.change);
       } else if (data.type === 'host') {
         if ((data.theme === 'light' || data.theme === 'dark') && data.theme !== theme) {
           theme = data.theme; showTheme(); tell(themeWatchers, theme);
@@ -273,6 +316,73 @@
     };
   }
 
+  // ---- Records: collections kept by Tendly, one row per record ------------
+  function recordJson(doc) {
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error('tendly: a record is an object, like { name: "Ana" }');
+    return JSON.stringify(doc);
+  }
+  function revision(options) {
+    return options && options.rev !== undefined && options.rev !== null ? Number(options.rev) : undefined;
+  }
+  function collection(name) {
+    name = checkedKey(name);
+    return {
+      name: name,
+      list: async function (options) {
+        options = options || {};
+        var page = await call('db.list', { collection: name, where: options.where, order: options.order, limit: options.limit, offset: options.offset });
+        var records = page.records;
+        records.total = page.total; records.truncated = page.truncated === true;
+        return records;
+      },
+      count: function (where) { return call('db.count', { collection: name, where: where }); },
+      get: async function (id) {
+        try {
+          return await call('db.get', { collection: name, id: checkedKey(id) });
+        } catch (error) {
+          if (error.status === 404) return null;
+          throw error;
+        }
+      },
+      insert: async function (doc, options) {
+        var id = options && options.id !== undefined && options.id !== null ? checkedKey(options.id) : undefined;
+        return call('db.insert', { collection: name, json: recordJson(doc), id: id });
+      },
+      update: async function (id, patch, options) {
+        return call('db.update', { collection: name, id: checkedKey(id), json: recordJson(patch), rev: revision(options), replace: !!(options && options.replace) });
+      },
+      remove: async function (id, options) {
+        return call('db.remove', { collection: name, id: checkedKey(id), rev: revision(options) });
+      },
+      subscribe: function (watcher) {
+        if (typeof watcher !== 'function') throw new Error('tendly: a function is needed');
+        var watchers = recordWatchers[name] || (recordWatchers[name] = []);
+        watchers.push(watcher);
+        // Tendly passes on the changes of the collections a page asked for, and only those.
+        if (watchers.length === 1) call('db.subscribe', { collection: name }).catch(function () { /* outside Tendly nothing is live */ });
+        return function () {
+          var at = watchers.indexOf(watcher);
+          if (at < 0) return;
+          watchers.splice(at, 1);
+          if (!watchers.length) call('db.unsubscribe', { collection: name }).catch(function () { /* the page is going away */ });
+        };
+      }
+    };
+  }
+
+  // ---- Files a person added: apps/<slug>/files/, served with the app's own files
+  var filesBase = match ? HOST_ORIGIN + match[0].replace(/\/?$/, '/') + 'files/' : '';
+  /** 'files/photo.png' (or just 'photo.png') as the plain name Tendly stored it under. */
+  function fileName(path) {
+    var name = String(path).replace(/^\.?\/+/, '').replace(/^files\//, '');
+    if (!/^[A-Za-z0-9_][A-Za-z0-9._-]*$/.test(name) || name.indexOf('..') >= 0) {
+      throw new Error('tendly: "' + path + '" is not an uploaded file (expected files/<name>)');
+    }
+    return name;
+  }
+  function fileUrl(path) { return filesBase + encodeURIComponent(fileName(path)); }
+  function withUrl(file) { file.url = fileUrl(file.path); return file; }
+
   window.tendly = {
     app: app,
     data: {
@@ -290,6 +400,23 @@
       },
       list: function () { return call('data.list'); },
       remove: async function (key) { await call('data.remove', { key: checkedKey(key) }); }
+    },
+    db: {
+      collection: collection,
+      collections: function () { return call('db.collections'); }
+    },
+    files: {
+      upload: async function (file, options) {
+        if (!file || typeof file.arrayBuffer !== 'function') throw new Error('tendly: upload() takes a File or a Blob');
+        if (file.size > MAX_UPLOAD) throw fail('tendly: a file can be at most 20 MB', 'invalid', 413);
+        var bytes = await file.arrayBuffer();
+        var name = String((options && options.name) || file.name || '');
+        return withUrl(await call('files.upload', { name: name, bytes: bytes }, UPLOAD_TIMEOUT));
+      },
+      url: fileUrl,
+      list: async function () { return (await call('files.list')).map(withUrl); },
+      remove: async function (path) { return call('files.remove', { name: fileName(path) }); },
+      open: async function (path) { return call('host.openFile', { path: 'apps/' + app.slug + '/files/' + fileName(path) }); }
     },
     host: {
       /** True while the app is shown inside Tendly (a pane or the full-screen view), false in a tab of its own. */

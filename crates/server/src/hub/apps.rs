@@ -8,6 +8,11 @@
 //! `apps/<slug>/data/<key>.json` its state, read and written only through the
 //! data API below (the files are never served from `data/`).
 //!
+//! Three places hold what an app keeps: `data/` (one JSON document per key,
+//! below), its collections (`records.rs`: records with revisions in `hub.db`,
+//! for what several panes or an agent change at once), and `files/`
+//! (`uploads.rs`: the images and PDFs a person adds).
+//!
 //! Trust: an app is code an agent wrote, and it may pull scripts from a CDN.
 //! It does not run as Tendly. Its files are served from an address of their
 //! own with a CSP sandbox that gives the page an opaque origin (`frame.rs`),
@@ -44,7 +49,9 @@ use tendly_domain::{Workspace, WorkspaceId};
 pub(crate) mod frame;
 pub(crate) mod grants;
 pub(crate) mod live;
+pub(crate) mod records;
 mod tendly;
+pub(crate) mod uploads;
 #[cfg(test)]
 mod tests;
 
@@ -89,6 +96,8 @@ pub fn routes() -> Router<AppState> {
         .merge(frame::routes())
         .merge(grants::routes())
         .merge(tendly::routes())
+        .merge(records::routes())
+        .merge(uploads::routes())
 }
 
 // ---------------------------------------------------------------------------

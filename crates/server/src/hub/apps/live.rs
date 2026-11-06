@@ -2,7 +2,7 @@
 //!
 //! The watcher that feeds the file history (`history.rs`) tells this module
 //! about every path that changes under `apps/<slug>/` (never `data/`, which is
-//! the app's own state). Changes to one app that come close together are one
+//! the app's own state, nor `files/`, which is what the person uploaded). Changes to one app that come close together are one
 //! burst: once the app has been quiet for `QUIET`, the burst is closed, what
 //! each file held before and holds now is written down, and every open window
 //! is told over the agent-activity socket, so the panes showing that app
@@ -159,11 +159,15 @@ pub(crate) struct Live {
     wake: tokio::sync::Notify,
 }
 
+/// The folders at the top of an app that are what it keeps, not what it is:
+/// its saved state and the files a person uploaded (`uploads.rs`).
+const KEPT: &[&str] = &["data", super::uploads::FOLDER];
+
 /// `apps/<slug>/<rest>` for a path whose change reloads the app: not the
-/// folder itself, not `data/`, not a dot-file.
+/// folder itself, not `data/` or `files/`, not a dot-file.
 pub(crate) fn app_path(path: &str) -> Option<(&str, &str)> {
     let (slug, rest) = path.strip_prefix("apps/")?.split_once('/')?;
-    if !valid_slug(slug) || rest.is_empty() || rest == "data" || rest.starts_with("data/") {
+    if !valid_slug(slug) || rest.is_empty() || KEPT.contains(&rest.split('/').next().unwrap_or_default()) {
         return None;
     }
     if rest.split('/').any(|part| part.is_empty() || part.starts_with('.')) {
@@ -335,7 +339,7 @@ fn hold(store: &crate::hub::HubStore, blobs: &Path, root: &Path, workspace: Work
     }
 }
 
-/// Every file of an app (not `data/`, dot-files or build output), as it is now.
+/// Every file of an app (not `data/`, `files/`, dot-files or build output), as it is now.
 fn index_app(store: &crate::hub::HubStore, blobs: &Path, root: &Path, workspace: WorkspaceId, slug: &str) -> Index {
     let mut index = Index { files: HashMap::new(), complete: true };
     let mut stack = vec![(root.join("apps").join(slug), format!("apps/{slug}"), 0usize)];
@@ -343,7 +347,7 @@ fn index_app(store: &crate::hub::HubStore, blobs: &Path, root: &Path, workspace:
         let Ok(entries) = fs::read_dir(&dir) else { continue };
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') || (depth == 0 && name == "data") {
+            if name.starts_with('.') || (depth == 0 && KEPT.contains(&name.as_str())) {
                 continue;
             }
             let path = format!("{prefix}/{name}");

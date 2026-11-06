@@ -413,8 +413,11 @@ test('the full-screen header names every action, in the order of the plan', asyn
   assert.match(html, /<section class="app-view is-page" aria-label="Pipeline"/);
   const bar = /<header class="app-view-bar"[\s\S]*?<\/header>/.exec(html)[0];
   const buttons = tags(bar, /<button[^>]*>/g);
-  assert.deepEqual(buttons.map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Show apps/pipeline/ in the file panel', 'Chat', 'Open on the Mesa', 'Reload', 'Copy link', 'Open in new tab']);
+  assert.deepEqual(buttons.map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Show apps/pipeline/ in the file panel', 'Chat', 'Open on the Mesa', 'Reload', 'Copy link', 'Open in new tab', 'More']);
   for (const button of buttons) { assert.match(button, /type="button"/); assert.match(button, /title="[^"]+"/); }
+  // The last one is a menu (export and import, stage D), closed until it is asked for.
+  assert.match(buttons.at(-1), /aria-haspopup="menu" aria-expanded="false"/);
+  assert.doesNotMatch(bar, /role="menu"/);
   assert.match(bar, /<strong class="app-view-name"[^>]*>Pipeline<\/strong>/);
   assert.match(bar, /code in apps\/pipeline\//);
   assert.match(bar, /<span class="app-tile"[^>]*>P<\/span>/);
@@ -433,7 +436,7 @@ test('a pane keeps its slim bar: Chat, reload, copy link and open outside', asyn
   stage([APP]);
   const html = await render(View, { ...PAGE, mode: 'pane' });
   const bar = /<header class="app-view-bar"[\s\S]*?<\/header>/.exec(html)[0];
-  assert.deepEqual(tags(bar, /<button[^>]*>/g).map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Chat', 'Reload', 'Copy link', 'Open in new tab']);
+  assert.deepEqual(tags(bar, /<button[^>]*>/g).map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Chat', 'Reload', 'Copy link', 'Open in new tab', 'More']);
   assert.match(bar, /<code class="app-view-path"[^>]*>apps\/pipeline\/<\/code>/);
   assert.doesNotMatch(bar, /aria-pressed/);
   assert.doesNotMatch(bar, /Open on the Mesa/);
@@ -554,7 +557,7 @@ test('the socket hands every message to the apps, and the frame follows them', (
   assert.match(activity, /try \{ message = JSON\.parse\(String\(event\.data\)\); \} catch \{ return; \}\n  liveMessage\(message\);/);
   const view = read('AppView.vue');
   assert.match(view, /stopWatching = watchApp\(target, heard\);/);
-  assert.match(view, /stopReconnect = onLiveReconnect\(\(\) => \{ void resync\(\); void renew\(\); \}\);/);
+  assert.match(view, /stopReconnect = onLiveReconnect\(\(\) => \{ void resync\(\); void renew\(\); resyncRecords\(\); \}\);/);
   assert.match(view, /window\.addEventListener\("message", onMessage\);/);
   assert.match(view, /window\.removeEventListener\("message", onMessage\);/);
   assert.match(view, /readAppMessage\(event, \{ frame: frame\.value\?\.contentWindow \}, current\)/);

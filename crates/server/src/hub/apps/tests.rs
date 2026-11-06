@@ -6,6 +6,8 @@ use axum::{body::to_bytes, http::Request as HttpRequest};
 use std::{fs, sync::Arc};
 use tower::ServiceExt;
 
+mod data;
+
 const HOST: &str = "127.0.0.1:8787";
 const TOKEN: &str = "team-token";
 
@@ -80,11 +82,13 @@ fn hub_apps_clean_path_refuses_escapes_and_data() {
 
 #[test]
 fn hub_apps_sdk_is_small_and_complete() {
-    assert!(SDK.lines().count() < 340, "{} lines", SDK.lines().count());
+    assert!(SDK.lines().count() < 480, "{} lines", SDK.lines().count());
     for needle in [
         "window.tendly", "data.get", "data.set", "data.list", "data.remove", "setContext", "openConversation",
         "openFile", "openApp", "openUrl", "draftChat", "notify", "toast", "onTheme", "onResize", "holdReload",
         "sessions.list", "workspace.files", "workspace.read", "automations.list", "permissions.get",
+        "db.list", "db.count", "db.get", "db.insert", "db.update", "db.remove", "db.subscribe", "db.unsubscribe", "db.collections",
+        "files.upload", "files.list", "files.remove", "error.current",
     ] {
         assert!(SDK.contains(needle), "{needle}");
     }
@@ -614,6 +618,7 @@ fn hub_apps_live_only_app_files_reload_an_app() {
     assert_eq!(live::app_path("apps/crm/assets/data/x.json"), Some(("crm", "assets/data/x.json")));
     for other in [
         "apps/crm", "apps/crm/", "apps/crm/data", "apps/crm/data/leads.json", "apps/crm/.env", "apps/crm/js/.cache/x",
+        "apps/crm/files", "apps/crm/files/photo.png",
         "apps/Bad Name/index.html", "src/apps/crm/index.html", "notes.md", "apps/index.html", "apps/crm//x",
     ] {
         assert_eq!(live::app_path(other), None, "{other}");

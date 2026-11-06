@@ -137,6 +137,21 @@ const MIGRATIONS: &[&str] = &[
         secret TEXT NOT NULL
     );
     ALTER TABLE notifications ADD COLUMN link TEXT;",
+    // 11: the records of an app's collections (`apps/records.rs`): one JSON
+    // object each, with a revision that counts its writes
+    "CREATE TABLE app_records (
+        workspace_id TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        collection TEXT NOT NULL,
+        id TEXT NOT NULL,
+        data TEXT NOT NULL CHECK (json_valid(data)),
+        rev INTEGER NOT NULL DEFAULT 1 CHECK (rev >= 1),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, slug, collection, id)
+    );
+    CREATE INDEX app_records_by_created ON app_records(workspace_id, slug, collection, created_at);
+    CREATE INDEX app_records_by_updated ON app_records(workspace_id, slug, collection, updated_at);",
 ];
 
 pub struct HubStore {
@@ -534,6 +549,61 @@ mod tests {
                     "INSERT INTO notifications(kind, title, created_at, link) VALUES ('app', 'CRM: New lead', 'now', '/apps/w/crm')",
                     [],
                 )?;
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_ten_database_upgrades_to_app_records() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..10] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 10i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO app_grants(workspace_id, slug, permission, allowed, granted_at) VALUES ('w', 'crm', 'notify', 1, 'then')",
+                [],
+            )
+            .unwrap();
+        connection.execute("INSERT INTO app_frame_secret(id, secret) VALUES (1, 'kept')", []).unwrap();
+        connection
+            .execute(
+                "INSERT INTO notifications(kind, title, created_at, link) VALUES ('app', 'CRM: New lead', 'then', '/apps/w/crm')",
+                [],
+            )
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version as usize, MIGRATIONS.len());
+                // What was there stays.
+                let allowed: i64 = c.query_row("SELECT allowed FROM app_grants WHERE slug = 'crm'", [], |r| r.get(0))?;
+                assert_eq!(allowed, 1);
+                let secret: String = c.query_row("SELECT secret FROM app_frame_secret", [], |r| r.get(0))?;
+                assert_eq!(secret, "kept");
+                let link: Option<String> = c.query_row("SELECT link FROM notifications", [], |r| r.get(0))?;
+                assert_eq!(link.as_deref(), Some("/apps/w/crm"));
+                let record = |collection: &str, id: &str, data: &str| {
+                    c.execute(
+                        "INSERT INTO app_records(workspace_id, slug, collection, id, data, created_at, updated_at)
+                         VALUES ('w', 'crm', ?1, ?2, ?3, 'now', 'now')",
+                        [collection, id, data],
+                    )
+                };
+                record("leads", "a", r#"{"name":"Ana"}"#)?;
+                assert!(record("leads", "a", "{}").is_err(), "one record per id in a collection");
+                record("deals", "a", "{}")?;
+                assert!(record("leads", "b", "{nope").is_err(), "data is JSON");
+                let rev: i64 = c.query_row("SELECT rev FROM app_records WHERE collection = 'leads'", [], |r| r.get(0))?;
+                assert_eq!(rev, 1, "a new record starts at revision 1");
+                assert!(c.execute("UPDATE app_records SET rev = 0", []).is_err(), "revisions start at 1");
+                // The filters of `apps/records.rs` need SQLite's JSON functions.
+                let name: String =
+                    c.query_row("SELECT json_extract(data, '$.\"name\"') FROM app_records WHERE id = 'a' AND collection = 'leads'", [], |r| r.get(0))?;
+                assert_eq!(name, "Ana");
                 Ok(())
             })
             .unwrap();

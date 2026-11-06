@@ -5,7 +5,7 @@ description: Build, change or fix a custom app inside Tendly (a mini-app, dashbo
 
 # Tendly apps
 
-A Tendly app is a folder of static files (HTML, CSS, JS) inside a workspace. Tendly lists it in the Apps page, the sidebar and the icon rail, opens it in full screen (`/apps/<workspace id>/<slug>`) or as a pane on the Mesa, reloads it by itself when you change its files, and gives it a small SDK (`window.tendly`) to store its state, talk to the Tendly around it and, with the person's permission, read Tendly's own data. There is no server code and no build step.
+A Tendly app is a folder of static files (HTML, CSS, JS) inside a workspace. Tendly lists it in the Apps page, the sidebar and the icon rail, opens it in full screen (`/apps/<workspace id>/<slug>`) or as a pane on the Mesa, reloads it by itself when you change its files, and gives it a small SDK (`window.tendly`) to store its state (single values, collections of records that several panes and agents can change at once, and files a person uploads), talk to the Tendly around it and, with the person's permission, read Tendly's own data. There is no server code and no build step.
 
 The app runs in a **sandboxed frame**, as a page of its own: it is not part of Tendly's page and cannot call Tendly's API. Everything it needs from Tendly goes through `window.tendly`. Read "The sandbox" below before writing code that uses `fetch`, `localStorage` or links to other sites.
 
@@ -16,8 +16,11 @@ The app runs in a **sandboxed frame**, as a page of its own: it is not part of T
   app.json        required: describes the app
   index.html      the entry page (or whatever "entry" names)
   ...             any other files: css, js, images
-  data/           the app's saved state, written by Tendly; do not create or edit by hand
+  data/           the app's saved values (tendly.data), written by Tendly; do not create or edit by hand
+  files/          what a person uploaded through the app (tendly.files): images and PDFs; never put code here
 ```
+
+The app's collections (`tendly.db`) are not in the folder: they live in Tendly's database. See "Where data goes".
 
 - `<slug>` is the folder name: lowercase letters, digits and dashes, starting with a letter or digit, up to 64 characters (`pipeline`, `crm`, `habit-tracker`).
 - `app.json` fields:
@@ -28,7 +31,7 @@ The app runs in a **sandboxed frame**, as a page of its own: it is not part of T
   - `entry` (optional): the page to open, relative to the app folder. Default `index.html`. Must not be inside `data/` or start with a dot.
   - `permissions` (optional): what the app asks to be allowed, a list out of `sessions:read`, `files:read`, `automations:read`, `notify`, `agent:draft`. Default `[]`. See "Permissions".
 - An invalid `app.json` (bad JSON, missing name, unknown color, unknown permission, missing entry file) makes the app show up as an error in the Apps page. Fix the file and it reappears.
-- Files whose name starts with a dot and anything under `data/` are never served.
+- Files whose name starts with a dot and anything under `data/` are never served. `files/` is served like the rest of the app, so an uploaded image has an address.
 
 ## Writing the page
 
@@ -43,14 +46,14 @@ The app runs in a **sandboxed frame**, as a page of its own: it is not part of T
 Tendly serves the app from an address of its own (`/apps-run/<workspace>/<slug>/<token>/...`, the token changes on every load) into a frame that has no access to Tendly. What that means for your code:
 
 - **Do not `fetch` Tendly's API** (`/api/...`): it is refused. Use `window.tendly`.
-- **`localStorage`, `sessionStorage`, cookies and IndexedDB do not persist.** The SDK puts a memory-only stand-in for `localStorage` and `sessionStorage` so old code does not crash, and it is empty again after every reload. Keep everything that matters in `tendly.data`.
+- **`localStorage`, `sessionStorage`, cookies and IndexedDB do not persist.** The SDK puts a memory-only stand-in for `localStorage` and `sessionStorage` so old code does not crash, and it is empty again after every reload. Keep everything that matters in `tendly.data` or a collection.
 - **Relative links between the app's files work as always** (`./app.js`, `css/style.css`, `pages/deal.html`, `fetch('./prices.json')`, ES modules). Never write the app's address by hand: it changes.
 - `<script src="app.js">` works, and its errors are reported with file and line. Scripts from a CDN work as before.
 - **Links to other sites** (`<a href="https://...">`) and `window.open('https://...')` are opened by Tendly in a normal browser tab. Do not try to show another site inside the app.
 - `new Worker('./worker.js')` and service workers do not work there. Keep the work in the page (or build the worker from a Blob).
 - Opened in a browser tab of its own, outside Tendly, the app has nobody to ask: every `tendly` call that returns a Promise rejects with `error.code === 'outside'`. `tendly.host.framed` says which case it is.
 
-## Saving data with the SDK
+## Where data goes
 
 Include the SDK before your own scripts:
 
@@ -58,7 +61,24 @@ Include the SDK before your own scripts:
 <script src="/api/hub/apps/sdk.js"></script>
 ```
 
-It exposes `window.tendly`. The data calls return a Promise and throw an `Error` with Tendly's message on failure (`error.status` is the HTTP status when there is one; `error.code` is `'permission'`, `'outside'`, `'timeout'`, `'rate'` or `'invalid'` when that is the reason). The comment at the top of `/api/hub/apps/sdk.js` lists every call.
+It exposes `window.tendly`. The data calls return a Promise and throw an `Error` with Tendly's message on failure (`error.status` is the HTTP status when there is one; `error.code` is `'permission'`, `'outside'`, `'timeout'`, `'rate'`, `'invalid'`, `'conflict'`, `'exists'` or `'full'` when that is the reason). The comment at the top of `/api/hub/apps/sdk.js` lists every call.
+
+An app has three places to keep things. Pick by what the thing is:
+
+| what | where | why |
+| --- | --- | --- |
+| A list of things that change one at a time: leads, cards, tasks, orders, entries | a **collection**, `tendly.db.collection('leads')` | one record per thing, each with a revision: two panes, or the app and an agent, can write at once without one overwriting the other; filters; live updates; export and import |
+| One small document or a few settings: preferences, the last filter used, a counter, a note | **`tendly.data`** | one JSON value per key; the last write wins |
+| A photo, a scan, a PDF the person adds | **`tendly.files`** | real files in `apps/<slug>/files/`, with an address for `<img src>` |
+
+Rules of thumb:
+
+- If the app has a board, a table or any list the person adds to, **use a collection**. Do not keep such a list as one array in `tendly.data`: with the app open in two panes (or an agent writing while it is open) each save replaces the whole array and someone's change is lost.
+- Keep `tendly.data` for what is naturally one value. An app can use both: `tendly.data` for settings, collections for the records.
+- Never put images in a record or in `tendly.data` as base64: upload them and keep the `path`.
+- Existing apps that keep a list in `tendly.data` keep working. Move them to a collection when the person asks for it or reports lost changes: read the old key once, insert each item, then remove the key.
+
+## Small values: `tendly.data`
 
 - `tendly.app` is `{ workspaceId, slug }`.
 - `await tendly.data.get(key, fallback)` returns the stored JSON value, or `fallback` (default `null`) when the key does not exist.
@@ -70,6 +90,90 @@ It exposes `window.tendly`. The data calls return a Promise and throw an `Error`
 Keys are letters, digits, `_` and `-`, up to 64 characters. Each key is saved as `data/<key>.json`. Prefer a few keys holding whole documents (`leads`, `settings`) over one key per item; debounce saves from text inputs.
 
 While the app is open, do not edit files in `data/` by hand: the app may overwrite your change or read a half-written file. To change stored data, change the app (or ask the person to close it first).
+
+## Records: `tendly.db.collection(name)`
+
+```js
+const leads = tendly.db.collection('leads');   // names: letters, digits, _ and -, up to 64
+```
+
+A record is `{ id, rev, created_at, updated_at, data }`. `data` is the object you stored (up to 5 MB of JSON); `rev` starts at 1 and goes up by one on every write. A collection holds up to 50,000 records and an app up to 100 collections. A collection exists as soon as it has a record; there is nothing to create or declare.
+
+- `await leads.list({ where, order, limit, offset })` returns an array of records, with `.total` (how many match in all).
+  - `where` compares **top-level fields of `data`** for equality: `{ stage: 'new', hot: true }` (all must match). Values are text, numbers, `true`, `false` or `null`; `null` also matches records without the field. `{ stage: { in: ['new', 'waiting'] } }` matches any of a list (up to 100 values). There is nothing else: no ranges, no text search, no nested fields. Filter the rest in the page.
+  - `order` is `'created_at'` (the default, oldest first), `'updated_at'` or a top-level field; put `-` in front for descending (`'-created_at'`).
+  - `limit` is 1000 by default and 5000 at most; `offset` pages through more.
+- `await leads.count(where)` returns how many match.
+- `await leads.get(id)` returns the record, or `null`.
+- `await leads.insert(doc)` returns the new record (`rev` 1) with an id made for it. `insert(doc, { id })` uses yours (letters, digits, `_`, `-`, up to 64) and rejects with `error.code === 'exists'` if it is taken.
+- `await leads.update(id, patch, { rev })` changes the top-level fields named in `patch`, keeps the others, and returns the record. `{ replace: true }` makes `data` exactly `patch`. A field set to `null` is stored as `null` (to drop a field, use `replace`).
+- `await leads.remove(id, { rev })` returns `true` if there was one, `false` if it was already gone.
+- `leads.subscribe(fn)` calls `fn({ type, id, rev, record })` on every change to the collection, **whoever made it**: another pane, an agent, this same page. `type` is `'insert'`, `'update'`, `'remove'` (then `record` is `null`) or `'reset'` (many records changed at once, for example an import: call `list()` again). It returns a function that stops it.
+- `await tendly.db.collections()` returns `[{ name, count, updated_at }]`.
+
+### Revisions: never lose someone else's change
+
+Pass the `rev` you read when you update or remove. If the record changed meanwhile (the other pane moved the card, an agent wrote a reply), the call rejects with `error.code === 'conflict'` and `error.current`, the record as it is now. Nothing was written. Take what you need from `error.current` and try again:
+
+```js
+async function moveCard(card, column) {
+  try {
+    return await cards.update(card.id, { column }, { rev: card.rev });
+  } catch (error) {
+    if (error.code !== 'conflict') throw error;
+    // Someone changed this card. Re-apply only what the person just did, on the current record.
+    return cards.update(card.id, { column }, { rev: error.current.rev });
+  }
+}
+```
+
+- Send only the fields that changed in `patch` (`{ column }`, not the whole card): two people editing different fields of the same record then never clash in practice.
+- Without `rev` the last write wins. That is fine for a field only one place writes; use `rev` for anything the person edits.
+- After a conflict, redraw from `error.current`: the person should see what the other side did.
+
+### Live: draw from `subscribe`
+
+The simplest correct app keeps a map of records, draws from it, and lets `subscribe` keep it current. Its own writes come back through `subscribe` too, so the write path does not need to touch the map:
+
+```js
+const cards = tendly.db.collection('cards');
+const byId = new Map();
+async function load() { byId.clear(); for (const card of await cards.list()) byId.set(card.id, card); draw(); }
+cards.subscribe((change) => {
+  if (change.type === 'reset') return load();
+  if (change.type === 'remove') byId.delete(change.id); else byId.set(change.id, change.record);
+  draw();
+});
+load();
+```
+
+Subscribe before (or right after) the first `list()`, and handle `'reset'`: Tendly also sends it when its connection dropped and came back.
+
+## Files: `tendly.files`
+
+For what a person adds: PNG, JPEG, GIF, WebP, AVIF and PDF, up to 20 MB each. Tendly decides what a file is from its content, not its name; anything else is refused (`error.status` 415).
+
+```js
+input.addEventListener('change', async () => {
+  const file = await tendly.files.upload(input.files[0]);        // { path, name, size, type, updated_at, url }
+  await leads.update(lead.id, { photo: file.path }, { rev: lead.rev });   // keep the path
+  img.src = tendly.files.url(file.path);
+});
+```
+
+- `await tendly.files.upload(file, { name })` takes a `File` or `Blob`. Tendly stores it in `apps/<slug>/files/` under a safe name made from the file's (ASCII letters, digits, `-`, `_`; the extension of what the file really is) and never overwrites: a taken name gets `-2`, `-3`. Use the `path` it returns (`files/photo.png`), not the name you sent.
+- `tendly.files.url(path)` returns an address for `<img src>`, `<a href download>` or CSS. **Store the path, not the url**: the address changes every time the app loads.
+- `await tendly.files.list()` returns `[{ path, name, size, type, updated_at, url }]`.
+- `await tendly.files.remove(path)` returns `true` if there was one. Remove the file when the record that points at it is removed.
+- `await tendly.files.open(path)` opens the file on the Mesa. Use it for PDFs: a PDF may not display inside the app's sandbox, so offer "Open" (this call) or a download link instead of embedding it.
+- An upload never reloads the app. You may read `apps/<slug>/files/` yourself (to look at what the person uploaded); do not write code or app assets there: the app's own images go beside its code, for example `apps/<slug>/img/`.
+
+## Export, import and the agent's tools
+
+- The "…" in the app's header has **Export data…** and **Import data…**: one collection as JSON (everything, to back up or import again) or CSV (one column per top-level field, for a spreadsheet; lists and nested objects go as JSON text in the cell). Importing adds to the collection (a record with the same id is replaced) or replaces it, after a confirmation. Tell the person about it when they ask how to get their data out or in; do not build an export screen into the app unless they ask.
+- Records made flat (text, numbers, true/false at the top level) are what CSV and `where` work with. Prefer `{ name, stage, value, owner }` to deep nesting.
+- You can read and write an app's records yourself, without opening the app, with Tendly's tools: `tendly_app_records_list` (the collections of an app, or the records of one, with the same `where`, `order`, `limit`), `tendly_app_records_get`, `tendly_app_records_upsert` (create, replace, or with `merge: true` change some fields; pass `rev` to refuse a stale write) and `tendly_app_records_delete`. Each call names one app by its folder (`app: "crm"`). The app on screen shows your change at once if it subscribes. Use them when the person asks you to work on the data ("suggest a reply for each new lead", "mark these as done", "what is in my pipeline?"), and write suggestions into a field of the record (`suggested_reply`) for the person to accept in the app, rather than overwriting what they wrote.
+- `tendly.data` values are files: read `apps/<slug>/data/<key>.json` to see them (and see the warning above about editing them while the app is open).
 
 ## Talking to Tendly: `tendly.host`
 
@@ -120,7 +224,7 @@ To read Tendly's own data, draft a chat message or notify the person, the app as
 - `await tendly.workspace.read(path)` (`files:read`): `{ path, content, size }` of a text file up to 1 MB. Hidden files and folders (names starting with a dot, such as `.env` or `.git`) are never listed or read; neither is anything outside the workspace.
 - `await tendly.automations.list({ runs })` (`automations:read`): `[{ id, name, description, kind, cron, timezone, workspace_id, enabled, next_run, running, created_at, updated_at, runs }]`, where `runs` holds the latest runs (5 by default, up to 20) as `{ id, status, started_at, finished_at, exit_code, session_id, trigger }`. Commands, prompts and run output are not included.
 
-All of it is read-only: an app cannot start a conversation, send a message, change a file outside its own `data/`, or run an automation.
+All of it is read-only: an app cannot start a conversation, send a message, change a file outside its own `data/` and `files/`, or run an automation.
 
 ## The app reloads on its own
 
@@ -128,9 +232,9 @@ Tendly watches `apps/<slug>/`. About 600 ms after your last write, every open vi
 
 - Do not tell the person to press reload. Say what changed; they are already looking at it.
 - Finish a change in one go where you can. Each pause longer than about half a second between writes is a separate reload, and the app may be seen half-edited in between.
-- Writes to `data/` never reload the app (that is the app saving its own state).
+- Writes to `data/` and `files/` never reload the app (that is the app saving its own state and the person's uploads), and neither do writes to its collections.
 - **Undo** puts the app's files back as they were before that burst of writes, from Tendly's file history: edited files are restored, files you deleted come back, files you created are removed. Binary files (images) and files over 1 MB are not in the history, so they stay as you left them. If the person says they undid your change, read the files again before continuing: they are not what you last wrote.
-- A reload starts the page from scratch. Anything the person should not lose must be saved with `tendly.data` as they go, not kept only in memory.
+- A reload starts the page from scratch. Anything the person should not lose must be saved (a collection, `tendly.data`) as they go, not kept only in memory.
 
 ### Unsaved input: `tendly.host.holdReload`
 
@@ -148,7 +252,7 @@ async function save() {
 While held, Tendly shows "A new version is ready · Reload now" instead of reloading, and the person decides. Rules:
 
 - Call `holdReload(true)` only while there really is unsaved input, and always release it with `holdReload(false)` after saving or discarding. An app that holds forever never shows your fixes.
-- Apps that save every change at once (debounced `tendly.data.set`) do not need it.
+- Apps that save every change at once (a collection write per action, or a debounced `tendly.data.set`) do not need it.
 - A page load clears the hold, so there is nothing to reset on start.
 - `tendly.host.framed` is `true` inside Tendly and `false` when the app is opened in a browser tab of its own (there `holdReload` does nothing, and the data calls reject: see "The sandbox").
 
@@ -182,6 +286,8 @@ To make that list useful:
 - If the app asks for permissions, tell the person which ones and why: they will see Tendly's question the first time it opens.
 
 ## Complete example
+
+This one keeps a single list with `tendly.data`, which is enough for a personal list in one pane. For a board or anything shared between panes, use a collection as in "Live: draw from `subscribe`" above.
 
 `apps/reading-list/app.json`:
 
