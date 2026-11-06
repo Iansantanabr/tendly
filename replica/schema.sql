@@ -191,6 +191,35 @@ CREATE TABLE app_frame_secret (
 -- notice (kind 'app') opens /apps/<workspace>/<slug>. NULL for everything else.
 ALTER TABLE notifications ADD COLUMN link TEXT;
 
+---------------------------------------------------------------- live: 11 (Apps D, collections)
+-- The records of an app's collections (tendly.db.collection(name) in the SDK).
+-- One row per record; `data` is a JSON object of the app's own making, up to
+-- 5 MB. `rev` is 1 when the record is created and goes up by one on every
+-- write: a write that names the revision it saw is refused (409, with the
+-- current record) when the record has moved on. That check is in code, under
+-- the connection's lock, together with the limits (50,000 records per
+-- collection, 100 collections per app).
+-- A collection is not a row of its own: it exists while it has records.
+-- No foreign keys: the app is a folder (apps/<slug>/ in a workspace of
+-- tendly.db), and its records stay if the folder goes.
+-- Filters (`where` on top-level fields) use json_type/json_extract on `data`
+-- with the field path bound as a parameter; no index on fields, which is fine
+-- at 50,000 rows per collection.
+CREATE TABLE app_records (
+    workspace_id TEXT NOT NULL,    -- soft ref to tendly.db workspaces
+    slug TEXT NOT NULL,            -- apps/<slug>/
+    collection TEXT NOT NULL,      -- [A-Za-z0-9_-]{1,64} (checked in code)
+    id TEXT NOT NULL,              -- a UUID made by the server, or the app's own ([A-Za-z0-9_-]{1,64})
+    data TEXT NOT NULL CHECK (json_valid(data)),
+    rev INTEGER NOT NULL DEFAULT 1 CHECK (rev >= 1),
+    created_at TEXT NOT NULL,      -- RFC 3339 UTC with milliseconds, so text order is time order
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (workspace_id, slug, collection, id)
+);
+-- The default list order (oldest first) and "most recently written first".
+CREATE INDEX app_records_by_created ON app_records(workspace_id, slug, collection, created_at);
+CREATE INDEX app_records_by_updated ON app_records(workspace_id, slug, collection, updated_at);
+
 ---------------------------------------------------------------- later (multi-user, after the VPS)
 -- Not a migration yet. Sketch so today's tables don't paint us into a corner:
 --   people(id, name, email UNIQUE, role CHECK IN ('admin','member'), created_at)

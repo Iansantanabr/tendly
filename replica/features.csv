@@ -110,8 +110,10 @@ Origem separada para apps + permissões declaradas,apps,must,no,yes,Etapa C (App
 App escreve rascunho no chat sem enviar (draftChat),apps,should,no,yes,Etapa C (AppsC); tendly.host.draftChat(text · {attach}); precisa de agent:draft; preenche o composer da conversa ao lado e nunca envia
 App avisa no sino e por push (notify) e mostra toast,apps,could,no,yes,Etapa C (AppsC); tendly.host.notify precisa de notify · 10 a cada 10 min por app · o aviso abre o app; tendly.host.toast
 App segue o tema do Tendly (claro/escuro),apps,could,no,yes,Etapa C (AppsC); tendly.host.theme / onTheme e <html data-tendly-theme>
-Coleções com registros e revisão + ao vivo,apps,should,yes,no,Etapa D; kanbans com arrastar (P30 P32)
-Subir arquivos/fotos pelo app,apps,could,yes,no,Etapa D; P31 Subir outra foto
+Coleções com registros e revisão + ao vivo,apps,should,yes,yes,Etapa D (AppsD); tendly.db.collection (list com where/order/limit · get · insert · update com rev · remove · subscribe); hub.db app_records; rev velho = 409 com o registro atual; dois painéis do mesmo app se atualizam pelo socket; não visto no navegador
+Subir arquivos/fotos pelo app,apps,could,yes,yes,Etapa D (AppsD); tendly.files.upload/url/list/remove/open; imagens e PDF até 20 MB em apps/<slug>/files/ com nome seguro; url serve de <img src>; não visto no navegador
+Exportar e importar uma coleção do app (JSON · CSV),apps,could,no,yes,Etapa D (AppsD); "…" no cabeçalho do app → Exportar dados… / Importar dados… (adicionar ou substituir com confirmação na tela)
+Agente lê e escreve os registros de um app (MCP),apps,should,yes,yes,Etapa D (AppsD); tendly_app_records_list · get · upsert · delete; um app por chamada; a escrita aparece ao vivo no app aberto; "o agente sugere resposta para o lead"
 Criar com o agente com modelos (kanban · tabela · calendário · painel · formulário · editor),apps,must,yes,partial,Etapa E; hoje blank/issues
 Kit de UI para apps (navegação lateral/inferior · kanban · tabela),apps,should,yes,no,Etapa E; P12 P13 visual coerente
 Versões do app inteiro e voltar,apps,should,yes,partial,Etapa E; P28 No ar · hash; hoje histórico por arquivo

@@ -27,12 +27,13 @@ Um banco por responsabilidade (upstream vs fork), sem microsserviços.
 
 ## Schema
 
-Tabelas em `hub.db`: migrações 1 a 9 em produção (a 8, `file_versions.message`, e a 9, `pinned_messages`, entraram no M5).
+Tabelas em `hub.db`: migrações 1 a 11 em produção (a 8, `file_versions.message`, e a 9, `pinned_messages`, entraram no M5; a 10, `app_grants` e `app_frame_secret`, na Apps C; a 11, `app_records`, na Apps D).
 Acesso: checagens na camada de dados. O `guard` autentica todo `/api/`, e cada rota do hub valida o id do workspace e o caminho (canonicaliza e confere o prefixo).
 
 O SQL completo está em [`schema.sql`](schema.sql). Restrições importantes:
 
 - `pinned_messages.session_id PRIMARY KEY`: uma mensagem fixada por conversa.
+- `app_records PRIMARY KEY (workspace_id, slug, collection, id)` com `rev >= 1` e `json_valid(data)`: um registro por id em cada coleção de cada app. A regra "escrever com `rev` velho é recusado" fica no código, dentro da mesma trava da conexão (ler o `rev`, comparar, gravar), não num gatilho.
 
 - `publications UNIQUE(workspace_id, path)`: publicar o mesmo arquivo de novo edita a publicação, não cria outra.
 - `push_subscriptions.endpoint UNIQUE`: o mesmo navegador inscrito duas vezes vira uma linha só.
@@ -148,6 +149,30 @@ Como o "antes" é guardado: `hub/apps/live.rs` mantém em memória, por app, o q
 
 Quem confere o quê: o **guard** recusa tudo que vem da moldura para `/api` (origem `null` ou `sec-fetch-site: cross-site`), menos a leitura de `/apps-run/…` e do SDK; o **token** diz de qual app são os arquivos; a **página do Tendly** só ouve a janela da moldura e faz os pedidos com as credenciais dela; o **servidor** confere a permissão em cada rota `tendly/*` e no `notify`. A página decide sozinha só o que só ela pode fazer (rascunho no composer, abrir na Mesa, toast).
 
+### Apps D: coleções, ao vivo, arquivos, exportar/importar (feito)
+
+| método e caminho | faz | saída |
+| --- | --- | --- |
+| `GET apps/{ws}/{slug}/db` | as coleções do app | `{collections: [{name, count, updated_at}]}` |
+| `GET apps/{ws}/{slug}/db/{coleção}` · `POST …/query` | lista com `where` (igualdade em campos de topo, ou `in`), `order`, `limit`, `offset`; `count: true` só conta | `{records, total, truncated}` · `{total}`; 400 para filtro que não existe |
+| `POST apps/{ws}/{slug}/db/{coleção}` | registro novo (`{data, id?}`) | 201 o registro; 409 `exists` + `current`; 413 (5 MB, 50.000, 100 coleções) |
+| `GET …/db/{coleção}/r/{id}` | um registro | `{id, rev, created_at, updated_at, data}`; 404 |
+| `PATCH …/db/{coleção}/r/{id}` | muda campos de topo (`{patch, rev?}`) | o registro; **409 `conflict` + `current`** se o `rev` está velho; 404 |
+| `PUT …/db/{coleção}/r/{id}` | troca tudo ou cria com esse id (`{data, rev?}`) | 200 / 201; 409; 404 se veio `rev` e não existe |
+| `DELETE …/db/{coleção}/r/{id}?rev=` | remove | `{removed}` (falso se já não existia); 409 |
+| `DELETE …/db/{coleção}` | esvazia a coleção | `{removed: n}` |
+| `GET …/db/{coleção}/export?format=json\|csv` | a coleção inteira num arquivo | anexo `<slug>-<coleção>.json\|csv` |
+| `POST …/db/{coleção}/import?format=&mode=merge\|replace` | lê o arquivo para a coleção, tudo ou nada | `{inserted, updated, removed, total}`; 400 diz a linha |
+| `GET apps/{ws}/{slug}/uploads` | arquivos enviados | `{files: [{path, name, size, type, updated_at}]}` |
+| `POST apps/{ws}/{slug}/uploads?name=` | guarda os bytes em `apps/<slug>/files/` com nome seguro | 201 `{path, …}`; 415 (não é imagem nem PDF); 413 (20 MB, 2.000 arquivos) |
+| `DELETE apps/{ws}/{slug}/uploads/{nome}` | remove um arquivo enviado | `{removed}` |
+| socket `/api/agent-activity/ws` (já existia) | `{type:"hub", event:"app-records", workspace_id, slug, collection, change}` a cada escrita | — |
+| MCP `tendly_app_records_list\|get\|upsert\|delete` | o agente lê e escreve os registros de um app | o registro / a lista; conflito com o registro atual no texto |
+
+Como uma escrita chega ao outro painel: o app chama `leads.update(...)` → o SDK manda a mensagem para a página → a página faz o `PATCH` → o servidor grava e avisa todas as janelas pelo socket → cada `AppView` daquele app repassa para a própria moldura, se o app se inscreveu naquela coleção → o SDK chama os `subscribe`. O mesmo caminho serve para o que o agente escreve pelas ferramentas MCP e para o que outra janela (o celular) escreve.
+
+Quem confere o quê: o **servidor** valida nomes, tamanho, quantidade, o `rev` e o filtro (os valores e os nomes de campo do `where` são parâmetros de um SQL de forma fixa; não há texto do app dentro do SQL); o tipo de um arquivo enviado vem dos bytes, e o nome guardado é feito no servidor. A **página** só transforma cada chamada num pedido sobre aquele app (nomes conferidos antes de virar caminho) e repassa mudanças só da coleção pedida. A **moldura** continua sem alcançar `/api`: ler, gravar, exportar e enviar arquivo de dentro dela dá 403.
+
 ### Webhooks e jobs
 
 Webhooks entrando: nenhum. Webhooks saindo: Web Push (M3).
@@ -229,6 +254,8 @@ Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeir
    - Inventário de jobs do servidor (crontab, LaunchAgents, timers do systemd).
    - Fixar mensagem (migração 9), app de "Reportar um problema".
    - Ficou de fora: rail de ícones na Mesa e versão publicada de app por commit (não estavam no pedido do M5).
+
+   - Apps A–D (plano em `plan-apps.md`): rail, tela cheia com Conversar e recarregar sozinho, origem própria com ponte e permissões (migração 10), coleções com revisão, ao vivo e arquivos (migração 11). Faltam E (modelos, kit de UI, versões do app, atalhos) e F (apps com servidor).
 
 7. **Depois: multiusuário**
    - Pessoas, permissões por pasta, compartilhar conversa (ler/participar), "Entre nós", @menções, contas da organização.

@@ -1,0 +1,73 @@
+AppsD — Etapa D de replica/plan-apps.md: dados de verdade para os apps (coleções com revisão, ao vivo, arquivos).
+Concluído em 2026-11-06. Os seis itens foram feitos, todos pela ponte da Apps C (a moldura do app não faz pedido nenhum).
+Nenhuma conversa de agente foi aberta, nenhuma automação rodou, nenhum app seu foi tocado (GET /api/hub/apps estava
+vazio antes e continua vazio).
+
+ENTREGUE
+1. Coleções: tendly.db.collection(nome) com list({where, order, limit, offset}), count, get, insert,
+   update(id, patch, {rev}) e remove(id, {rev}). Registros no hub.db (migração 11, app_records), cada um com rev que
+   sobe 1 por escrita. rev velho = 409 com o registro atual (no app: error.code "conflict" e error.current). Limites:
+   5 MB por registro, 50.000 por coleção, 100 coleções por app. where = igualdade em campos de topo ou in; nome de campo
+   e valor entram como parâmetros, nunca SQL do app.
+2. Ao vivo: collection.subscribe(fn). Cada escrita é avisada pelo socket que já existia e cada vista do app repassa para
+   a própria moldura: dois painéis do mesmo app se atualizam, e o que o agente escreve aparece na hora.
+3. Arquivos: tendly.files.upload / url / list / remove / open. Imagens (PNG, JPEG, GIF, WebP, AVIF) e PDF, decididos
+   pelo conteúdo, até 20 MB, em apps/<slug>/files/ com nome seguro e sem sobrescrever; url serve de <img src>.
+4. Exportar/importar uma coleção em JSON ou CSV pelo botão novo "…" do cabeçalho do app (substituir pede confirmação
+   na tela).
+5. Ferramentas MCP tendly_app_records_list / _get / _upsert / _delete, um app por chamada.
+6. Documentação: cabeçalho do sdk.js, skills/tendly-apps/SKILL.md (repositório), texto do "Criar com o agente",
+   FORK.md, architecture.md, schema.sql, components.md, features.csv.
+
+TESTES
+- Hub: 195 ok (14 novos). Servidor inteiro: 625 ok, 2 ignorados. Web: 1.003 ok (18 novos em
+  features/hub/appsD-data.test.mjs); typecheck ok.
+- Cobertos: conflito com rev velho, dois ouvintes, limites, filtro que não vira SQL, CSV, limites e segurança de
+  caminho no envio de arquivos, ferramentas MCP, e dois painéis movendo o mesmo cartão (dois SDKs de verdade em Node).
+- Servidor rodando depois do build.sh: 63 conferências ok, com um app de teste criado e apagado pela própria API na
+  pasta oculta de conversas e duas conexões ouvindo o socket. Depois: lista de apps vazia, 0 linhas em app_records.
+
+BLOQUEADO EM VOCÊ
+1. Recarregue as abas do Tendly abertas antes deste build.
+2. Copie a skill (esta rodada não escreve fora do repositório):
+     cp ~/tendly-src/tendly/skills/tendly-apps/SKILL.md ~/.claude/skills/tendly-apps/SKILL.md
+
+NÃO EXERCITADO AO VIVO
+- Nada foi visto num navegador: o arquivo atravessando a ponte, <img src> dentro do sandbox, o download do exportar,
+  o menu "…" e a faixa em 360px. PDF embutido dentro do app provavelmente não aparece no sandbox; por isso existe
+  tendly.files.open(path), que abre na Mesa.
+- As ferramentas MCP foram chamadas direto em /api/agent/call, não por um agente (regra: não abrir conversas).
+- Safari e o app instalado no celular não foram testados.
+
+O QUE VOCÊ PRECISA OLHAR NO NAVEGADOR (detalhe e o texto pronto do pedido em replica/progress/AppsD.md)
+1. Janela larga, tema claro: um "App em branco" continua funcionando; o cabeçalho tem o botão novo "…".
+2. Peça ao agente o app "Quadro" (kanban com coleção, subscribe, rev e foto; texto no AppsD.md, passo 2).
+3. Dois painéis do Quadro lado a lado na Mesa: criar, arrastar e editar num aparece no outro sem recarregar.
+4. Arrastar o mesmo cartão nos dois quase ao mesmo tempo: ninguém perde o que fez; o segundo mostra o aviso.
+5. Numa conversa, peça ao agente para escrever na nota de um cartão: o app aberto muda sozinho.
+6. Subir foto: miniatura aparece, continua depois de recarregar, o app não recarrega ao subir; a mesma foto vira "-2".
+7. Subir .txt ou .zip e um arquivo > 20 MB: recusados com mensagem.
+8. Subir um PDF e "Abrir": abre na Mesa.
+9. "…" → Exportar dados…: JSON e CSV (abrir o CSV no Numbers/Excel, acentos certos).
+10. "…" → Importar dados…: "Manter" atualiza; "Remover antes" mostra a faixa vermelha com Cancelar / Remover e importar.
+11. Teclado: Tab até "…", Enter, setas, Esc devolve o foco.
+12. Tela cheia e painel de ~360px: a faixa cabe, o menu não sai da tela.
+13. Tema escuro: menu, faixa, confirmação.
+14. Celular pelo Tailscale: toque e foto da câmera.
+15. Barra lateral (bf0f3f0): Início com janela baixa (~640px): seletor inteiro, listas ≥ 180px, a barra rola.
+
+DECISÕES QUE VOCÊ PODE QUERER INVERTER (todas em replica/progress/AppsD.md)
+- Registro é um envelope {id, rev, created_at, updated_at, data}; update troca só os campos de topo citados.
+- rev é opcional: sem ele a última escrita vence.
+- Apagar a pasta do app não apaga os registros do hub.db.
+- SVG e HEIC não são aceitos no envio; files/ não recarrega o app.
+- As ferramentas do agente não pedem confirmação na janela.
+- Não há teto total de dados por app nem limite de frequência de escrita.
+
+OBSERVAÇÕES
+- Upstream tocado: só crates/server/src/agent.rs (3 pontos pequenos, listados no FORK.md).
+- Três testes antigos foram ajustados (lista de botões do cabeçalho ganhou "More"; limite de linhas do sdk.js).
+- Os commits levam a linha "Co-Authored-By: Claude Opus 5.5", como manda a regra do piloto; esta rodada rodou no
+  Claude Fable 5.1.
+- A rodada terminou no limite de uso: o fechamento (este arquivo, commit, push) foi feito sem uma última releitura
+  dos documentos.

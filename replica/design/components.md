@@ -405,4 +405,29 @@ Aviso de app no sino (Apps C, `InboxPage.vue`)
   clique     marca como lido e abre o app em tela cheia (só links /apps/<workspace>/<slug> são seguidos)
 ```
 
+### Apps D (dados: exportar e importar)
+
+```
+Menu "…" do cabeçalho do app (Apps D, `AppView.vue`)
+  onde       último botão do cabeçalho (icon-button, ícone more), no painel da Mesa e na tela cheia; aria-haspopup=menu, aria-expanded
+  menu       abre embaixo do botão, alinhado à direita: --elevated, --line, --radius-md, --shadow-md, largura 180–260px, acima da moldura (z-index 6)
+  itens      "Exportar dados…" (ícone download) · "Importar dados…" (ícone upload); linhas de 30px (44px em pointer: coarse), --text-sm, hover --fill
+  teclado    ↓ no botão abre; ao abrir o foco vai para o 1º item; ↑ ↓ Home End andam; Esc fecha e devolve o foco ao botão; Tab fecha; clique fora fecha
+```
+
+```
+Painel de dados do app (Apps D, `AppDataPanel.vue`, faixa acima do app como a de permissões)
+  forma      faixa --surface com borda embaixo, até 70% da altura com rolagem própria; conteúdo com largura máx. 520px; cabe em 360px (min-width 0)
+  cabeçalho  ícone (download | upload) + título ("Exportar dados de {app}" · "Importar dados para {app}") + fechar (icon-button); Esc fecha e devolve o foco ao "…"
+  exportar   Coleção (select: "leads · 12 registros") · Formato (2 opções em cartão: JSON "Tudo, do jeito que está guardado…" · CSV "Uma coluna por campo…") · botão Exportar (small-button primary)
+             estados: carregando a lista · app sem coleções ("…não há o que exportar") · exportando (botão desabilitado) · "{arquivo} salvo" (--ok-ink, role=status)
+  importar   Arquivo (input file .json/.csv) · Para a coleção (texto com sugestões das que existem; embaixo "Ela tem N registros hoje." ou "Uma coleção nova."; nome inválido em --danger-ink)
+             · Registros que já estão lá (2 opções em cartão: Manter · Remover antes) · botão Importar (desabilitado sem arquivo e coleção)
+  confirmar  "Remover antes" numa coleção com registros: no lugar do rodapé aparece a faixa --danger-soft "Isso remove os N registros de {coleção} antes de importar. Não dá para desfazer."
+             com Cancelar e "Remover e importar" (small-button danger); nunca window.confirm; mudar arquivo, coleção ou opção desfaz a pergunta
+  resultado  "{n} registros adicionados." · "… e {m} atualizados." · "{n} registros substituídos por {m}." (--ok-ink); erro do servidor em faixa --danger-soft (role=alert), com a linha do arquivo
+  campos     borda --line-input, --radius-sm, --text-md; opção marcada: --elevated com borda --line-input; foco: o anel global
+  toque      botões, campos e opções com 44px em pointer: coarse
+```
+
 Fora deste sistema: modais, menus de contexto, árvore de arquivos, terminal e chat são do upstream e seguem como estão.
