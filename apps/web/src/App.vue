@@ -20,6 +20,7 @@ import AutomationsPage from "./features/hub/AutomationsPage.vue";
 import IntegrationsPage from "./features/hub/IntegrationsPage.vue";
 import SkillsPage from "./features/hub/SkillsPage.vue";
 import DesignPage from "./features/hub/DesignPage.vue";
+import { onConversationStarted, startProfiles } from "./features/hub/start";
 import AppsPage from "./features/hub/AppsPage.vue";
 import { refreshApps, type HubApp } from "./features/hub/apps";
 import { inbox, isUnread, markSeen, refreshInbox } from "./features/hub/inbox";
@@ -145,6 +146,8 @@ function leavePage() {
 /** A conversation on screen, in a visible tab, has been read. */
 function seeFocused() { const id = selectedSessionId.value; if (id && !page.value && !document.hidden && isUnread(id)) void markSeen(id); }
 watch(() => selectedSessionId.value, id => { if (id && !page.value) void markSeen(id); });
+onConversationStarted(id => void homeStarted(id));
+watch(profiles, value => { startProfiles.value = value; }, { immediate: true });
 async function homeStarted(id: string) {
   try { const session = await request<Session>(sessionPath(id)); openSession(session); void refreshSessions(); }
   catch (cause) { report(cause); }
