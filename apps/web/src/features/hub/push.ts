@@ -181,7 +181,8 @@ export async function enablePush(): Promise<string> {
   try {
     subscription = await registration.pushManager.getSubscription();
     // Made with another server key (the server's was replaced): it would be refused.
-    if (subscription && !sameKey(subscription.options.applicationServerKey, key)) {
+    // (A browser that does not say which key it used gets a fresh one too.)
+    if (subscription && !sameKey((subscription.options as PushSubscriptionOptions | undefined)?.applicationServerKey, key)) {
       await subscription.unsubscribe();
       subscription = null;
     }

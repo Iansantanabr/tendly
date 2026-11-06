@@ -18,7 +18,7 @@ A skill sugere Next.js + Postgres por padrão, mas o projeto já tem a stack do 
 | agentes | Claude Code e Codex pelas contas oficiais da pessoa (assinatura, não API) | é o que a Ratoeira faz e o Tendly já sabe fazer |
 | jobs | tokio dentro do servidor (agendador de 30 s, observador de arquivos, limpezas) | o servidor já fica ligado; nada de cron externo |
 | arquivos | disco em `~/.tendly` (blobs do histórico, publicados) e nas pastas dos projetos (apps) | conteúdo do usuário fica no lugar dele |
-| push | Web Push (VAPID) com crate `web-push` | padrão aberto, funciona no Android e no iPhone com o app instalado na tela inicial |
+| push | Web Push (VAPID): RFC 8291 + 8292 implementados em `hub/push/crypto.rs` sobre `p256` + `hkdf` + `aes-gcm` (Rust puro, sem OpenSSL), envio pelo `reqwest` | padrão aberto, funciona no Android e no iPhone com o app instalado na tela inicial; o crate `web-push` puxaria OpenSSL |
 | ditado | Web Speech API do navegador primeiro; Whisper local depois | zero infraestrutura agora; o áudio sai pelo serviço do navegador (avisar) |
 | hospedagem | Mac agora; VPS Linux depois (binário x64/arm64 do CI, systemd, Caddy com HTTPS) | decisão do Ian: "Mac agora, VPS depois" |
 | e-mail / pagamentos | nenhum | single-user, sem cobrança |
@@ -79,13 +79,15 @@ O ditado é só interface: um botão de microfone no composer usa `SpeechRecogni
 
 | método e caminho | faz | entrada | saída |
 | --- | --- | --- | --- |
-| `GET /manifest.webmanifest`, `GET /sw.js` | PWA instalável; o service worker guarda só o shell e trata `push`/`notificationclick` | — | arquivos |
+| `GET /manifest.webmanifest`, `GET /sw.js` | PWA instalável; o service worker guarda só o shell e trata `push`/`notificationclick` (rotas do servidor em `hub/pwa.rs`, iguais com o web embutido ou em `~/.tendly/web`) | — | arquivos |
 | `GET push/key` | chave pública VAPID | — | `{key}` |
-| `POST push/subscriptions` | inscreve este aparelho | `{endpoint, keys:{p256dh, auth}, label}` | `{id}` |
+| `POST push/subscriptions` | inscreve este aparelho (ou atualiza, pelo endpoint) | `{endpoint, keys:{p256dh, auth}, label}` | `{id}` |
+| `GET push/subscriptions` | aparelhos inscritos, sem segredo nenhum | — | `{subscriptions:[{id, label, service, endpoint_sha256, created_at, last_ok_at, failures}]}` |
 | `DELETE push/subscriptions/{id}` | desinscreve | — | 204 |
-| `POST push/test` | manda uma notificação de teste | — | `{sent, failed}` |
+| `POST push/test` | manda uma notificação de teste | — | `{sent, failed, removed, waiting}` |
+| `GET inbox?focused=<sessão>` | (já existia) o navegador diz qual conversa está na frente da pessoa | — | — |
 
-`home::notify()` passa a disparar push para cada inscrição, com título, corpo e URL `/session/{id}`. O disparo acontece numa tarefa à parte, para não segurar o fim do turno.
+`home::notify()` dispara push para cada inscrição, com título, corpo e URL `/session/{id}` (ou `/notificacoes`). O disparo acontece numa tarefa à parte, para não segurar o fim do turno, e é pulado para a conversa que um navegador diz estar na tela, em janela com foco e com a pessoa mexendo (M3 feito).
 
 ### M4: VPS
 
@@ -110,7 +112,7 @@ Webhooks entrando: nenhum. Webhooks saindo: Web Push (M3).
 | agendador de automações | a cada 30 s | roda o que venceu; não recupera horário perdido |
 | observador do histórico | contínuo, com debounce de 1,5 s, relista workspaces a cada 60 s | grava versões |
 | limpeza do histórico | de hora em hora | 100 versões / 60 dias, blobs órfãos |
-| limpeza de inscrições push (M3) | a cada envio | remove após 410 Gone ou 5 falhas seguidas |
+| limpeza de inscrições push (M3) | a cada envio | remove após 404/410 ou 5 recusas seguidas; serviço fora do ar ou pedindo pausa (`Retry-After`) não conta |
 | backup (M4) | diário, cron/systemd timer da VPS | copia `~/.tendly` para fora da máquina |
 
 Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeira é chamado ou copiado.

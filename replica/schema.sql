@@ -1,6 +1,6 @@
 -- hub.db: the fork's own SQLite database, beside Tendly's tendly.db.
 -- Source of truth is MIGRATIONS in crates/server/src/hub/store.rs; this file
--- mirrors it for planning. Entries 1-4 are live (never edit them); 5-8 are
+-- mirrors it for planning. Entries 1-6 are live (never edit them); 7-8 are
 -- proposed for the remaining milestones, in the order they would ship.
 --
 -- Conventions (SQLite, not Postgres):
@@ -96,7 +96,7 @@ CREATE TABLE publication_secret (
     secret TEXT NOT NULL           -- HMAC key for password cookies
 );
 
----------------------------------------------------------------- proposed: 5 (M2, named spaces)
+---------------------------------------------------------------- live: 5 (M2, named spaces)
 -- A saved Mesa layout with a name ("Relatório de anúncios"). Loading one
 -- replaces the shared canvas through Tendly's own revisioned save, so two
 -- windows still resolve conflicts the way they do today.
@@ -110,21 +110,25 @@ CREATE TABLE spaces (
     UNIQUE (name)
 );
 
----------------------------------------------------------------- proposed: 6 (M3, push on phones)
+---------------------------------------------------------------- live: 6 (M3, push on phones)
+-- Nothing secret is stored in the clear: `push_keys.vapid_private` and
+-- `push_subscriptions.auth` hold base64url(nonce || AES-256-GCM ciphertext),
+-- sealed with the 32-byte key in <state>/push-seal.key (0600). Lose that file
+-- and the key pair is made again and every device subscribes again.
 CREATE TABLE push_subscriptions (
     id TEXT PRIMARY KEY,
     endpoint TEXT NOT NULL UNIQUE, -- browser push service URL
-    p256dh TEXT NOT NULL,
-    auth TEXT NOT NULL,
-    label TEXT NOT NULL DEFAULT '', -- "iPhone", "Chrome no Mac"
+    p256dh TEXT NOT NULL,          -- the browser's public key (base64url, 65 bytes)
+    auth TEXT NOT NULL,            -- sealed
+    label TEXT NOT NULL DEFAULT '', -- "iPhone", "Mac · Chrome"
     created_at TEXT NOT NULL,
     last_ok_at TEXT,
-    failures INTEGER NOT NULL DEFAULT 0  -- dropped after 410 Gone or 5 failures in a row
+    failures INTEGER NOT NULL DEFAULT 0  -- dropped after 404/410 or 5 rejections in a row
 );
 CREATE TABLE push_keys (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     vapid_public TEXT NOT NULL,
-    vapid_private TEXT NOT NULL    -- generated once; rotating it invalidates every subscription
+    vapid_private TEXT NOT NULL    -- sealed; generated once; rotating it invalidates every subscription
 );
 
 ---------------------------------------------------------------- proposed: 7 (M3/M4, hub settings)

@@ -190,9 +190,28 @@ Espaços da Mesa (M2)
 ```
 
 ```
-Aparelho para notificações (M3)
-  partes     "Receber notificações neste aparelho" (interruptor), lista de aparelhos com Remover, "Enviar teste"
-  estados    sem HTTPS (explica e aponta o Tailscale), permissão negada, inscrito, falhou
+Aparelho para notificações (M3, feito: Configurações → Notificações, `NotificationsPanel.vue` + `PushDeviceList.vue`)
+  partes     "Receber notificações neste aparelho" (interruptor), lista de aparelhos com Remover (dois cliques, na tela), "Enviar teste"
+  estados    sem HTTPS (explica e aponta o Tailscale, botão para Acesso remoto), iPhone fora da Tela de Início ("adicione primeiro"),
+             navegador sem push, permissão negada, desligado, inscrito (selo "Este aparelho"), ocupado, falhou (erro na tela)
+  aparelho   nome curto (iPhone, Android · Chrome), serviço (Google, Apple, Mozilla), adicionado em, última entrega, tentativas falhas seguidas
+  tokens     cartão --surface / borda --line / raio --radius-lg; interruptor --line-input → --accent; selo --ok-ink sobre --ok-soft; aviso .inline-notice
+  a11y       <input type=checkbox role=switch> dentro do <label>; resultado do teste em role=status; erros em role=alert; 44px em toque
+```
+
+```
+Dica "Instalar o app" (M3, `InstallHint.vue`)
+  onde       Início (dispensável, "Agora não" fica guardado no aparelho) e Configurações → Notificações (fixa)
+  variantes  botão "Instalar" (Chrome no Android, usa o diálogo do navegador), passos do iPhone (Compartilhar → Adicionar à Tela de Início), menu do navegador
+  regra      só em tela de toque e fora do app instalado; no Android só com HTTPS
+  tokens     --elevated, borda --line, raio --radius-lg, ícone --accent-ink sobre --accent-soft
+```
+
+```
+Página "Sem conexão" (M3, dentro do service worker)
+  quando     o aparelho pede uma página e o servidor não responde; nada é servido do cache para fingir que funciona
+  partes     título, uma frase (internet, Tailscale, servidor ligado), "Tentar de novo"
+  regra      cores copiadas dos tokens claro/escuro (o worker não carrega o styles.css); texto em pt-BR ou inglês, pelo idioma do app
 ```
 
 Fora deste sistema: modais, menus de contexto, árvore de arquivos, terminal e chat são do upstream e seguem como estão.

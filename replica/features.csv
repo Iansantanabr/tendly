@@ -23,7 +23,7 @@ Seção Rotinas recentes na barra,conversas,should,yes,yes,M1
 Sino de notificações com não lidas,notificações,must,yes,yes,Fase 1
 Notificação de automação concluída ou falhou,notificações,must,yes,yes,Fase 2
 Notificação por @menção,notificações,could,yes,no,depende de multiusuário
-Push no celular (Android/iPhone),notificações,should,yes,no,exige PWA + Web Push
+Push no celular (Android/iPhone),notificações,should,yes,yes,M3; Configurações → Notificações; entrega real no aparelho a conferir por HTTPS (Tailscale)
 Chips de contexto de arquivo aberto no chat,chat,must,yes,yes,Fase 1
 Chip de contexto de app aberto no chat,chat,should,yes,yes,Fase 4
 Rodapé do composer com conta modelo esforço permissão,chat,must,yes,yes,Tendly upstream
@@ -83,7 +83,7 @@ Configurações: Segurança (2FA),configurações,could,yes,skip,só depois da V
 Botão Reportar bug,shell,could,yes,no,P10; poderia virar um app
 Tema escuro,shell,must,yes,yes,Tendly upstream
 Celular: interface adaptada,celular,should,yes,partial,Tendly tem layout mobile; conferir no aparelho
-Celular: app instalável sem loja (PWA),celular,should,yes,no,manifest + service worker
+Celular: app instalável sem loja (PWA),celular,should,yes,yes,M3; manifest + service worker; instalar exige HTTPS (no iPhone: Adicionar à Tela de Início)
 Compartilhar conversa (só ler / pode entrar),multiplayer,could,yes,skip,multiusuário depois da VPS
 Entre nós: nota que o agente não vê,multiplayer,could,yes,skip,multiusuário
 Presença vendo agora,multiplayer,could,yes,skip,multiusuário

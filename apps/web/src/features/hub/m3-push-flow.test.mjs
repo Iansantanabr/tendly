@@ -108,8 +108,17 @@ test('a subscription made with an old server key is replaced', async () => {
   assert.equal(posts().at(-1).body.endpoint, 'https://fcm.googleapis.com/fcm/send/device-2');
 });
 
+test('a subscription that does not say which key made it is replaced too', async () => {
+  // Older browsers have no `options` on a subscription.
+  delete browser.subscription.options;
+  await enablePush();
+  assert.equal(browser.unsubscribed.at(-1), 'https://fcm.googleapis.com/fcm/send/device-2');
+  assert.equal(browser.subscribeCalls.length, 3);
+  assert.equal(posts().at(-1).body.endpoint, 'https://fcm.googleapis.com/fcm/send/device-3');
+});
+
 test('turning it off removes this device from the server and from the browser', async () => {
-  const hash = await sha256Hex('https://fcm.googleapis.com/fcm/send/device-2');
+  const hash = await sha256Hex('https://fcm.googleapis.com/fcm/send/device-3');
   const devices = [
     { id: 'someone-else', endpoint_sha256: await sha256Hex('https://web.push.apple.com/other') },
     { id: 'device-1', endpoint_sha256: hash },

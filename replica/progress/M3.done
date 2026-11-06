@@ -1,0 +1,37 @@
+M3 — celular: app instalável (PWA) + notificações push. Concluído em 2026-11-05.
+
+ENTREGUE
+- PWA: /manifest.webmanifest e /sw.js servidos pelo servidor (hub/pwa.rs; valem com o web embutido e com ~/.tendly/web),
+  ícones 192/512 + maskable + apple-touch-icon + selo (apps/web/public/icons, gerados por replica/design/gen_icons.py),
+  service worker que guarda só o shell, mostra "Sem conexão" offline, mostra o push e abre o lugar certo ao tocar.
+- Web Push: migração 6 (push_subscriptions, push_keys), par VAPID gerado uma vez, RFC 8291 + RFC 8292 em Rust puro
+  (p256 + hkdf + aes-gcm, sem OpenSSL). Rotas /api/hub/push/key, /subscriptions (GET, POST, DELETE /{id}), /test.
+  404/410 apaga a inscrição, 5 recusas seguidas também, Retry-After é respeitado, serviço fora do ar não conta.
+  Chave privada VAPID e o auth de cada aparelho selados (~/.tendly/push-seal.key, 0600); nenhuma rota devolve segredo.
+- home::notify() (fim de turno, erro, esperando você, rotinas) manda push numa tarefa própria; não manda para a conversa
+  que está na tela com a pessoa mexendo (presença pelo ciclo de 5 s do navegador).
+- Interface: Configurações → Notificações (interruptor, aparelhos com Remover, "Enviar teste", motivo quando não dá:
+  sem HTTPS, iPhone sem instalar, navegador sem push, permissão negada) e a dica "Instalar o app" no Início.
+
+TESTES
+- web: 881 ok (33 novos). hub: 109 ok (27 novos). Servidor inteiro: 539 ok, 2 ignorados. Contraste: 0 falhas.
+- Servidor rodando (depois do build.sh): manifest, sw.js, ícones, chave, inscrever/listar/remover, push de teste cifrado
+  chegando num serviço de push de mentira em loopback, push de uma rotina de script, 410 removendo a inscrição.
+  Dados de teste removidos (nenhuma inscrição, rotina ou aviso de teste ficou).
+
+O IAN PRECISA CONFERIR (não há navegador nem celular nesta rodada)
+1. Ligar o HTTPS: Configurações → Acesso remoto (Tailscale está desligado hoje). No celular, abrir o endereço https://…ts.net.
+2. Android/Chrome: instalar pelo aviso do Início; Configurações → Notificações → ligar → permitir → "Enviar teste".
+3. iPhone/Safari (iOS 16.4+): Compartilhar → Adicionar à Tela de Início; abrir pelo ícone; ligar; "Enviar teste".
+4. Push de verdade: deixar uma conversa rodando, sair da janela e ver chegar; tocar abre a conversa. Olhando a conversa
+   e mexendo no Mac, não deve chegar.
+5. No próprio Mac já dá para testar sem HTTPS (http://127.0.0.1:28789 é contexto seguro): ligar o interruptor e "Enviar teste".
+6. Visual: página de Notificações (claro/escuro, 360 px), dica de instalar, página "Sem conexão", ícone na tela inicial.
+
+PENDENTE / DEPENDE DELE
+- Entrega real em FCM (Android) e Apple nunca foi exercitada: só contra o serviço de mentira e o exemplo do RFC.
+- O "sub" do VAPID é um placeholder (mailto:tendly-push@example.com). Se a Apple recusar (403 no ~/.tendly/tendly.log),
+  definir TENDLY_PUSH_SUBJECT=mailto:<e-mail dele> e reiniciar. No M4 isso vira configuração (hub_settings).
+- Conferir o layout mobile do Tendly no aparelho (linha "Celular: interface adaptada" continua "partial").
+
+Detalhes e decisões: replica/progress/M3.md. Não bloqueia o M4.
