@@ -1,0 +1,32 @@
+/* Roles -> Tendly variables. Reference only: components use the Tendly
+ * variables directly (var(--muted), not var(--role-text-muted)); this file
+ * exists so a rebrand knows which variable carries which job.
+ * Generated from apps/web/src/styles.css by gen_tokens.py. No Tailwind: the
+ * stack is Vue scoped CSS, guarded by apps/web/src/design-tokens.test.mjs. */
+:root {
+  --role-bg: var(--bg);  /* light #f1eee8 · dark #0f1113 */
+  --role-surface: var(--surface);  /* light #fcfbf9 · dark #191c20 */
+  --role-elevated: var(--elevated);  /* light #ffffff · dark #1f2328 */
+  --role-fill: var(--fill);  /* light #efebe4 · dark #22262b */
+  --role-fill-hover: var(--fill-hover);  /* light #e4dfd6 · dark #2a2f35 */
+  --role-border: var(--line);  /* light #ddd8ce · dark #2d3238 */
+  --role-border-input: var(--line-input);  /* light #92846b · dark #67717e */
+  --role-text: var(--ink);  /* light #221f1b · dark #ecebe8 */
+  --role-text-soft: var(--ink-soft);  /* light #5c574f · dark #b3b1ac */
+  --role-text-muted: var(--muted);  /* light #6e6961 · dark #8e8d89 */
+  --role-text-faint: var(--faint);  /* light #8c8579 · dark #71706c */
+  --role-accent: var(--accent);  /* light #0f7f70 · dark #3fc4b0 */
+  --role-on-accent: var(--on-accent);  /* light #ffffff · dark #06211d */
+  --role-accent-ink: var(--accent-ink);  /* light #146c60 · dark #74dac8 */
+  --role-accent-soft: var(--accent-soft);  /* light #e3f1ec · dark #163631 */
+  --role-focus: var(--focus);  /* light #2fa08f · dark #3fc4b0 */
+  --role-danger: var(--danger);  /* light #b8414f · dark #ef6b80 */
+  --role-danger-ink: var(--danger-ink);  /* light #a0404f · dark #ff9eae */
+  --role-danger-soft: var(--danger-soft);  /* light #fdf1f2 · dark #371a20 */
+  --role-success: var(--ok);  /* light #2f9e7f · dark #4cc39b */
+  --role-success-ink: var(--ok-ink);  /* light #1f7a61 · dark #7fd8b7 */
+  --role-success-soft: var(--ok-soft);  /* light #e8f5ef · dark #13302a */
+  --role-warning: var(--warn);  /* light #c0861e · dark #e2a63c */
+  --role-warning-ink: var(--warn-ink);  /* light #8a6418 · dark #f1c472 */
+  --role-warning-soft: var(--warn-soft);  /* light #fbf4e6 · dark #30250f */
+}

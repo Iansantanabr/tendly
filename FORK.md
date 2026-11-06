@@ -26,6 +26,7 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - `cargo check` precisa de `apps/web/dist` existir (RustEmbed); num clone novo, rodar `pnpm build:web` antes.
 - Duas janelas do Tendly abertas (ex.: Chrome + navegador do app) disputam o canvas compartilhado: a que salva depois vê "Conflito ao salvar". Comportamento do upstream, não do fork.
 - Recon da Ratoeira em `replica/` (`recon.md`, `features.csv`; prints em `replica/screens/`, fora do git).
+- Design (`replica/design/`): `tokens.json`/`tokens.dark.json` gerados do `styles.css` por `gen_tokens.py`; `python3 replica/design/contrast.py replica/design/tokens.json` (e o dark) deve dar 0 falhas AA. Ajustes do fork no `styles.css`: `--muted` e `--faint` mais escuros (claro) / mais claros (escuro), `--line-input` novo para borda de campo, cores dos tiles de app. Página `/design` mostra os primitivos (fora do menu). Specs em `components.md`.
 - Confirmações na tela, não `window.confirm` (no navegador do app o diálogo nativo não aparece).
 - Ícones novos em `features/Icon.vue`: home, bell, chat, arrowUp, plug, sparkles, timer, apps.
 

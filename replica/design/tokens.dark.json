@@ -1,0 +1,328 @@
+{
+  "_about": "Papéis de design do fork, lidos de apps/web/src/styles.css (gerado por gen_tokens.py; não editar à mão). Os nomes de papel são os do replica; a coluna css diz qual variável do Tendly usar no código. Valores = paleta padrão do Tendly (bege + verde-azulado), sem a marca da Ratoeira.",
+  "_theme": "dark",
+  "_css": {
+    "bg": "var(--bg)",
+    "surface": "var(--surface)",
+    "elevated": "var(--elevated)",
+    "fill": "var(--fill)",
+    "fill-hover": "var(--fill-hover)",
+    "border": "var(--line)",
+    "border-input": "var(--line-input)",
+    "text": "var(--ink)",
+    "text-soft": "var(--ink-soft)",
+    "text-muted": "var(--muted)",
+    "text-faint": "var(--faint)",
+    "accent": "var(--accent)",
+    "on-accent": "var(--on-accent)",
+    "accent-ink": "var(--accent-ink)",
+    "accent-soft": "var(--accent-soft)",
+    "focus": "var(--focus)",
+    "danger": "var(--danger)",
+    "danger-ink": "var(--danger-ink)",
+    "danger-soft": "var(--danger-soft)",
+    "success": "var(--ok)",
+    "success-ink": "var(--ok-ink)",
+    "success-soft": "var(--ok-soft)",
+    "warning": "var(--warn)",
+    "warning-ink": "var(--warn-ink)",
+    "warning-soft": "var(--warn-soft)"
+  },
+  "color": {
+    "bg": "#0f1113",
+    "surface": "#191c20",
+    "elevated": "#1f2328",
+    "fill": "#22262b",
+    "fill-hover": "#2a2f35",
+    "border": "#2d3238",
+    "border-input": "#67717e",
+    "text": "#ecebe8",
+    "text-soft": "#b3b1ac",
+    "text-muted": "#8e8d89",
+    "text-faint": "#71706c",
+    "accent": "#3fc4b0",
+    "on-accent": "#06211d",
+    "accent-ink": "#74dac8",
+    "accent-soft": "#163631",
+    "focus": "#3fc4b0",
+    "danger": "#ef6b80",
+    "danger-ink": "#ff9eae",
+    "danger-soft": "#371a20",
+    "success": "#4cc39b",
+    "success-ink": "#7fd8b7",
+    "success-soft": "#13302a",
+    "warning": "#e2a63c",
+    "warning-ink": "#f1c472",
+    "warning-soft": "#30250f",
+    "app-amber": "#f0b44c",
+    "app-amber-soft": "#3a2c12",
+    "app-green": "#6fcf8d",
+    "app-green-soft": "#173322",
+    "app-blue": "#7fa9f5",
+    "app-blue-soft": "#18284a",
+    "app-violet": "#b39af0",
+    "app-violet-soft": "#2a2244",
+    "app-rose": "#f08aa9",
+    "app-rose-soft": "#3d1d29",
+    "app-slate": "#a3b0c2",
+    "app-slate-soft": "#252b33",
+    "app-teal": "#5fd0bd",
+    "app-teal-soft": "#163631",
+    "app-orange": "#f39a5f",
+    "app-orange-soft": "#3d2516"
+  },
+  "pairs": [
+    [
+      "text",
+      "bg"
+    ],
+    [
+      "text",
+      "surface"
+    ],
+    [
+      "text",
+      "elevated"
+    ],
+    [
+      "text",
+      "fill"
+    ],
+    [
+      "text-soft",
+      "bg"
+    ],
+    [
+      "text-soft",
+      "surface"
+    ],
+    [
+      "text-soft",
+      "elevated"
+    ],
+    [
+      "text-soft",
+      "fill"
+    ],
+    [
+      "text-muted",
+      "bg"
+    ],
+    [
+      "text-muted",
+      "surface"
+    ],
+    [
+      "text-muted",
+      "elevated"
+    ],
+    [
+      "text-muted",
+      "fill"
+    ],
+    [
+      "text-faint",
+      "surface",
+      "ui"
+    ],
+    [
+      "text-faint",
+      "fill",
+      "ui"
+    ],
+    [
+      "on-accent",
+      "accent"
+    ],
+    [
+      "accent-ink",
+      "surface"
+    ],
+    [
+      "accent-ink",
+      "accent-soft"
+    ],
+    [
+      "danger-ink",
+      "danger-soft"
+    ],
+    [
+      "danger-ink",
+      "surface"
+    ],
+    [
+      "success-ink",
+      "success-soft"
+    ],
+    [
+      "warning-ink",
+      "warning-soft"
+    ],
+    [
+      "warning-ink",
+      "surface"
+    ],
+    [
+      "accent",
+      "surface",
+      "ui"
+    ],
+    [
+      "border-input",
+      "surface",
+      "ui"
+    ],
+    [
+      "focus",
+      "surface",
+      "ui"
+    ],
+    [
+      "danger",
+      "surface",
+      "ui"
+    ],
+    [
+      "success",
+      "surface",
+      "ui"
+    ],
+    [
+      "warning",
+      "surface",
+      "ui"
+    ],
+    [
+      "app-amber",
+      "app-amber-soft"
+    ],
+    [
+      "app-green",
+      "app-green-soft"
+    ],
+    [
+      "app-blue",
+      "app-blue-soft"
+    ],
+    [
+      "app-violet",
+      "app-violet-soft"
+    ],
+    [
+      "app-rose",
+      "app-rose-soft"
+    ],
+    [
+      "app-slate",
+      "app-slate-soft"
+    ],
+    [
+      "app-teal",
+      "app-teal-soft"
+    ],
+    [
+      "app-orange",
+      "app-orange-soft"
+    ]
+  ],
+  "font": {
+    "sans": "Instrument Sans Variable, Inter Variable, system-ui, sans-serif (OFL, embutidas pelo Tendly)",
+    "mono": "JetBrains Mono Variable, ui-monospace, Menlo, monospace (OFL)"
+  },
+  "type": {
+    "xs": {
+      "size": 12,
+      "line": 16,
+      "weight": 500,
+      "css": "--text-xs"
+    },
+    "sm": {
+      "size": 13,
+      "line": 18,
+      "weight": 400,
+      "css": "--text-sm"
+    },
+    "md": {
+      "size": 14,
+      "line": 20,
+      "weight": 400,
+      "css": "--text-md"
+    },
+    "base": {
+      "size": 15,
+      "line": 22,
+      "weight": 400,
+      "css": "--text-base"
+    },
+    "lg": {
+      "size": 16,
+      "line": 24,
+      "weight": 600,
+      "css": "--text-lg"
+    },
+    "xl": {
+      "size": 18,
+      "line": 26,
+      "weight": 600,
+      "css": "--text-xl"
+    },
+    "2xl": {
+      "size": 22,
+      "line": 28,
+      "weight": 650,
+      "css": "--text-2xl"
+    },
+    "3xl": {
+      "size": 28,
+      "line": 34,
+      "weight": 650,
+      "css": "--text-3xl"
+    },
+    "input": {
+      "size": 16,
+      "line": 22,
+      "weight": 400,
+      "css": "--input-text",
+      "_note": "16px mínimo: o iOS não dá zoom no campo"
+    }
+  },
+  "space": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20,
+    24,
+    32,
+    40
+  ],
+  "radius": {
+    "xs": 4,
+    "sm": 6,
+    "md": 10,
+    "lg": 14,
+    "xl": 20,
+    "pill": 999,
+    "_note": "md/lg/xl multiplicados por --corner-scale"
+  },
+  "shadow": {
+    "sm": "--shadow-sm",
+    "md": "--shadow-md",
+    "lg": "--shadow-lg",
+    "card": "--shadow-card"
+  },
+  "motion": {
+    "fast": "100ms (--duration-fast)",
+    "normal": "--duration-normal",
+    "ease": "cubic-bezier(.16,1,.3,1) (--ease-out)",
+    "_note": "respeitar prefers-reduced-motion"
+  },
+  "layout": {
+    "sidebar": "~264px expandida",
+    "page_max": "760–820px nas páginas do hub",
+    "pane_min": "360px (apps e painéis precisam funcionar aqui)",
+    "breakpoint_mobile": "< 768px",
+    "touch_target": "44px com pointer:coarse"
+  }
+}

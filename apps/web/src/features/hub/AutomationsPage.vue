@@ -265,9 +265,9 @@ async function save() {
 .auto-kind.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .auto-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .auto-field { display: grid; gap: 4px; font-size: var(--text-sm); color: var(--muted); }
-.auto-field input, .auto-field select, .auto-field textarea { font: inherit; font-size: var(--text-md); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; min-width: 0; }
+.auto-field input, .auto-field select, .auto-field textarea { font: inherit; font-size: var(--text-md); color: var(--ink); background: var(--surface); border: 1px solid var(--line-input); border-radius: var(--radius-sm); padding: 6px 10px; min-width: 0; }
 .auto-field textarea { resize: vertical; }
-.auto-field :is(input, select, textarea):focus { outline: none; border-color: var(--accent); }
+.auto-field :is(input, select, textarea):focus { border-color: var(--accent); }
 .mono, code, pre { font-family: var(--mono); }
 .auto-hint { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 .auto-form-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
@@ -289,7 +289,7 @@ async function save() {
 .auto-result.ok { background: var(--ok-soft); color: var(--ok-ink); }
 .auto-result.failed { background: var(--danger-soft); color: var(--danger-ink); }
 .auto-result.running { background: var(--warn-soft); color: var(--warn-ink); }
-.auto-switch { appearance: none; flex: none; position: relative; width: 38px; height: 22px; border-radius: var(--radius-full); background: var(--line-strong); cursor: pointer; transition: background .15s; }
+.auto-switch { appearance: none; flex: none; position: relative; width: 38px; height: 22px; border-radius: var(--radius-full); background: var(--line-input); cursor: pointer; transition: background .15s; }
 .auto-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-sm); transition: transform .15s; }
 .auto-switch:checked { background: var(--accent); }
 .auto-switch:checked::after { transform: translateX(16px); }

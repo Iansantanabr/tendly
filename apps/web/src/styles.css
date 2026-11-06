@@ -73,13 +73,15 @@
 
   --ink: #221f1b;
   --ink-soft: #5c574f;
-  --muted: #817b72;
-  --faint: #a39d93;
+  --muted: #6e6961;
+  --faint: #8c8579;
   --on-accent: #ffffff;
 
   --border: #e6e2da;
   --line: #ddd8ce;
   --line-strong: #c8c1b4;
+  /* Form field borders: 3:1 against surface and fill (WCAG 1.4.11); --line-strong stays for dividers. */
+  --line-input: #92846b;
 
   --accent: #0f7f70;
   --accent-hover: #0a6a5e;
@@ -144,21 +146,21 @@
   /* How strongly a pastel tint shows: full on light surfaces, a trace on dark. */
   --tint-mix: 100%;
   /* Custom app tiles: a letter in --app-<colour> on --app-<colour>-soft (features/hub/app-tile.ts). */
-  --app-amber: #a86a00;
+  --app-amber: #9a6100;
   --app-amber-soft: #fdf1d8;
-  --app-green: #2f8a4c;
+  --app-green: #2a7b44;
   --app-green-soft: #e6f4ea;
-  --app-blue: #2f6fdb;
+  --app-blue: #2566d4;
   --app-blue-soft: #e7effc;
   --app-violet: #7656c2;
   --app-violet-soft: #f0ebfa;
-  --app-rose: #c0436a;
+  --app-rose: #b83e64;
   --app-rose-soft: #fbe8ef;
   --app-slate: #56657a;
   --app-slate-soft: #ebeef2;
-  --app-teal: #0f7f70;
+  --app-teal: #0e786a;
   --app-teal-soft: #e3f1ec;
-  --app-orange: #c25a1c;
+  --app-orange: #af5119;
   --app-orange-soft: #fdeee3;
   /* Chart series, validated as a set (adjacent CVD and contrast) for these surfaces. */
   --chart-1: #2a78d6;
@@ -252,12 +254,14 @@
     --backdrop-glow: radial-gradient(1200px 680px at -6% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%), radial-gradient(1000px 600px at 106% 110%, color-mix(in srgb, var(--violet) 8%, transparent), transparent 58%), linear-gradient(180deg, var(--bg), var(--bg-accent));
     --ink: #ecebe8;
     --ink-soft: #b3b1ac;
-    --muted: #8a8884;
-    --faint: #5f5e5b;
+    --muted: #8e8d89;
+    --faint: #71706c;
     --on-accent: #06211d;
     --border: #24282d;
     --line: #2d3238;
     --line-strong: #3d434b;
+    /* Form field borders: 3:1 against surface and fill (WCAG 1.4.11); --line-strong stays for dividers. */
+    --line-input: #67717e;
     --accent: #3fc4b0;
     --accent-hover: #62d2c1;
     --accent-soft: #163631;
@@ -350,12 +354,14 @@
   --backdrop-glow: radial-gradient(1200px 680px at -6% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%), radial-gradient(1000px 600px at 106% 110%, color-mix(in srgb, var(--violet) 8%, transparent), transparent 58%), linear-gradient(180deg, var(--bg), var(--bg-accent));
   --ink: #ecebe8;
   --ink-soft: #b3b1ac;
-  --muted: #8a8884;
-  --faint: #5f5e5b;
+  --muted: #8e8d89;
+  --faint: #71706c;
   --on-accent: #06211d;
   --border: #24282d;
   --line: #2d3238;
   --line-strong: #3d434b;
+  /* Form field borders: 3:1 against surface and fill (WCAG 1.4.11); --line-strong stays for dividers. */
+  --line-input: #67717e;
   --accent: #3fc4b0;
   --accent-hover: #62d2c1;
   --accent-soft: #163631;

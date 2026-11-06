@@ -142,9 +142,9 @@ function openTab(app: HubApp) { window.open(routedUrl(app.url), "_blank", "noope
 .apps-create-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent-ink); }
 .apps-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .apps-field { display: grid; gap: 4px; font-size: var(--text-sm); color: var(--muted); min-width: 0; }
-.apps-field input, .apps-field select, .apps-field textarea { font: inherit; font-size: var(--text-md); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; min-width: 0; }
+.apps-field input, .apps-field select, .apps-field textarea { font: inherit; font-size: var(--text-md); color: var(--ink); background: var(--surface); border: 1px solid var(--line-input); border-radius: var(--radius-sm); padding: 6px 10px; min-width: 0; }
 .apps-field textarea { resize: vertical; }
-.apps-field :is(input, select, textarea):focus { outline: none; border-color: var(--accent); }
+.apps-field :is(input, select, textarea):focus { border-color: var(--accent); }
 .apps-create-actions { display: flex; align-items: center; gap: var(--space-2); }
 .flex-spacer { flex: 1; }
 .link-button { border: 0; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: var(--text-sm); padding: 4px 6px; border-radius: var(--radius-sm); }

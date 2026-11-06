@@ -19,6 +19,7 @@ import InboxPage from "./features/hub/InboxPage.vue";
 import AutomationsPage from "./features/hub/AutomationsPage.vue";
 import IntegrationsPage from "./features/hub/IntegrationsPage.vue";
 import SkillsPage from "./features/hub/SkillsPage.vue";
+import DesignPage from "./features/hub/DesignPage.vue";
 import AppsPage from "./features/hub/AppsPage.vue";
 import { refreshApps, type HubApp } from "./features/hub/apps";
 import { inbox, isUnread, markSeen, refreshInbox } from "./features/hub/inbox";
@@ -129,7 +130,7 @@ const hostPreview = ref<{ path: string; line?: number }>();
 const route = useRoute() ?? reactive({ name: "canvas", params: {}, query: {}, fullPath: "/" });
 const router = useRouter() ?? ({ push: async () => undefined, replace: async () => undefined, back: () => undefined } as unknown as ReturnType<typeof useRouter>);
 /** Which page, if any, is drawn over the canvas. The canvas itself never unmounts. */
-const page = computed(() => route.name === "settings" || route.name === "sessions" || route.name === "system" || route.name === "usage" || route.name === "home" || route.name === "inbox" || route.name === "automations" || route.name === "integrations" || route.name === "skills" || route.name === "apps" ? route.name : undefined);
+const page = computed(() => route.name === "settings" || route.name === "sessions" || route.name === "system" || route.name === "usage" || route.name === "home" || route.name === "inbox" || route.name === "automations" || route.name === "integrations" || route.name === "skills" || route.name === "apps" || route.name === "design" ? route.name : undefined);
 const settingsRouteSection = computed(() => String(route.params.section ?? "preferences") as SettingsSection);
 // Session menus are teleported out of their tabs to the body, so a page over
 // the canvas cannot cover them; the body says a page is open and they step aside.
@@ -923,6 +924,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
         <AutomationsPage v-else-if="page==='automations'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" @back="leavePage" @open-session="openSession" @started="homeStarted"/>
         <IntegrationsPage v-else-if="page==='integrations'" :workspaces="workspaces" @back="leavePage"/>
         <AppsPage v-else-if="page==='apps'" :workspaces="workspaces" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @back="leavePage" @started="homeStarted" @open-app="openApp"/>
+        <DesignPage v-else-if="page==='design'" @back="leavePage"/>
         <SkillsPage v-else-if="page==='skills'" :workspaces="workspaces" @back="leavePage" @open-file="openFileFromHome"/>
         <SystemPage v-else-if="page==='system'" :sessions="sessions" @back="leavePage" @open-session="openSession"/>
         <UsagePage v-else-if="page==='usage'" :sessions="sessions" :workspaces="workspaces" @back="leavePage" @open-session="openSession"/>

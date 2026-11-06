@@ -87,8 +87,9 @@ function open(skill: Skill) {
 .catalog-page { max-width: 820px; display: grid; gap: 14px; }
 .catalog-page > .inline-error { margin: 0; }
 .catalog-muted { color: var(--muted); }
-.catalog-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 36px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--muted); }
-.catalog-search:focus-within { border-color: var(--line-strong); }
+.catalog-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 36px; border: 1px solid var(--line-input); border-radius: var(--radius-md); background: var(--surface); color: var(--muted); }
+.catalog-search:focus-within { border-color: var(--accent); }
+.catalog-search:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .catalog-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; color: var(--ink); }
 .catalog-group { display: grid; gap: 6px; }
 .catalog-group h2 { margin: 6px 0 0; font-size: var(--text-sm); font-weight: 600; color: var(--muted); }

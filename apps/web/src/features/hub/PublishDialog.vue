@@ -179,9 +179,9 @@ function toggleOthers(event: Event) {
 .publish-form { display: grid; gap: var(--space-3); }
 .publish-link { display: flex; gap: var(--space-2); align-items: center; }
 .publish-link input { flex: 1; min-width: 0; }
-.publish-link input, .publish-input { font: inherit; font-size: var(--text-sm); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 10px; min-width: 0; }
+.publish-link input, .publish-input { font: inherit; font-size: var(--text-sm); color: var(--ink); background: var(--surface); border: 1px solid var(--line-input); border-radius: var(--radius-sm); padding: 6px 10px; min-width: 0; }
 .publish-link input { font-family: var(--mono); }
-.publish-input:focus, .publish-link input:focus { outline: none; border-color: var(--accent); }
+.publish-input:focus, .publish-link input:focus { border-color: var(--accent); }
 .publish-group { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .publish-group legend { padding: 0; margin-bottom: 4px; color: var(--muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .publish-choice { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; }

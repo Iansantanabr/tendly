@@ -160,7 +160,8 @@ const suggestions = computed(() => [
 .home-inner { max-width: 1080px; margin: 0 auto; padding: 48px 24px 64px; display: grid; gap: 20px; }
 .home-header h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; color: var(--ink); }
 .home-header p { margin: 4px 0 0; color: var(--muted); }
-.home-composer { background: var(--elevated); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 14px 16px 10px; display: grid; gap: 8px; box-shadow: 0 1px 3px rgb(0 0 0 / 6%); }
+.home-composer { background: var(--elevated); border: 1px solid var(--line-input); border-radius: var(--radius-lg); padding: 14px 16px 10px; display: grid; gap: 8px; box-shadow: 0 1px 3px rgb(0 0 0 / 6%); }
+.home-composer:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .home-composer textarea { border: 0; background: transparent; resize: none; font: inherit; font-size: 1.05rem; color: var(--ink); outline: none; min-height: 52px; }
 .home-composer-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .home-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; color: var(--ink-soft, var(--ink)); }

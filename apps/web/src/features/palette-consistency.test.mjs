@@ -13,7 +13,8 @@ const css = file => {
 
 test('the existing workspace palette remains the source for new conversation and account surfaces', () => {
   const shell = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
-  for (const token of ['--accent: #0f7f70', '--accent-soft: #e3f1ec', '--violet: #7760b5', '--border: #e6e2da', '--muted: #817b72', '--surface: #fcfbf9', '--elevated: #ffffff', '--teal: var(--accent)', '--teal-soft: var(--accent-soft)']) assert.ok(shell.includes(token), token);
+  // Fork: --muted darkened from #817b72 to #6e6961 for WCAG AA (4.5:1 on bg, surface and fill); see replica/design.
+  for (const token of ['--accent: #0f7f70', '--accent-soft: #e3f1ec', '--violet: #7760b5', '--border: #e6e2da', '--muted: #6e6961', '--surface: #fcfbf9', '--elevated: #ffffff', '--teal: var(--accent)', '--teal-soft: var(--accent-soft)']) assert.ok(shell.includes(token), token);
   for (const file of ['./ChatSessionPane.vue', './AccountsDialog.vue', './ChatPreview.vue']) {
     const style = css(file);
     for (const token of ['var(--teal)', 'var(--teal-soft)', 'var(--border)', 'var(--muted)', 'var(--surface)']) assert.ok(style.includes(token), `${file} reuses ${token}`);

@@ -71,6 +71,7 @@ const anyUnread = computed(() => conversations.value.some(s => isUnread(s.id)));
 .conv-new button:disabled { opacity: .5; cursor: default; }
 .conv-search { display: flex; align-items: center; gap: 7px; padding: 6px 10px; margin: 2px 6px 6px; border: 1px solid transparent; border-radius: var(--radius-sm); background: var(--fill); color: var(--muted); }
 .conv-search:focus-within { background: var(--surface); border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+.conv-search:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .conv-search input { width: 100%; min-width: 0; padding: 0; border: 0; background: none; font-size: var(--text-sm); color: var(--ink); outline: 0; }
 .conversations-bar { display: grid; align-content: start; gap: 6px; overflow: auto; min-height: 0; padding-bottom: 12px; }
 .conv-mark { justify-self: start; margin: 0 10px; border: 0; background: none; color: var(--muted); font: inherit; font-size: .85em; cursor: pointer; }

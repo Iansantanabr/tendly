@@ -23,6 +23,7 @@ export const router = createRouter({
     { path: "/automacoes", name: "automations", component: Page },
     { path: "/integracoes", name: "integrations", component: Page },
     { path: "/habilidades", name: "skills", component: Page },
+    { path: "/design", name: "design", component: Page },
     { path: "/apps", name: "apps", component: Page },
     { path: "/sessions", name: "sessions", component: Page },
     { path: "/system", name: "system", component: Page },
