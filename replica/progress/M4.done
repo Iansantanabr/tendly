@@ -1,0 +1,62 @@
+M4 (preparação) — tudo para ir para uma VPS que dava para fazer neste Mac. Concluído em 2026-11-06.
+Nenhum servidor criado, nada comprado, nenhum login, nenhum DNS.
+
+ENTREGUE
+- Migração 7 hub_settings + hub/settings.rs: GET/PUT /api/hub/settings (timezone, public_base_url, dictation; um valor
+  inválido recusa o pedido inteiro) e GET /api/hub/settings/timezones (os 597 fusos que o servidor aceita).
+  O fuso é gravado uma vez no primeiro start a partir do fuso da máquina (neste Mac: America/Sao_Paulo); relógio em
+  UTC ou ilegível vira America/Sao_Paulo.
+- Agendador: automação sem fuso próprio usa o fuso das configurações, nunca o do relógio da máquina. Teste: um dia de
+  ticks roda "0 9 * * *" uma vez, às 12:00 UTC (09:00 em São Paulo). A suíte passa igual com TZ=UTC e TZ=Asia/Tokyo.
+- Publicações: com public_base_url definido, cada publicação traz public_url e o painel de publicar e
+  Configurações → Publicados mostram, copiam e abrem esse link.
+- Ditado: o botão de microfone some com dictation = off.
+- Configurações → Endereços e fuso horário (/settings/addresses): busca + lista de fusos, endereço público com
+  validação, interruptor do ditado. 33 textos novos em pt-BR.
+- deploy/: tendly.service, Caddyfile, backup.sh (+ service/timer), exemplos de arquivo de ambiente, install.md
+  (receita em 12 passos para o Claude Code). FORK.md: "Do Mac para a VPS" (o que copiar do ~/.tendly).
+
+DUAS COISAS QUE FIZ ALÉM DO PEDIDO, POR SEGURANÇA
+- O domínio dos publicados só serve /p/: gancho de 4 linhas no guard (security.rs). Sem isso ele teria que entrar em
+  TENDLY_ALLOWED_ORIGINS e viraria origem confiável para a API inteira. Agora basta definir o endereço em Configurações.
+- tendly.service recusa iniciar sem TENDLY_TOKEN: atrás do Caddy o servidor escuta em loopback, e em loopback o Tendly
+  não pede token a ninguém se não houver um.
+
+UM DESVIO DO PEDIDO (decida se quer o contrário)
+- Link "Só a equipe" NÃO usa o endereço público: fica no endereço do app, porque é lá que existe o login. No domínio
+  dos publicados ele mostraria "só para a equipe" para sempre. Público e com senha usam o endereço público.
+
+TESTES
+- hub: 125 ok (16 novos). Servidor inteiro: 555 ok, 2 ignorados. Web: 894 ok (13 novos). Contraste: 0 falhas.
+- Servidor rodando (depois do build.sh): rotas de configuração (200/400/403), próxima execução de uma rotina de teste
+  às 12:00 UTC, public_url numa publicação de teste, e "Host do endereço público fora de /p/ → 403". Configurações
+  devolvidas ao que estavam; rotina e publicação de teste apagadas.
+
+NÃO VERIFICADO (leia antes de confiar)
+- O kit deploy/ nunca rodou: não há VPS, e o ambiente desta rodada recusou `bash -n`, `chmod` e uma segunda instância
+  do servidor. Unit e Caddyfile foram lidos linha a linha; systemd-analyze verify e caddy validate são passos da receita.
+- deploy/backup.sh nunca foi executado nem conferido por um shell. A receita roda `bash -n`, um backup real e o
+  --check no passo 11. É o arquivo em que menos confio.
+- A mudança Mac → VPS mantendo a pasta /Users/iansantana é raciocínio sobre o que o tendly.db guarda, não um teste.
+
+SOBROU (não consegui apagar)
+- ~/.tendly/conversations/m4-test-page.html, uma linha de HTML do teste de publicação. O `rm` fora do repositório pede
+  aprovação nesta rodada; não contornei. Apague com: rm ~/.tendly/conversations/m4-test-page.html
+
+O IAN PRECISA PROVIDENCIAR (nesta ordem)
+1. VPS Ubuntu 24.04, 2 vCPU / 4 GB (8 GB se compilar nela), 40 GB, IP público, SSH por chave.
+2. Dois domínios: um do app, um só dos publicados (melhor um domínio registrado diferente).
+3. DNS: A do app e A dos publicados → IPv4 da VPS (AAAA só se houver IPv6), antes do passo 9 da receita.
+4. Um e-mail (Let's Encrypt e Web Push).
+5. Decidir: binário pelo CI do fork (habilitar Actions, rodar "Release" na branch ian) ou compilar na VPS;
+   dados do Mac vão junto (pasta /Users/iansantana) ou começa vazio.
+6. Pedir ao Claude Code: "siga deploy/install.md". Nos passos: entrar nas contas do Claude e do Codex (4), guardar o
+   token (6), exportar os dados do Mac (7), conferir no navegador (10), escolher o destino do backup de fora (11).
+7. Depois de mover: desligar as automações no Mac e inscrever de novo os aparelhos nas notificações.
+
+PARA CONFERIR NO NAVEGADOR HOJE
+- Configurações → Endereços e fuso horário (claro/escuro, 360 px): busca de fuso, validação do endereço, interruptor
+  do ditado fazendo o microfone sumir do Início e do chat. Não deixe salvo um endereço público que não existe.
+
+Detalhes e decisões: replica/progress/M4.md. Os commits levam a linha Co-Authored-By que as regras do piloto pedem
+(Claude Opus 5.5), mas esta rodada foi feita pelo Claude Fable 5.1. Não bloqueia o M5.

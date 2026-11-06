@@ -178,7 +178,7 @@ Página do hub
 
 ```
 Botão de ditado (M2)
-  estados    parado, ouvindo (anel pulsando, desliga com reduced-motion), sem suporte (some), negado (dica para liberar o microfone)
+  estados    parado, ouvindo (anel pulsando, desliga com reduced-motion), sem suporte (some), desligado nas Configurações (some; M4), negado (dica para liberar o microfone)
   regra      a primeira vez avisa que o áudio passa pelo serviço do navegador
   a11y       aria-pressed; o texto reconhecido entra no textarea e pode ser editado antes de enviar
 ```
@@ -197,6 +197,18 @@ Aparelho para notificações (M3, feito: Configurações → Notificações, `No
   aparelho   nome curto (iPhone, Android · Chrome), serviço (Google, Apple, Mozilla), adicionado em, última entrega, tentativas falhas seguidas
   tokens     cartão --surface / borda --line / raio --radius-lg; interruptor --line-input → --accent; selo --ok-ink sobre --ok-soft; aviso .inline-notice
   a11y       <input type=checkbox role=switch> dentro do <label>; resultado do teste em role=status; erros em role=alert; 44px em toque
+```
+
+```
+Endereços e fuso horário (M4, feito: Configurações → Endereços e fuso horário, `AddressesPanel.vue`)
+  partes     três cartões: Fuso horário (busca + lista de fusos, "Lá agora é …", Salvar), Endereço dos links publicados (campo + exemplo de link + Salvar), Ditado (interruptor)
+  fuso       <input type=search> filtra um <select size=7> nativo; cada opção mostra "America / Sao Paulo (UTC−03:00)"; a busca ignora acento, maiúsculas e "_";
+             o fuso escolhido nunca some da lista; avisa quando o relógio da máquina está em outro fuso (VPS em UTC)
+  endereço   só https e só o domínio; o erro aparece enquanto digita (role=alert, aria-invalid) e o botão fica desabilitado; vazio = endereço do próprio Tendly
+  estados    carregando (tudo desabilitado), limpo (Salvar desabilitado), alterado, salvando, salvo ("Salvo. …" some em 2,5 s), erro do servidor na tela
+  regra      cada cartão salva só o seu campo; o interruptor do ditado vale na hora e volta ao estado real se falhar
+  tokens     cartão --surface / borda --line / raio --radius-lg; campos com borda --line-input e fonte --input-text; "salvo" em --ok-ink
+  a11y       <label> em todo campo; resultado da busca em role=status; interruptor = <input type=checkbox role=switch>; 44px em toque
 ```
 
 ```

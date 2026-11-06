@@ -27,7 +27,7 @@ Um banco por responsabilidade (upstream vs fork), sem microsserviços.
 
 ## Schema
 
-Tabelas: 8 em `hub.db` (6 em produção, mais 3 propostas: `spaces`, `push_subscriptions` + `push_keys`, `hub_settings`) e 1 coluna nova.
+Tabelas em `hub.db`: migrações 1 a 7 em produção (a 7, `hub_settings`, entrou no M4); proposta: 1 coluna nova (migração 8).
 Acesso: checagens na camada de dados. O `guard` autentica todo `/api/`, e cada rota do hub valida o id do workspace e o caminho (canonicaliza e confere o prefixo).
 
 O SQL completo, com as migrações em produção e as propostas, está em [`schema.sql`](schema.sql). Restrições importantes:
@@ -93,15 +93,16 @@ O ditado é só interface: um botão de microfone no composer usa `SpeechRecogni
 
 | método e caminho | faz | entrada | saída |
 | --- | --- | --- | --- |
-| `GET/PUT settings` | `timezone`, `public_base_url`, `dictation` | `{key: value}` | mapa |
+| `GET/PUT settings` | `timezone`, `public_base_url`, `dictation` (feito no M4; um valor inválido recusa o pedido inteiro) | `{key: value}` | mapa |
+| `GET settings/timezones` | os fusos que o servidor aceita, para o seletor, e o fuso do relógio da máquina | — | `{zones, server}` |
 
-Fora da API:
-- `tendly service install` (já existe no upstream) com unit systemd.
-- Caddy como proxy com HTTPS automático para dois domínios: o do app e o dos publicados.
-- Backup diário do `~/.tendly` (restic ou rsync), incluindo `hub.db`, `history/` e `published/`.
-- Uma "receita" `docs/vps.md` que o Claude Code segue para instalar tudo.
+Fora da API (kit em `deploy/`, feito no M4, ainda não rodado numa VPS):
+- `deploy/tendly.service`: unit de sistema com usuário próprio e sandbox. Não é o `tendly service install` do upstream, que cria um unit de usuário sem token obrigatório.
+- `deploy/Caddyfile`: HTTPS automático para dois domínios: o do app (tudo) e o dos publicados (só `/p/*`, o resto 404).
+- `deploy/backup.sh` + timer: backup diário do `~/.tendly` (bancos por `sqlite3 .backup`, 14 dias, restic opcional), incluindo `hub.db`, `history/` e `published/`.
+- `deploy/install.md`: a receita que o Claude Code segue para instalar tudo.
 
-O link publicado passa a usar `public_base_url` quando estiver definido.
+O link publicado usa `public_base_url` quando definido (`public_url` em cada publicação; "só a equipe" continua no endereço do app). O servidor só responde por esse nome em `/p/...`: ele nunca vira `Host` do app nem `Origin` aceito pela API (gancho no `guard`).
 
 ### Webhooks e jobs
 
@@ -139,7 +140,8 @@ Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeir
   - no Mac, a saída é o `tailscale serve` com HTTPS (o Tendly já integra Tailscale); na VPS, o Caddy;
   - por isso o M3 depende de HTTPS e é testado primeiro pelo Tailscale.
 - **Segurança na VPS:**
-  - o token passa a ser obrigatório (o Tendly já faz isso fora do loopback);
+  - o token passa a ser obrigatório. Atenção: atrás do Caddy o servidor escuta em loopback, e em loopback o Tendly **não** pede token a não ser que exista um. Por isso o `TENDLY_TOKEN` é obrigatório no arquivo de ambiente e o unit se recusa a iniciar sem ele;
+  - o domínio dos publicados só serve `/p/*` (no Caddy e de novo no servidor) e não é origem aceita pela API;
   - o publicado fica fora de `/api` e com CSP sandbox;
   - apps rodam na mesma origem e sem sandbox, aceitável com um usuário e código do próprio agente; no multiusuário passam para uma origem separada (`apps.<domínio>`);
   - o 1Password (M5) usa o CLI `op` com um token de serviço guardado no `secrets` do Tendly, nunca no `hub.db`.
@@ -171,9 +173,8 @@ Somente APIs oficiais e públicas com as chaves do próprio Ian. Nada da Ratoeir
    - Conferir o layout mobile do Tendly no aparelho.
 
 5. **M4: VPS (2–3 dias, etapa à parte)**
-   - Binário Linux, systemd, Caddy + HTTPS, backup.
-   - `hub_settings` (migração 7) com fuso e domínio dos publicados.
-   - Receita `docs/vps.md`.
+   - Preparação feita: `hub_settings` (migração 7) com fuso, domínio dos publicados e ditado; kit `deploy/` (systemd, Caddy + HTTPS, backup, receita `deploy/install.md`).
+   - Falta: a VPS, os domínios e o DNS (do Ian), rodar a receita, trazer os dados do Mac.
    - Fecha o must "rodar 24h num servidor".
 
 6. **M5: coulds**

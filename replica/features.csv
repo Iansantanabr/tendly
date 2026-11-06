@@ -32,7 +32,7 @@ Fila ou Agora ao mandar mensagem com agente rodando,chat,should,yes,yes,Tendly t
 Tool calls colapsáveis e status ao vivo,chat,must,yes,yes,Tendly upstream
 Caminho de arquivo na resposta abre na Mesa,chat,must,yes,yes,Tendly upstream
 Fixar mensagem do usuário no topo,chat,could,yes,no,P11
-Ditado por voz embutido,chat,should,yes,yes,M2 (Web Speech; não testado com microfone)
+Ditado por voz embutido,chat,should,yes,yes,M2 (Web Speech; não testado com microfone); M4: liga/desliga em Configurações → Endereços e fuso horário
 Colar link de outra conversa como contexto,chat,should,yes,yes,M2
 Várias contas Claude e Codex ao mesmo tempo,contas,must,yes,yes,Tendly endpoints/perfis
 Escolher conta ao abrir nova conversa,contas,must,yes,yes,Tendly CreateSessionDialog
@@ -50,7 +50,7 @@ Publicar: link com nome editável,publicar,must,yes,yes,Fase 3
 Publicar: botão Gerar senha,publicar,could,yes,yes,M1
 Publicar: Pedir pro agente,publicar,should,yes,yes,M1
 Lista de publicados nas Configurações,publicar,should,yes,yes,M1
-Domínio próprio para os links publicados,publicar,should,yes,no,Configurações > Endereços; depende da VPS
+Domínio próprio para os links publicados,publicar,should,yes,partial,M4: Configurações → Endereços e fuso horário (public_base_url); o servidor só responde /p/ por esse nome; falta o domínio e a VPS
 Markdown publicado renderizado,publicar,should,yes,yes,M1
 Automações com cron toggle próxima execução e log,automações,must,yes,yes,Fase 2
 Editar automação com o chat,automações,must,yes,yes,Fase 2
@@ -90,7 +90,7 @@ Presença vendo agora,multiplayer,could,yes,skip,multiusuário
 Pessoas e permissões por pasta,multiplayer,could,yes,skip,multiusuário
 Conversa infinita que chama outras sessões,avançado,could,yes,no,mencionado no vídeo; sem tela
 Orquestração de agentes,avançado,could,yes,no,mencionado no vídeo; sem tela
-Instalação guiada na VPS por receita,infra,should,yes,no,etapa VPS
-Rodar 24h num servidor,infra,must,yes,partial,roda no Mac; VPS depois
+Instalação guiada na VPS por receita,infra,should,yes,partial,M4: deploy/install.md + unit systemd + Caddyfile + backup; escrita e revisada no Mac; ainda não rodou numa VPS
+Rodar 24h num servidor,infra,must,yes,partial,roda no Mac; M4 deixou pronto o kit (deploy/) e o fuso das automações independente do relógio da máquina; falta o Ian contratar a VPS e os domínios
 Apps do negócio da Dobra (Conteúdo Pipeline Workshop Sessões),apps,could,yes,skip,são conteúdo deles; o fork dá a plataforma para criar os seus
 Comunidade cursos e receitas,negócio,could,yes,skip,conteúdo pago da Ratos de IA

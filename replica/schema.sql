@@ -131,10 +131,14 @@ CREATE TABLE push_keys (
     vapid_private TEXT NOT NULL    -- sealed; generated once; rotating it invalidates every subscription
 );
 
----------------------------------------------------------------- proposed: 7 (M3/M4, hub settings)
--- Small key/value settings that are the fork's, not Tendly's preferences:
---   timezone          IANA zone for automations without one (VPS clocks run UTC)
---   public_base_url   https://apps.example.com for /p/{slug} links (Endereços)
+---------------------------------------------------------------- live: 7 (M4, hub settings)
+-- Small key/value settings that are the fork's, not Tendly's preferences.
+-- The migration seeds nothing; a missing or unusable row means the default.
+--   timezone          IANA zone for automations without one (VPS clocks run UTC).
+--                     Written once, at the first start, from the machine's own zone
+--                     unless that is UTC-like; default America/Sao_Paulo.
+--   public_base_url   https://pub.example.com for /p/{slug} links, or '' (this server's own
+--                     address). The server answers for that host under /p/ only.
 --   dictation         'browser' | 'off'
 CREATE TABLE hub_settings (
     key TEXT PRIMARY KEY,
