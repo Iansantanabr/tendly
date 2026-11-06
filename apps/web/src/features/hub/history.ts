@@ -30,6 +30,11 @@ export function authorLabel(version: Pick<FileVersion, "author_kind" | "session_
   return t("Outside Tendly");
 }
 
+/** The conversation an agent's version came from, when there is one to open. */
+export function conversationOf(version: Pick<FileVersion, "author_kind" | "session_id">): string | null {
+  return version.author_kind === "agent" && version.session_id ? version.session_id : null;
+}
+
 export function ago(iso: string, t: Translate, now = Date.now()): string {
   const seconds = Math.max(0, (now - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return t("just now");

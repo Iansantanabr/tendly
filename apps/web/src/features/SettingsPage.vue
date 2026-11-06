@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { EndpointProfile } from '@tendly/protocol';
 import PageShell from './PageShell.vue';
 import Icon from './Icon.vue';
@@ -10,6 +10,7 @@ import PreferencesPanel from './PreferencesPanel.vue';
 import UpdatePanel from './UpdatePanel.vue';
 import RemoteAccessPanel from './RemoteAccessPanel.vue';
 import MachinesPanel from './MachinesPanel.vue';
+import PublishedPanel from './hub/PublishedPanel.vue';
 import { backendCapabilities } from './backend-capabilities';
 import { useI18n } from '../i18n';
 
@@ -52,20 +53,33 @@ const removeGuard = useRouter().beforeEach((to, from) => {
   return new Promise<boolean>(resolve => page.requestLeave(() => resolve(true)));
 });
 onBeforeUnmount(removeGuard);
-function select(next: SettingsSection) { if (next !== section.value) emit('navigate', next); }
+/** "Published" (hub) has no address of its own: it is shown over the routed section until another is chosen. */
+const published = ref(false);
+watch(() => props.section, () => { published.value = false; });
+function openPublished() {
+  if (published.value) return;
+  if (section.value === 'endpoints' && profilesPage.value) profilesPage.value.requestLeave(() => { published.value = true; });
+  else published.value = true;
+}
+function select(next: SettingsSection) { published.value = false; if (next !== section.value) emit('navigate', next); }
 </script>
 
 <template>
   <PageShell named-above :title="t('Settings')" @back="emit('back')">
     <div class="settings-layout">
       <nav class="settings-nav" data-arrow-nav :aria-label="t('Settings sections')">
-        <button v-for="entry in SECTIONS" :key="entry.id" type="button" :class="['settings-nav-item',{selected:section===entry.id}]" :aria-current="section===entry.id?'page':undefined" @click="select(entry.id)">
+        <button v-for="entry in SECTIONS" :key="entry.id" type="button" :class="['settings-nav-item',{selected:!published&&section===entry.id}]" :aria-current="!published&&section===entry.id?'page':undefined" @click="select(entry.id)">
           <Icon :name="entry.icon" :size="16"/>
           <strong>{{ t(entry.label) }}</strong>
         </button>
+        <button type="button" :class="['settings-nav-item',{selected:published}]" :aria-current="published?'page':undefined" @click="openPublished">
+          <Icon name="globe" :size="16"/>
+          <strong>{{ t('Published files') }}</strong>
+        </button>
       </nav>
       <div class="settings-page">
-        <PreferencesPanel v-if="section==='preferences'" :profiles="profiles"/>
+        <PublishedPanel v-if="published"/>
+        <PreferencesPanel v-else-if="section==='preferences'" :profiles="profiles"/>
         <AgentClientsPanel v-else-if="section==='agents'"/>
         <ProfilesDialog v-else-if="section==='endpoints'" ref="profilesPage" embedded :profiles="profiles" @close="emit('back')" @changed="emit('changed', $event)" @accounts="select('accounts')"/>
         <UpdatePanel v-else-if="section==='updates'"/>

@@ -5,7 +5,10 @@
 //! symlinked skill folder is followed once and a symlink loop cannot recurse.
 use super::{home, read_capped};
 use crate::{ApiError, AppState, Result, app::db};
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{Path as UrlPath, State},
+};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
@@ -17,9 +20,13 @@ const SKILL_LIMIT: u64 = 64 * 1024;
 /// Skill folders read from one directory at most.
 const MAX_PER_DIR: usize = 500;
 const MAX_DESCRIPTION: usize = 1200;
+/// The most of one SKILL.md that `content` returns.
+const CONTENT_LIMIT: u64 = 256 * 1024;
 
 #[derive(Serialize, Debug, Clone)]
 struct Skill {
+    /// Stable while the SKILL.md stays where it is: a hash of its absolute path.
+    id: String,
     name: String,
     description: String,
     source: &'static str,
@@ -35,15 +42,51 @@ struct Skill {
 }
 
 pub(super) async fn list(State(state): State<AppState>) -> Result<Json<Value>> {
-    let workspaces = db(&state, |s| s.list_workspaces()).await?;
-    let skills = tokio::task::spawn_blocking(move || {
+    let skills = scan(&state).await?;
+    Ok(Json(json!({ "skills": skills })))
+}
+
+async fn scan(state: &AppState) -> Result<Vec<Skill>> {
+    let workspaces = db(state, |s| s.list_workspaces()).await?;
+    tokio::task::spawn_blocking(move || {
         let workspaces: Vec<(String, String, String)> =
             workspaces.into_iter().map(|w| (w.id.to_string(), w.name, w.root_path)).collect();
         collect(home().as_deref(), &workspaces)
     })
     .await
-    .map_err(ApiError::internal)?;
-    Ok(Json(json!({ "skills": skills })))
+    .map_err(ApiError::internal)
+}
+
+/// One skill's SKILL.md, found by id in a fresh scan: only a file the
+/// listing would show can be read, never a path the caller names.
+pub(super) async fn content(State(state): State<AppState>, UrlPath(id): UrlPath<String>) -> Result<Json<Value>> {
+    if !valid_id(&id) {
+        return Err(ApiError::missing("Skill"));
+    }
+    let skill = scan(&state).await?.into_iter().find(|s| s.id == id).ok_or_else(|| ApiError::missing("Skill"))?;
+    let (content, truncated) = tokio::task::spawn_blocking({
+        let path = PathBuf::from(&skill.path);
+        move || read_content(&path)
+    })
+    .await
+    .map_err(ApiError::internal)?
+    .ok_or_else(|| ApiError::missing("Skill"))?;
+    Ok(Json(json!({ "id": skill.id, "name": skill.name, "path": skill.path, "content": content, "truncated": truncated })))
+}
+
+fn read_content(path: &Path) -> Option<(String, bool)> {
+    let size = std::fs::metadata(path).ok()?.len();
+    let text = read_capped(path, CONTENT_LIMIT)?;
+    Some((text, size > CONTENT_LIMIT))
+}
+
+pub(super) fn skill_id(path: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(path.display().to_string().as_bytes()).iter().take(12).map(|b| format!("{b:02x}")).collect()
+}
+
+fn valid_id(id: &str) -> bool {
+    id.len() == 24 && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn collect(home: Option<&Path>, workspaces: &[(String, String, String)]) -> Vec<Skill> {
@@ -105,6 +148,7 @@ fn read_skill(dir: &Path, folder: &str, source: &'static str, plugin: Option<Str
         description = description.chars().take(MAX_DESCRIPTION).collect::<String>() + "…";
     }
     Skill {
+        id: skill_id(&path),
         name,
         description,
         source,
@@ -400,6 +444,31 @@ mod tests {
         let local = skills.last().unwrap();
         assert_eq!(local.rel_path.as_deref(), Some(".claude/skills/local/SKILL.md"));
         assert_eq!(local.workspace_id.as_deref(), Some("w1"));
+        // Ids are stable across scans and distinct per file.
+        let again = collect(Some(&home), &workspaces);
+        assert_eq!(skills.iter().map(|s| &s.id).collect::<Vec<_>>(), again.iter().map(|s| &s.id).collect::<Vec<_>>());
+        let ids: HashSet<&String> = skills.iter().map(|s| &s.id).collect();
+        assert_eq!(ids.len(), skills.len());
+        assert!(skills.iter().all(|s| valid_id(&s.id)));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn content_is_capped_and_ids_are_checked() {
+        let dir = std::env::temp_dir().join(format!("tendly-skill-content-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let small = dir.join("SKILL.md");
+        std::fs::write(&small, "---\nname: s\n---\n# Hi\n").unwrap();
+        assert_eq!(read_content(&small), Some(("---\nname: s\n---\n# Hi\n".to_owned(), false)));
+        let big = dir.join("BIG.md");
+        std::fs::write(&big, "x".repeat(CONTENT_LIMIT as usize + 10)).unwrap();
+        let (text, truncated) = read_content(&big).unwrap();
+        assert_eq!(text.len(), CONTENT_LIMIT as usize);
+        assert!(truncated);
+        assert!(read_content(&dir.join("missing.md")).is_none());
+        assert!(valid_id(&skill_id(&small)));
+        assert!(!valid_id("../../etc/passwd"));
+        assert!(!valid_id(&"A".repeat(24)));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

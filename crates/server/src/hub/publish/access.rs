@@ -166,6 +166,30 @@ button {{ font: inherit; padding: .6rem .75rem; border: 0; border-radius: .5rem;
 .error {{ color: #c0392b; }}
 pre {{ white-space: pre-wrap; word-wrap: break-word; font: 15px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: .5rem; padding: 1.25rem; margin: 0; }}
 .name {{ color: var(--muted); font-size: .85rem; margin-bottom: .5rem; }}
+.md {{ font-size: 1.0625rem; line-height: 1.7; overflow-wrap: break-word; }}
+.md > :first-child {{ margin-top: 0; }}
+.md p, .md li {{ color: var(--ink); }}
+.md p, .md ul, .md ol, .md blockquote, .md table, .md pre {{ margin: 0 0 1.1rem; }}
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {{ line-height: 1.3; font-weight: 650; margin: 2rem 0 .75rem; }}
+.md h1 {{ font-size: 2rem; margin-top: .5rem; }}
+.md h2 {{ font-size: 1.5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--line); }}
+.md h3 {{ font-size: 1.25rem; }}
+.md h4, .md h5, .md h6 {{ font-size: 1.05rem; }}
+.md a {{ color: var(--accent); }}
+.md ul, .md ol {{ padding-left: 1.5rem; }}
+.md li + li {{ margin-top: .25rem; }}
+.md li > input[type=checkbox] {{ margin: 0 .45rem 0 -1.3rem; }}
+.md ul:has(> li > input[type=checkbox]) {{ list-style: none; }}
+.md blockquote {{ padding: .1rem 1rem; border-left: 3px solid var(--line); color: var(--muted); }}
+.md blockquote p {{ color: inherit; }}
+.md code {{ font: .9em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: .3rem; padding: .1em .35em; }}
+.md pre {{ white-space: pre; overflow-x: auto; font-size: .9rem; }}
+.md pre code {{ background: none; border: 0; padding: 0; font-size: inherit; }}
+.md table {{ display: block; overflow-x: auto; border-collapse: collapse; }}
+.md th, .md td {{ border: 1px solid var(--line); padding: .45rem .75rem; text-align: left; }}
+.md th {{ background: var(--card); font-weight: 600; }}
+.md img {{ max-width: 100%; height: auto; }}
+.md hr {{ border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }}
 </style></head>
 <body><main{class}>{body}</main></body></html>"#,
         title = escape(title),
@@ -201,12 +225,16 @@ pub(super) fn password_form(slug: &str, error: Option<&str>) -> String {
     )
 }
 
-/// A Markdown file shown as its text, wrapped so it reads on any screen. No
-/// Markdown renderer is a dependency; the text is escaped, never interpreted.
+/// A Markdown file rendered as a readable document (`markdown.rs` keeps raw
+/// HTML out), under the file's name.
 pub(super) fn markdown_page(name: &str, text: &str) -> String {
     page(
         name,
-        &format!(r#"<div class="name">{}</div><pre>{}</pre>"#, escape(name), escape(text)),
+        &format!(
+            r#"<div class="name">{}</div><article class="md">{}</article>"#,
+            escape(name),
+            super::markdown::render(text)
+        ),
         true,
     )
 }

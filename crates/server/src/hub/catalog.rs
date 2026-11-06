@@ -8,10 +8,14 @@ mod integrations;
 mod redact;
 mod skills;
 
+#[cfg(test)]
+mod tests;
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/hub/catalog/integrations", get(integrations::list))
         .route("/api/hub/catalog/skills", get(skills::list))
+        .route("/api/hub/catalog/skills/{id}/content", get(skills::content))
 }
 
 /// The person's home directory, where Claude Code and Codex keep their settings.

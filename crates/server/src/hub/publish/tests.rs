@@ -187,6 +187,7 @@ async fn hub_publish_frozen_keeps_the_snapshot_and_live_follows_the_file() {
     let (status, headers, markdown) = f.visit("GET", &format!("/p/{live_slug}/"), &[], "").await;
     assert_eq!(status, StatusCode::OK);
     assert!(markdown.contains("&lt;b&gt;v2&lt;/b&gt;"), "escaped, current: {markdown}");
+    assert!(markdown.contains("<h1>Notes</h1>"), "rendered: {markdown}");
     assert!(headers[header::CONTENT_TYPE].to_str().unwrap().starts_with("text/html"));
 
     let (status, refreshed) = f.api("POST", "/api/hub/publications/my-site/refresh", json!({})).await;

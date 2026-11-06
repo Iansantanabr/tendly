@@ -1,14 +1,17 @@
 <script setup lang="ts">
 /** Publish one file at /p/{slug}: who sees it and when it updates. */
-import { computed, reactive, ref, watch } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
 import Icon from "../Icon.vue";
 import { errorMessage } from "../api";
 import { copyText } from "../clipboard";
 import { useI18n } from "../../i18n";
 import {
-  MODES, VISIBILITIES, changes, listPublications, problem, publicLink, publicationFor, publish, refreshPublication,
+  MODES, VISIBILITIES, changes, fileName, problem, publicLink, publicationFor, publish, publishAgentPrompt, refreshPublication,
   tidySlug, unpublish, updatePublication, type Publication, type PublishMode, type Visibility,
 } from "./publish";
+import { generatePassword } from "./password";
+import { AccountChoiceRequired, startConversation } from "./start";
+import PublicationsList from "./PublicationsList.vue";
 
 const props = defineProps<{ workspaceId: string; path: string }>();
 const emit = defineEmits<{ close: [] }>();
@@ -19,14 +22,18 @@ const uid = Math.random().toString(36).slice(2, 8);
 const current = ref<Publication | null>(null);
 const loading = ref(true), busy = ref(""), error = ref(""), copied = ref(false);
 const form = reactive<{ visibility: Visibility; password: string; mode: PublishMode; slug: string }>({ visibility: "team", password: "", mode: "frozen", slug: "" });
-const others = ref<Publication[]>([]), othersOpen = ref(false), othersError = ref("");
+const othersOpen = ref(false);
+const othersList = ref<InstanceType<typeof PublicationsList>>();
+/** A generated password shows as plain text until the panel is saved. */
+const passwordShown = ref(false), passwordCopied = ref(false);
+const passwordInput = ref<HTMLInputElement>();
+const asking = ref(false);
 
 const origin = typeof location === "undefined" ? "" : location.origin;
 const link = computed(() => current.value ? publicLink(current.value, origin) : "");
 const invalid = computed(() => problem(form, current.value?.has_password ?? false, t));
 const dirty = computed(() => !!current.value && Object.keys(changes(current.value, form)).length > 0);
 const frozenAt = computed(() => current.value?.frozen_at ? new Date(current.value.frozen_at).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
-const fileName = (path: string) => path.split("/").pop() || path;
 
 function fill(publication: Publication | null) {
   current.value = publication;
@@ -34,6 +41,7 @@ function fill(publication: Publication | null) {
   form.mode = publication?.mode ?? "frozen";
   form.slug = publication?.slug ?? "";
   form.password = "";
+  passwordShown.value = false;
 }
 
 async function load() {
@@ -47,7 +55,7 @@ watch(() => [props.workspaceId, props.path], () => { copied.value = false; void 
 async function act(label: string, work: () => Promise<void>) {
   if (busy.value) return;
   busy.value = label; error.value = "";
-  try { await work(); if (othersOpen.value) await loadOthers(); }
+  try { await work(); if (othersOpen.value) await othersList.value?.load(); }
   catch (cause) { error.value = errorMessage(cause); }
   finally { busy.value = ""; }
 }
@@ -84,14 +92,33 @@ async function copy() {
 }
 const open = () => window.open(link.value, "_blank", "noopener");
 
-async function loadOthers() {
-  othersError.value = "";
-  try { others.value = await listPublications(); }
-  catch (cause) { othersError.value = errorMessage(cause); }
-}
 function toggleOthers(event: Event) {
   othersOpen.value = (event.target as HTMLDetailsElement).open;
-  if (othersOpen.value) void loadOthers();
+}
+/** Unpublished from the list below: this file's panel goes back to "not published". */
+function removedElsewhere(slug: string) {
+  if (current.value?.slug === slug) fill(null);
+}
+
+function generate() {
+  form.password = generatePassword();
+  passwordShown.value = true;
+  passwordCopied.value = false;
+  void nextTick(() => passwordInput.value?.select());
+}
+async function copyPassword() {
+  await copyText(form.password);
+  passwordCopied.value = true;
+  setTimeout(() => { passwordCopied.value = false; }, 1500);
+}
+
+/** "Ask the agent": a conversation in this file's project that gets it ready to publish. */
+async function askAgent() {
+  if (asking.value) return;
+  asking.value = true; error.value = "";
+  try { await startConversation({ prompt: publishAgentPrompt(props.path, t), workspaceId: props.workspaceId }); }
+  catch (cause) { error.value = cause instanceof AccountChoiceRequired ? t(cause.message) : errorMessage(cause); }
+  finally { asking.value = false; }
 }
 </script>
 
@@ -117,10 +144,16 @@ function toggleOthers(event: Event) {
         <label v-for="choice in VISIBILITIES" :key="choice.value" class="publish-choice">
           <input v-model="form.visibility" type="radio" :name="`publish-visibility-${uid}`" :value="choice.value">{{ t(choice.label) }}
         </label>
-        <input
-          v-if="form.visibility === 'password'" v-model="form.password" class="publish-input" type="password" autocomplete="new-password"
-          :aria-label="t('Password')" :placeholder="current?.has_password ? t('New password (empty keeps the current one)') : t('Password')"
-        >
+        <div v-if="form.visibility === 'password'" class="publish-password">
+          <input
+            ref="passwordInput" v-model="form.password" class="publish-input" :type="passwordShown ? 'text' : 'password'" autocomplete="new-password" spellcheck="false"
+            :aria-label="t('Password')" :placeholder="current?.has_password ? t('New password (empty keeps the current one)') : t('Password')"
+            @input="passwordShown = passwordShown && !!form.password"
+          >
+          <button type="button" class="small-button" @click="generate"><Icon name="refresh" :size="13" />{{ t('Generate') }}</button>
+          <button v-if="passwordShown && form.password" type="button" class="small-button" :aria-label="t('Copy password')" @click="copyPassword"><Icon :name="passwordCopied ? 'check' : 'clipboard'" :size="13" /><span role="status">{{ t(passwordCopied ? 'Copied' : 'Copy') }}</span></button>
+        </div>
+        <p v-if="form.visibility === 'password' && passwordShown && form.password" class="publish-hint">{{ t('Copy it now: once saved, the password is not shown again.') }}</p>
       </fieldset>
 
       <fieldset class="publish-group">
@@ -138,6 +171,7 @@ function toggleOthers(event: Event) {
       <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
 
       <div class="publish-actions">
+        <button type="button" class="small-button" :disabled="asking" @click="askAgent"><Icon name="spark" :size="13" />{{ t(asking ? 'Starting…' : 'Ask the agent') }}</button>
         <template v-if="current">
           <span v-if="current.mode === 'frozen' && frozenAt" class="publish-hint">{{ t('Frozen at {time}', { time: frozenAt }) }}</span>
           <button v-if="current.mode === 'frozen'" type="button" class="small-button" :disabled="!!busy || dirty" @click="refresh"><Icon name="refresh" :size="13" />{{ t(busy === 'refresh' ? 'Updating…' : 'Update now') }}</button>
@@ -157,16 +191,7 @@ function toggleOthers(event: Event) {
 
     <details class="publish-others" @toggle="toggleOthers">
       <summary>{{ t('All published files') }}</summary>
-      <p v-if="othersError" class="inline-error" role="alert">{{ othersError }}</p>
-      <p v-else-if="!others.length" class="publish-hint">{{ t('Nothing is published yet.') }}</p>
-      <ul v-else class="publish-list">
-        <li v-for="item in others" :key="item.slug">
-          <a :href="item.url" target="_blank" rel="noopener" :title="item.path">{{ fileName(item.path) }}</a>
-          <code>{{ item.url }}</code>
-          <span class="publish-spacer" />
-          <button type="button" class="link-button danger" :disabled="!!busy" @click="remove(item)">{{ t(removing === item.slug ? 'Confirm unpublish' : 'Unpublish') }}</button>
-        </li>
-      </ul>
+      <PublicationsList v-if="othersOpen" ref="othersList" compact class="publish-others-list" :current="current?.slug" @removed="removedElsewhere" />
     </details>
   </section>
 </template>
@@ -186,7 +211,6 @@ function toggleOthers(event: Event) {
 .publish-group legend { padding: 0; margin-bottom: 4px; color: var(--muted); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .publish-choice { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; }
 .publish-choice input { accent-color: var(--accent); margin: 0; }
-.publish-group .publish-input { max-width: 320px; margin-top: 4px; }
 .publish-field { display: grid; gap: 4px; color: var(--muted); font-size: var(--text-xs); }
 .publish-slug { display: flex; align-items: center; gap: 4px; max-width: 420px; }
 .publish-slug .publish-input { flex: 1; font-family: var(--mono); }
@@ -199,13 +223,8 @@ function toggleOthers(event: Event) {
 .publish-others { border-top: 1px solid var(--line); padding-top: var(--space-2); }
 .publish-others summary { cursor: pointer; color: var(--muted); font-size: var(--text-xs); }
 .publish-others summary:hover { color: var(--ink); }
-.publish-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 2px; max-height: 220px; overflow: auto; }
-.publish-list li { display: flex; align-items: center; gap: var(--space-2); padding: 4px 6px; border-radius: var(--radius-sm); min-width: 0; }
-.publish-list li:hover { background: var(--fill-hover); }
-.publish-list a { color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.publish-list a:hover { color: var(--accent); }
-.publish-list code { font-family: var(--mono); color: var(--faint); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.link-button { border: 0; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: var(--text-xs); padding: 2px 6px; border-radius: var(--radius-sm); }
-.link-button.danger:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
+.publish-others-list { margin-top: var(--space-2); }
+.publish-password { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: 4px; }
+.publish-password .publish-input { flex: 1 1 12rem; max-width: 320px; font-family: var(--mono); }
 @media (max-width: 600px) { .publish-link { flex-wrap: wrap; } .publish-link input { flex-basis: 100%; } }
 </style>

@@ -37,6 +37,17 @@ export const MODES: { value: PublishMode; label: string }[] = [
   { value: "live", label: "Live: always shows the current file" },
 ];
 
+/** Short labels for a list of publications. */
+export const VISIBILITY_SHORT: Record<Visibility, string> = { team: "Team only", password: "Password", public: "Public" };
+export const MODE_SHORT: Record<PublishMode, string> = { frozen: "Frozen", live: "Live" };
+
+export const fileName = (path: string) => path.split("/").pop() || path;
+
+/** What "Ask the agent" sends: get this file ready to publish on its own. */
+export function publishAgentPrompt(path: string, t: (source: string, values?: Record<string, string | number>) => string): string {
+  return t("Help me publish {path} with Tendly. Check that the page works on its own: every image, style, script and font it uses sits inside its folder and is referenced with a relative path, with nothing loaded by an absolute path from this computer, and that it reads well on a phone. Fix what is missing and tell me what you changed. Then I will publish it from the globe button (Publish) at the top of the file.", { path });
+}
+
 export const listPublications = () => request<Publication[]>("/hub/publications");
 export const publicationFor = (workspaceId: string, path: string) =>
   request<Publication | null>(`/hub/publications/for?workspace_id=${encodeURIComponent(workspaceId)}&path=${encodeURIComponent(path)}`);
