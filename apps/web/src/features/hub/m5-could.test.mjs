@@ -2,13 +2,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { envKeyCount, splitByUse, splitEnvNames } from './catalog.ts';
+import { envKeyCount, splitByUse, splitEnvNames, vaultState } from './catalog.ts';
 
 const here = new URL('.', import.meta.url);
 const read = name => readFileSync(new URL(name, here), 'utf8');
 
 /** The components and modules M5 added, whose strings and styles are checked below. */
-const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue'];
+const COMPONENTS = ['EnvKeysSection.vue', 'IntegrationRow.vue', 'IntegrationsPage.vue', 'VaultSection.vue'];
 const MODULES = ['catalog.ts'];
 
 // ---------------------------------------------------------------- keys found in .env files
@@ -78,13 +78,44 @@ test('servers that are off or never set up are listed apart, closed until asked 
   assert.match(row, /return t\(server\.detail \|\| "Not checked"\)/);
 });
 
+// ---------------------------------------------------------------- 1Password vault
+
+test('the vault section has three faces and no place for a token', () => {
+  assert.equal(vaultState({ installed: false, signed_in: false }), 'missing');
+  assert.equal(vaultState({ installed: true, signed_in: false }), 'signed_out');
+  assert.equal(vaultState({ installed: true, signed_in: true }), 'signed_in');
+
+  const section = read('VaultSection.vue');
+  assert.match(read('IntegrationsPage.vue'), /<VaultSection \/>/);
+  // Read only: nothing to type into, so no token can be given to Tendly here.
+  assert.doesNotMatch(section, /<input|<textarea|v-model/);
+  assert.match(section, /Tendly never stores the token and reads only the names of the vaults/);
+  // Opening the page never asks 1Password for approval; only the button does.
+  assert.match(section, /onMounted\(\(\) => \{ void load\(\); \}\)/);
+  assert.equal(section.match(/load\(true\)/g).length, 1);
+  assert.match(section, /@click="load\(true\)">\{\{ loading \? t\('Waiting for 1Password…'\) : t\('List vaults'\) \}\}/);
+  // Missing CLI: how to install it, with the link opening apart.
+  assert.match(section, /brew install 1password-cli/);
+  assert.match(section, /:href="ONE_PASSWORD_CLI_URL" target="_blank" rel="noopener"/);
+  // The API asks for approval only with ?unlock=1.
+  const api = read('catalog.ts');
+  assert.match(api, /`\/hub\/catalog\/vault\$\{unlock \? "\?unlock=1" : ""\}`/);
+  const info = /export interface VaultInfo \{([\s\S]*?)\n\}/.exec(api)[1];
+  assert.doesNotMatch(info, /token|email|item|secret/i);
+});
+
 // ---------------------------------------------------------------- translations and design rules
 
 test('every M5 string has a Brazilian Portuguese translation with the same placeholders', () => {
   const raw = readFileSync(new URL('../../i18n/pt-BR.json', here), 'utf8');
   const translations = JSON.parse(raw);
   // Strings chosen by a value the server sends, which the scan below can not see.
-  const keys = new Set(['Not configured', 'Turned off', 'Not checked', 'Not reported by Claude Code']);
+  const keys = new Set([
+    'Not configured', 'Turned off', 'Not checked', 'Not reported by Claude Code',
+    '1Password answered in a form Tendly does not understand.', '1Password could not list the vaults.',
+    '1Password did not sign in. Approve the request in the 1Password app, or sign in with a service account.',
+    '1Password took too long to answer.',
+  ]);
   for (const file of COMPONENTS) {
     for (const match of read(file).matchAll(/\bt\(\s*(["'])((?:\\.|(?!\1).)*)\1/g)) keys.add(match[2]);
   }

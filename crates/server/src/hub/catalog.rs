@@ -1,6 +1,6 @@
 //! Read-only catalogs of what the agents on this machine can use: MCP
-//! integrations and skills, and the names of the variables kept in `.env`
-//! files. Routes live under `/api/hub/catalog`.
+//! integrations and skills, the names of the variables kept in `.env`
+//! files, and the names of the 1Password vaults the `op` CLI can see. Routes live under `/api/hub/catalog`.
 use crate::AppState;
 use axum::{Router, routing::get};
 use std::path::PathBuf;
@@ -9,6 +9,7 @@ mod env_keys;
 mod integrations;
 mod redact;
 mod skills;
+mod vault;
 
 #[cfg(test)]
 mod tests;
@@ -17,6 +18,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/hub/catalog/integrations", get(integrations::list))
         .route("/api/hub/catalog/env-keys", get(env_keys::list))
+        .route("/api/hub/catalog/vault", get(vault::show))
         .route("/api/hub/catalog/skills", get(skills::list))
         .route("/api/hub/catalog/skills/{id}/content", get(skills::content))
 }

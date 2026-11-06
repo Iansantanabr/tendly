@@ -52,6 +52,33 @@ export function splitEnvNames(file: Pick<EnvFile, "names">): { keys: string[]; o
   };
 }
 
+/** What the `op` CLI on the server reports. Vault names only; no item, no token, no e-mail. */
+export interface VaultInfo {
+  installed: boolean;
+  platform: "macos" | "linux" | "other";
+  version?: string;
+  signed_in: boolean;
+  /** The sign-in address, such as `my.1password.com`. */
+  account?: string;
+  service_account: boolean;
+  /** Whether the vaults were asked for (they are not while nobody is signed in, until the person asks). */
+  listed: boolean;
+  vaults: string[];
+  /** A fixed English sentence, translated in the page. */
+  error?: string;
+}
+
+/** `unlock` lists the vaults even when nobody is signed in, which makes 1Password ask for approval. */
+export const loadVault = (unlock = false) => request<VaultInfo>(`/hub/catalog/vault${unlock ? "?unlock=1" : ""}`);
+
+export const ONE_PASSWORD_CLI_URL = "https://developer.1password.com/docs/cli/get-started/";
+
+/** Which of the three faces the vault section shows. */
+export function vaultState(vault: Pick<VaultInfo, "installed" | "signed_in">): "missing" | "signed_out" | "signed_in" {
+  if (!vault.installed) return "missing";
+  return vault.signed_in ? "signed_in" : "signed_out";
+}
+
 export type SkillSource = "claude_user" | "claude_plugin" | "workspace" | "codex";
 
 export interface Skill {

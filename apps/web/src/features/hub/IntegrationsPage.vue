@@ -7,6 +7,7 @@ import { useI18n } from "../../i18n";
 import { shortAgo } from "./inbox";
 import EnvKeysSection from "./EnvKeysSection.vue";
 import IntegrationRow from "./IntegrationRow.vue";
+import VaultSection from "./VaultSection.vue";
 import { groupBy, loadIntegrations, splitByUse, type Integration, type IntegrationList } from "./catalog";
 
 /** MCP servers the agents on this machine can reach. Read only. */
@@ -101,6 +102,7 @@ const checkedAgo = computed(() => {
         </section>
       </details>
 
+      <VaultSection />
       <EnvKeysSection :workspaces="workspaces" />
     </div>
   </PageShell>
