@@ -81,6 +81,16 @@ const MIGRATIONS: &[&str] = &[
         id INTEGER PRIMARY KEY CHECK (id = 1),
         secret TEXT NOT NULL
     );",
+    // 5: named spaces (saved Mesa layouts)
+    "CREATE TABLE spaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+        layout TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (name)
+    );",
 ];
 
 pub struct HubStore {
@@ -199,6 +209,50 @@ mod tests {
                     )
                     .is_err()
                 );
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_four_database_upgrades_to_spaces() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..4] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 4i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO publications(slug, workspace_id, path, visibility, mode, created_at, updated_at)
+                 VALUES ('kept-1234', 'w', 'a.html', 'team', 'live', 'now', 'now')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute("INSERT INTO notifications(kind, title, created_at) VALUES ('waiting', 'kept', 'now')", [])
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version, 5);
+                let slug: String = c.query_row("SELECT slug FROM publications", [], |r| r.get(0))?;
+                assert_eq!(slug, "kept-1234");
+                let title: String = c.query_row("SELECT title FROM notifications", [], |r| r.get(0))?;
+                assert_eq!(title, "kept");
+                let insert = |id: &str, name: &str| {
+                    c.execute(
+                        "INSERT INTO spaces(id, name, layout, created_at, updated_at) VALUES (?1, ?2, '{}', 'now', 'now')",
+                        [id, name],
+                    )
+                };
+                insert("a", "Ads report")?;
+                assert!(insert("b", "Ads report").is_err(), "names are unique");
+                assert!(insert("c", "").is_err(), "empty name");
+                assert!(insert("d", &"x".repeat(81)).is_err(), "name too long");
+                insert("e", &"é".repeat(80))?;
+                let position: i64 = c.query_row("SELECT position FROM spaces WHERE id='a'", [], |r| r.get(0))?;
+                assert_eq!(position, 0);
                 Ok(())
             })
             .unwrap();

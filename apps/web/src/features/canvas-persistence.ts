@@ -163,6 +163,15 @@ export function useCanvasPersistence({ layout, selectedPaneId, sessions, storage
       await adoptServerLayout(shared.layout, true);
     } catch (cause) { report(cause); }
   }
+  /** The server saved `document` as the shared canvas for this window (a named
+   * space was opened): take it and its revision, dropping any change still waiting.
+   * Skipped when a newer canvas already arrived through the change signal. */
+  async function adoptSavedLayout(document: LayoutDocument, revision: number) {
+    if (revision < canvasRevision.value) return;
+    clearTimeout(layoutTimer); pendingLayout = undefined;
+    canvasRevision.value = revision; canvasConflict.value = false;
+    await adoptServerLayout(document, false);
+  }
   /** A change not yet sent, which leaving the page now would lose. */
   const hasPendingLayout = () => !!pendingLayout;
   /** The page is going: a change still waiting is kept in this browser to offer back, and nothing more is sent. */
@@ -177,5 +186,5 @@ export function useCanvasPersistence({ layout, selectedPaneId, sessions, storage
     const held = suspendLayoutSave; suspendLayoutSave = true; layout.value = document;
     await nextTick(); suspendLayoutSave = held;
   }
-  return { canvasReady, layoutStatus, canvasRevision, canvasConflict, localRecovery, cacheLayout, queueLayout, flushLayout, initializeCanvas, resolveCanvasConflict, restoreLocalRecovery, agentCanvas, hasPendingLayout, showWithoutSaving, dispose };
+  return { canvasReady, layoutStatus, canvasRevision, canvasConflict, localRecovery, cacheLayout, queueLayout, flushLayout, initializeCanvas, resolveCanvasConflict, restoreLocalRecovery, agentCanvas, adoptSavedLayout, hasPendingLayout, showWithoutSaving, dispose };
 }

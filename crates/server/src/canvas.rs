@@ -69,6 +69,13 @@ pub(crate) fn save_checked(
         .map_err(ApiError::internal)
 }
 
+/// The save route's shape and ownership checks without saving (fork: named
+/// spaces in hub/spaces.rs keep layouts that must open as the shared canvas).
+pub(crate) fn validate(store: &Store, layout: &Value) -> Result<()> {
+    validate_shape(layout)?;
+    validate_ownership(store, &layout["root"], &mut HashSet::new())
+}
+
 fn validate_shape(layout: &Value) -> Result<()> {
     if !crate::valid_layout(layout) || layout.to_string().len() > MAX_LAYOUT_BYTES {
         return Err(ApiError::bad("Invalid or oversized shared canvas layout"));
