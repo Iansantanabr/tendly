@@ -2736,7 +2736,7 @@
  "When set, the links of the files you publish use this address instead of the one in your browser. On a server it is the domain that shows only the published pages. Leave it empty to use Tendly’s own address.": "Quando preenchido, os links dos arquivos que você publica usam este endereço em vez do que está no seu navegador. Num servidor, é o domínio que mostra só as páginas publicadas. Deixe vazio para usar o endereço do próprio Tendly.",
  "Public address": "Endereço público",
  "A link will look like this:": "Um link vai ficar assim:",
- "Links marked “Only the team” keep Tendly’s own address, because the sign-in lives there. The server also has to be told to answer for the public address (TENDLY_ALLOWED_ORIGINS); the installation recipe in deploy/install.md does that.": "Os links marcados como “Só a equipe” continuam no endereço do próprio Tendly, porque é lá que você entra com o token. O servidor também precisa saber que responde pelo endereço público (TENDLY_ALLOWED_ORIGINS); a receita de instalação em deploy/install.md cuida disso.",
+ "Links marked “Only the team” keep Tendly’s own address, because the sign-in lives there. Through the public address the server delivers only published pages (/p/…), never the app or its API.": "Os links marcados como “Só a equipe” continuam no endereço do próprio Tendly, porque é lá que você entra com o token. Pelo endereço público o servidor só entrega as páginas publicadas (/p/…), nunca o app nem a API.",
  "Save address": "Salvar endereço",
  "Saved. Published links now use this address.": "Salvo. Os links publicados agora usam este endereço.",
  "Saved. Published links use Tendly’s own address again.": "Salvo. Os links publicados voltaram a usar o endereço do próprio Tendly.",

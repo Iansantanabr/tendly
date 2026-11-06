@@ -1,0 +1,57 @@
+# Caddy in front of Tendly on the VPS. Recipe: deploy/install.md.
+#
+# Replace before installing as /etc/caddy/Caddyfile:
+#   app.example.com   the app (workspace, API): needs the access token
+#   pub.example.com   published pages only (/p/...): what you share with others
+#   you@example.com   where Let's Encrypt writes about the certificates
+#
+# Both names need a DNS A record (and AAAA, if the VPS has IPv6) pointing at
+# the VPS BEFORE Caddy starts: that is how it proves it may have a certificate.
+# Caddy gets and renews the certificates by itself and redirects http to https.
+#
+# Tendly itself listens only on 127.0.0.1:28789; nothing reaches it except
+# through here. Caddy passes the Host header on unchanged and adds
+# X-Forwarded-Proto, both of which Tendly relies on.
+
+{
+	email you@example.com
+}
+
+# The app. Everything goes to Tendly, which asks for the token itself
+# (TENDLY_TOKEN in /etc/tendly/tendly.env). WebSockets (terminals, live
+# updates) need no extra configuration.
+app.example.com {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		# The workspace is nobody's search result.
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:28789 {
+		# Agent replies stream; hand each chunk on as it arrives.
+		flush_interval -1
+	}
+	# Uncomment to keep an access log in the journal (journalctl -u caddy).
+	# log
+}
+
+# Published pages. Only /p/... is passed on; the app, its API, the login and
+# every other path do not exist on this name. Tendly enforces the same rule on
+# its side: it answers for this name under /p/ only (the public address set in
+# Settings -> Addresses and time zone), so a mistake here does not open the app.
+pub.example.com {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		# Shared by link, not by search engine. Remove this line to let
+		# public pages be indexed.
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	@published path /p/*
+	handle @published {
+		reverse_proxy 127.0.0.1:28789
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

@@ -347,6 +347,10 @@ pub async fn guard(State(state): State<AppState>, request: Request, next: Next) 
         .get::<crate::peer_proxy::Proxied>()
         .is_some();
     let headers = request.headers();
+    let path = request.uri().path();
+    // The fork's address for published pages (hub settings): answered for
+    // under `/p/` and nowhere else, so it never becomes an origin the API trusts.
+    let public_pages = |authority: &str| crate::hub::serves_public_pages(&state, path, authority);
     if !headers
         .get(header::HOST)
         .and_then(|v| v.to_str().ok())
@@ -354,6 +358,7 @@ pub async fn guard(State(state): State<AppState>, request: Request, next: Next) 
             state.security.hosts.contains(v)
                 || state.security.addressed_by_ip(v)
                 || via_tailnet && state.tailnet.serves_host(v)
+                || public_pages(v)
         })
     {
         return error(
@@ -366,11 +371,11 @@ pub async fn guard(State(state): State<AppState>, request: Request, next: Next) 
             state.security.origins.contains(v)
                 || state.security.own_origin(v)
                 || via_tailnet && state.tailnet.serves_origin(v)
+                || v.strip_prefix("https://").is_some_and(public_pages)
         })
     {
         return error(StatusCode::FORBIDDEN, "Untrusted Origin");
     }
-    let path = request.uri().path();
     if headers
         .get("sec-fetch-site")
         .is_some_and(|v| v == "cross-site")

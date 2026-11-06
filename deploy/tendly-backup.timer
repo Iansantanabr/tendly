@@ -1,0 +1,15 @@
+# Every day at 06:30 UTC (03:30 in São Paulo), give or take a few minutes.
+# Install as /etc/systemd/system/tendly-backup.timer, then:
+#   systemctl enable --now tendly-backup.timer
+
+[Unit]
+Description=Daily backup of Tendly's state directory
+
+[Timer]
+OnCalendar=*-*-* 06:30:00 UTC
+RandomizedDelaySec=10m
+# If the machine was off at that time, run once it is back.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -151,7 +151,7 @@ test('the panel shows the saved zone, the public address and the dictation switc
   assert.match(tag(html, /<input[^>]*type="url"[^>]*>/), /value="https:\/\/pub\.example\.com"/);
   assert.match(tag(html, /<input[^>]*type="url"[^>]*>/), /aria-invalid="false"/);
   assert.match(html, /A link will look like this:[^<]*<code[^>]*>https:\/\/pub\.example\.com\/p\/report-k3f9<\/code>/);
-  assert.match(html, /TENDLY_ALLOWED_ORIGINS/);
+  assert.match(html, /delivers only published pages \(\/p\/…\), never the app or its API/);
   assert.match(tag(html, /<input[^>]*role="switch"[^>]*>/), /checked/);
   assert.match(html, /Chrome sends the audio to Google/);
   assert.doesNotMatch(html, /role="alert"/);

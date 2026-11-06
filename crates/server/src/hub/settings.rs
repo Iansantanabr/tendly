@@ -512,6 +512,42 @@ mod tests {
         assert_eq!(body["dictation"], "browser");
     }
 
+    /// What `deploy/tendly.service` relies on. Behind Caddy the server binds
+    /// loopback, where upstream asks for no token at all; an explicit token
+    /// (`TENDLY_TOKEN`, which `resolve_token` returns for any binding) is what
+    /// keeps "every request comes from 127.0.0.1" from meaning "everyone is in".
+    #[tokio::test]
+    async fn hub_settings_loopback_behind_a_proxy_is_closed_only_with_a_token() {
+        let loopback: std::net::SocketAddr = "127.0.0.1:28789".parse().unwrap();
+        let ask = |state: AppState, path: &'static str, bearer: Option<&'static str>| async move {
+            let mut request = HttpRequest::builder().uri(path).header("host", "127.0.0.1:28789");
+            if let Some(token) = bearer {
+                request = request.header("authorization", format!("Bearer {token}"));
+            }
+            crate::router(state)
+                .oneshot(request.body(axum::body::Body::empty()).unwrap())
+                .await
+                .unwrap()
+                .status()
+        };
+
+        let mut closed = fixture();
+        closed.state.security = security::Security::new(loopback, Some("vps-token".into())).ok().unwrap();
+        assert!(closed.state.security.required(false));
+        for path in ["/api/hub/settings", "/api/hub/automations", "/api/hub/publications", "/api/workspaces"] {
+            assert_eq!(ask(closed.state.clone(), path, None).await, StatusCode::UNAUTHORIZED, "{path}");
+            assert_eq!(ask(closed.state.clone(), path, Some("wrong")).await, StatusCode::UNAUTHORIZED, "{path}");
+        }
+        assert_eq!(ask(closed.state.clone(), "/api/hub/settings", Some("vps-token")).await, StatusCode::OK);
+        assert_eq!(ask(closed.state.clone(), "/api/health", None).await, StatusCode::OK, "health stays public");
+
+        // The same binding with no token: open to whoever reaches it. Never run this behind a proxy.
+        let mut open = fixture();
+        open.state.security = security::Security::new(loopback, None).ok().unwrap();
+        assert!(!open.state.security.required(false));
+        assert_eq!(ask(open.state.clone(), "/api/hub/settings", None).await, StatusCode::OK);
+    }
+
     #[tokio::test]
     async fn hub_settings_api_lists_the_zones_it_accepts() {
         let f = fixture();

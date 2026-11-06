@@ -99,4 +99,21 @@ pub(crate) async fn on_waiting(state: &AppState, id: tendly_domain::SessionId) {
     home::record_waiting(state, id).await;
 }
 
+/// Asked by the guard (`security.rs`) about a Host or Origin it does not know:
+/// whether it is the public address of published pages (`public_base_url` in
+/// the hub settings) on a request for one of them. Only `/p/...` ever answers
+/// yes, so that address reaches the pages and never the app or its API.
+pub(crate) fn serves_public_pages(state: &AppState, path: &str, authority: &str) -> bool {
+    if path != "/p" && !path.starts_with("/p/") {
+        return false;
+    }
+    state
+        .hub
+        .with(settings::public_base_url)
+        .ok()
+        .flatten()
+        .and_then(|base| base.strip_prefix("https://").map(str::to_owned))
+        .is_some_and(|public| public.eq_ignore_ascii_case(authority))
+}
+
 pub(crate) type SharedConnection = Mutex<rusqlite::Connection>;

@@ -417,6 +417,77 @@ async fn hub_publish_links_use_the_public_address_from_the_settings() {
     assert!(list.as_array().unwrap().iter().all(|p| p["public_url"].is_null()), "{list}");
 }
 
+/// The pages' own domain reaches the pages and nothing else: it is never a
+/// Host the app answers for, nor an Origin the API trusts.
+#[tokio::test]
+async fn hub_publish_public_address_is_answered_for_under_p_only() {
+    const PUBLIC: &str = "pub.example.com";
+    let f = fixture();
+    f.write("report.html", r#"<p>report</p><img src="a.png">"#);
+    f.write("a.png", "png");
+    f.write("secret.html", "<p>locked</p>");
+    f.publish(json!({"path": "report.html", "visibility": "public", "mode": "live", "slug": "report"})).await;
+    f.publish(json!({"path": "secret.html", "visibility": "password", "password": "open sesame", "mode": "live", "slug": "locked"}))
+        .await;
+    let ask = |method: &'static str, host: &'static str, uri: &'static str, headers: Vec<(&'static str, &'static str)>, body: &'static str| {
+        let state = f.state.clone();
+        async move {
+            let mut request = HttpRequest::builder().method(method).uri(uri).header("host", host);
+            for (name, value) in headers {
+                request = request.header(name, value);
+            }
+            let response = crate::router(state)
+                .oneshot(request.body(axum::body::Body::from(body)).unwrap())
+                .await
+                .unwrap();
+            (response.status(), response.headers().clone())
+        }
+    };
+
+    // Until the address is in the settings, the server does not know that name.
+    assert_eq!(ask("GET", PUBLIC, "/p/report/", vec![], "").await.0, StatusCode::FORBIDDEN);
+
+    let (status, _) = f.api("PUT", "/api/hub/settings", json!({"public_base_url": "https://pub.example.com"})).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, headers) = ask("GET", PUBLIC, "/p/report/", vec![], "").await;
+    assert_eq!(status, StatusCode::OK);
+    let policy = headers[header::CONTENT_SECURITY_POLICY].to_str().unwrap();
+    assert!(policy.contains("connect-src http://pub.example.com/p/report/ https://pub.example.com/p/report/;"), "{policy}");
+    assert_eq!(ask("GET", "PUB.Example.com", "/p/report/a.png", vec![], "").await.0, StatusCode::OK);
+    assert_eq!(ask("GET", PUBLIC, "/p/report", vec![], "").await.0, StatusCode::PERMANENT_REDIRECT);
+    // The password form posts from the pages' own origin.
+    let form = vec![("content-type", "application/x-www-form-urlencoded"), ("origin", "https://pub.example.com"), ("x-forwarded-proto", "https")];
+    let (status, headers) = ask("POST", PUBLIC, "/p/locked", form, "password=open+sesame").await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(headers[header::SET_COOKIE].to_str().unwrap().ends_with("; Secure"));
+
+    // Everything that is not a published page refuses that name, with or without the token.
+    let bearer: &'static str = "Bearer team-token";
+    for uri in ["/", "/api/health", "/api/hub/settings", "/api/workspaces", "/manifest.webmanifest", "/settings/addresses", "/px", "/p-other"] {
+        assert_eq!(ask("GET", PUBLIC, uri, vec![], "").await.0, StatusCode::FORBIDDEN, "{uri}");
+        assert_eq!(ask("GET", PUBLIC, uri, vec![("authorization", bearer)], "").await.0, StatusCode::FORBIDDEN, "{uri} with the token");
+    }
+    // A page served there cannot call the API of the app: its Origin is not trusted,
+    // even on the app's own Host and with the team's token.
+    let from_page = vec![("origin", "https://pub.example.com"), ("authorization", bearer)];
+    assert_eq!(ask("GET", HOST, "/api/hub/settings", from_page.clone(), "").await.0, StatusCode::FORBIDDEN);
+    let socket = vec![("origin", "https://pub.example.com"), ("authorization", bearer), ("upgrade", "websocket")];
+    assert_eq!(ask("GET", HOST, "/api/workspaces", socket, "").await.0, StatusCode::FORBIDDEN);
+    assert_eq!(ask("GET", HOST, "/api/hub/settings", vec![("authorization", bearer)], "").await.0, StatusCode::OK);
+    // Other names are still strangers, also under /p/.
+    assert_eq!(ask("GET", "evil.example.com", "/p/report/", vec![], "").await.0, StatusCode::FORBIDDEN);
+    assert_eq!(ask("GET", "pub.example.com:8443", "/p/report/", vec![], "").await.0, StatusCode::FORBIDDEN);
+    assert_eq!(
+        ask("POST", PUBLIC, "/p/locked", vec![("content-type", "application/x-www-form-urlencoded"), ("origin", "https://evil.example")], "password=x").await.0,
+        StatusCode::FORBIDDEN
+    );
+
+    // Emptying the setting closes the door again.
+    f.api("PUT", "/api/hub/settings", json!({"public_base_url": ""})).await;
+    assert_eq!(ask("GET", PUBLIC, "/p/report/", vec![], "").await.0, StatusCode::FORBIDDEN);
+    assert_eq!(f.get("/p/report/").await.0, StatusCode::OK, "this server's own address still serves it");
+}
+
 /// Behind Caddy the server itself speaks plain HTTP; the proxy says the visitor used HTTPS.
 #[tokio::test]
 async fn hub_publish_password_cookie_is_secure_behind_an_https_proxy() {

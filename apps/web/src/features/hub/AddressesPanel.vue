@@ -125,7 +125,7 @@ async function toggleDictation(input: HTMLInputElement) {
       </label>
       <p v-if="baseProblem" id="addr-base-note" class="inline-error" role="alert">{{ baseProblem }}</p>
       <p v-else id="addr-base-note" class="addr-hint">{{ t('A link will look like this:') }} <code class="addr-sample">{{ sample }}</code></p>
-      <p class="addr-hint">{{ t('Links marked “Only the team” keep Tendly’s own address, because the sign-in lives there. The server also has to be told to answer for the public address (TENDLY_ALLOWED_ORIGINS); the installation recipe in deploy/install.md does that.') }}</p>
+      <p class="addr-hint">{{ t('Links marked “Only the team” keep Tendly’s own address, because the sign-in lives there. Through the public address the server delivers only published pages (/p/…), never the app or its API.') }}</p>
       <p v-if="baseError" class="inline-error" role="alert">{{ baseError }}</p>
       <div class="addr-actions">
         <button type="submit" class="primary-button" :disabled="!baseDirty || !!baseProblem || saving === 'public_base_url'">{{ t(saving === 'public_base_url' ? 'Saving…' : 'Save address') }}</button>

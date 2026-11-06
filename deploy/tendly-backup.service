@@ -1,0 +1,27 @@
+# Runs deploy/backup.sh once; tendly-backup.timer starts it every day.
+# Install as /etc/systemd/system/tendly-backup.service, with the script at
+# /usr/local/bin/tendly-backup. As in tendly.service, replace /home/tendly if
+# the service user's home is somewhere else.
+
+[Unit]
+Description=Backup of Tendly's state directory
+Documentation=https://github.com/Iansantanabr/tendly/blob/ian/deploy/install.md
+
+[Service]
+Type=oneshot
+User=tendly
+Group=tendly
+Environment=HOME=/home/tendly
+Environment=TENDLY_STATE_DIR=/home/tendly/.tendly
+Environment=TENDLY_BACKUP_DIR=/home/tendly/backups/tendly
+# Optional: days to keep and the restic repository (see backup.env.example).
+# The leading "-" lets the unit run when the file does not exist.
+EnvironmentFile=-/etc/tendly/backup.env
+ExecStart=/usr/bin/env bash /usr/local/bin/tendly-backup
+# Never in the way of a conversation.
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/tendly
+PrivateTmp=true

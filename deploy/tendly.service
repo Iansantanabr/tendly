@@ -1,0 +1,89 @@
+# Tendly (Ian's fork) on a VPS: one long-running server, reached only through
+# Caddy on the same machine. Recipe: deploy/install.md.
+#
+# Install as /etc/systemd/system/tendly.service. The paths below assume the
+# service user's home is /home/tendly. If the data comes from the Mac and the
+# home is /Users/iansantana instead (see FORK.md, "Do Mac para a VPS"), replace
+# every /home/tendly in this file before installing:
+#   sed 's#/home/tendly#/Users/iansantana#g' deploy/tendly.service
+# (%h is no help here: in a system unit it is root's home, not User='s.)
+
+[Unit]
+Description=Tendly (Ian's fork)
+Documentation=https://github.com/Iansantanabr/tendly/blob/ian/deploy/install.md
+After=network-online.target
+Wants=network-online.target
+# Keep trying forever; RestartSec below is the only brake.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=tendly
+Group=tendly
+WorkingDirectory=/home/tendly
+
+# Secrets and addresses: TENDLY_TOKEN, TENDLY_ALLOWED_ORIGINS, TENDLY_ADDR...
+# Owned by root, mode 0600; systemd reads it before dropping privileges.
+EnvironmentFile=/etc/tendly/tendly.env
+Environment=HOME=/home/tendly
+Environment=TENDLY_STATE_DIR=/home/tendly/.tendly
+# A service starts with almost no PATH. The server runs `node` (its helpers),
+# `claude` and `codex`, and so do script automations. ~/.local/bin is where the
+# Claude Code installer puts `claude`; ~/.npm-global/bin is the user's npm prefix
+# (`codex`); node itself comes from the system package in /usr/bin.
+Environment=PATH=/home/tendly/.local/bin:/home/tendly/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=LANG=C.UTF-8
+# The clock stays in UTC on purpose: automations follow the time zone in
+# Settings -> Addresses and time zone (hub_settings), not the machine's.
+
+# Behind a proxy every request arrives from 127.0.0.1, and Tendly asks nobody
+# on loopback for a token unless one is set. Without TENDLY_TOKEN the whole
+# internet would be "this machine". Refuse to start rather than run open.
+# ($$ is a literal $ for the shell: systemd must not paste the token into the
+# command line, where `ps` would show it.)
+ExecStartPre=/bin/sh -c 'test -n "$$TENDLY_TOKEN" || { echo "TENDLY_TOKEN is empty in /etc/tendly/tendly.env: refusing to start an open server" >&2; exit 1; }'
+ExecStartPre=/bin/sh -c 'case "$$TENDLY_ADDR" in 127.0.0.1:*) ;; *) echo "TENDLY_ADDR must be 127.0.0.1:<port>: Caddy is the only way in" >&2; exit 1;; esac'
+ExecStart=/usr/local/bin/tendly-server serve
+
+# Exit 75 (restart after an update), a crash and a clean exit all start it again.
+Restart=always
+RestartSec=3
+# Stop the server, which stops its sessions; terminals it deliberately left
+# running in hosts of their own survive a restart, as upstream's own unit does.
+KillMode=process
+TimeoutStopSec=30
+# Agents open many files and processes.
+LimitNOFILE=65536
+TasksMax=4096
+
+# --- Sandboxing -------------------------------------------------------------
+# Agents run commands as this user. They get the user's home and nothing else
+# to write to, and no way to become root.
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ReadWritePaths=/home/tendly
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+UMask=0077
+# Deliberately NOT set, because they break what agents do:
+#   MemoryDenyWriteExecute  Node's JIT needs writable+executable memory.
+#   RestrictNamespaces      Claude Code and Codex sandbox commands with user namespaces.
+#   SystemCallFilter        compilers, package managers and test runners use too much to list.
+#   ProcSubset=pid          the status bar reads /proc/stat and /proc/meminfo.
+
+[Install]
+WantedBy=multi-user.target
