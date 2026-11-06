@@ -13,7 +13,7 @@ Card Abertas no celular,início,could,yes,no,P10; exige sincronizar abas entre a
 Card Compartilhadas contigo,início,could,yes,no,depende de multiusuário
 Mesa com grade livre de painéis e abas arrastáveis,mesa,must,yes,yes,já é o canvas do Tendly
 Dividir arrastando aba para a borda,mesa,must,yes,yes,Tendly upstream
-Layout salvo como espaço com nome e URL,mesa,should,yes,partial,Tendly salva o layout mas não nomeia espaços (P05)
+Layout salvo como espaço com nome e URL,mesa,should,yes,yes,M2
 Sidebar vira rail de ícones na Mesa,mesa,could,yes,no,P02; Tendly recolhe a sidebar inteira
 Barra Conversas: Não lidas Esperando Rodando Tuas,conversas,must,yes,yes,Fase 1 (ConversationsBar)
 Card Esperando tua resposta com botão Responder,conversas,should,yes,yes,M1
@@ -32,8 +32,8 @@ Fila ou Agora ao mandar mensagem com agente rodando,chat,should,yes,yes,Tendly t
 Tool calls colapsáveis e status ao vivo,chat,must,yes,yes,Tendly upstream
 Caminho de arquivo na resposta abre na Mesa,chat,must,yes,yes,Tendly upstream
 Fixar mensagem do usuário no topo,chat,could,yes,no,P11
-Ditado por voz embutido,chat,should,yes,no,P01/P10 microfone; Configurações > Ditado
-Colar link de outra conversa como contexto,chat,should,yes,no,ferramenta ler_conversa (P07)
+Ditado por voz embutido,chat,should,yes,yes,M2 (Web Speech; não testado com microfone)
+Colar link de outra conversa como contexto,chat,should,yes,yes,M2
 Várias contas Claude e Codex ao mesmo tempo,contas,must,yes,yes,Tendly endpoints/perfis
 Escolher conta ao abrir nova conversa,contas,must,yes,yes,Tendly CreateSessionDialog
 Uso por conta 5h e semanal no seletor,contas,should,yes,yes,M1
