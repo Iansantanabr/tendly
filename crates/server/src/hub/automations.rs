@@ -49,6 +49,7 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/hub/automations/{id}/run", post(run_route))
         .route("/api/hub/automations/{id}/runs", get(runs_route))
+        .route("/api/hub/automations/recent-sessions", get(recent_sessions_route))
 }
 
 // ---------------------------------------------------------------------------
@@ -434,6 +435,27 @@ fn runs(c: &Connection, id: &str, limit: i64) -> rusqlite::Result<Vec<Run>> {
         "SELECT {RUN_COLUMNS} FROM automation_runs WHERE automation_id = ?1 ORDER BY id DESC LIMIT ?2"
     ))?;
     stmt.query_map(params![id, limit], Run::from_row)?.collect()
+}
+
+/// Conversations agent routines opened, newest first, one entry per conversation.
+fn recent_sessions(c: &Connection, limit: i64) -> rusqlite::Result<Vec<Value>> {
+    let mut stmt = c.prepare(
+        "SELECT r.session_id, r.automation_id, a.name, r.started_at, r.status
+         FROM automation_runs r JOIN automations a ON a.id = r.automation_id
+         WHERE a.kind = 'agent' AND r.id IN
+            (SELECT MAX(id) FROM automation_runs WHERE session_id IS NOT NULL AND session_id != '' GROUP BY session_id)
+         ORDER BY r.started_at DESC, r.id DESC LIMIT ?1",
+    )?;
+    stmt.query_map(params![limit], |r| {
+        Ok(json!({
+            "session_id": r.get::<_, String>(0)?,
+            "automation_id": r.get::<_, String>(1)?,
+            "automation_name": r.get::<_, String>(2)?,
+            "started_at": r.get::<_, String>(3)?,
+            "status": r.get::<_, String>(4)?,
+        }))
+    })?
+    .collect()
 }
 
 fn get_run(c: &Connection, id: i64) -> rusqlite::Result<Run> {
@@ -882,6 +904,12 @@ async fn runs_route(
     Ok(Json(json!({ "runs": rows })))
 }
 
+async fn recent_sessions_route(State(state): State<AppState>, Query(query): Query<RunsQuery>) -> Result<Json<Value>> {
+    let limit = query.limit.unwrap_or(10).clamp(1, 50);
+    let items = cs(&state, move |c| recent_sessions(c, limit)).await?;
+    Ok(Json(json!({ "items": items })))
+}
+
 // ---------------------------------------------------------------------------
 // Agent tools
 
@@ -1102,6 +1130,49 @@ mod tests {
                 assert!(load(c, &a.id)?.is_none());
                 let count: i64 = c.query_row("SELECT COUNT(*) FROM automation_runs", [], |r| r.get(0))?;
                 assert_eq!(count, 0);
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn hub_recent_sessions_lists_agent_conversations_newest_first() {
+        let store = super::super::HubStore::memory();
+        store
+            .with(|c| {
+                let mut agent = Automation::blank();
+                agent.name = "Morning brief".into();
+                agent.kind = "agent".into();
+                agent.cron = "0 8 * * *".into();
+                agent.prompt = Some("brief".into());
+                insert(c, &agent)?;
+                let mut job = Automation::blank();
+                job.name = "Backup".into();
+                job.cron = "* * * * *".into();
+                job.command = Some("true".into());
+                insert(c, &job)?;
+                let run = |automation: &str, at: &str, session: Option<&str>| -> rusqlite::Result<()> {
+                    let id = start_run(c, automation, "schedule")?;
+                    c.execute(
+                        "UPDATE automation_runs SET started_at = ?2, status = 'ok', session_id = ?3 WHERE id = ?1",
+                        params![id, at, session],
+                    )?;
+                    Ok(())
+                };
+                run(&agent.id, "2026-11-01T08:00:00+00:00", Some("s1"))?;
+                run(&agent.id, "2026-11-02T08:00:00+00:00", Some("s2"))?;
+                run(&agent.id, "2026-11-03T08:00:00+00:00", None)?;
+                // A later run that reports the same conversation again stays one entry.
+                run(&agent.id, "2026-11-04T08:00:00+00:00", Some("s1"))?;
+                run(&job.id, "2026-11-05T08:00:00+00:00", Some("not-an-agent"))?;
+                let items = recent_sessions(c, 10)?;
+                let ids: Vec<&str> = items.iter().map(|i| i["session_id"].as_str().unwrap()).collect();
+                assert_eq!(ids, ["s1", "s2"]);
+                assert_eq!(items[0]["automation_name"], "Morning brief");
+                assert_eq!(items[0]["automation_id"], agent.id.as_str());
+                assert_eq!(items[0]["started_at"], "2026-11-04T08:00:00+00:00");
+                assert_eq!(items[0]["status"], "ok");
+                assert_eq!(recent_sessions(c, 1)?.len(), 1);
                 Ok(())
             })
             .unwrap();

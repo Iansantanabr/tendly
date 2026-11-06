@@ -52,35 +52,115 @@ struct StartRequest {
     prompt: String,
     endpoint_id: Option<String>,
     model: Option<String>,
+    /// A reasoning effort (`low` … `max`), or `auto` for the client's own
+    /// default; absent takes the preference, as "New session" does.
+    effort: Option<String>,
+    /// How tools are approved (`ask`, `plan`, `accept_edits`, `danger`, as the
+    /// client offers them); absent takes the preference.
+    permission: Option<String>,
+}
+
+/// `None` leaves the effort to the preference, `Some(None)` asks for the
+/// client's own default and `Some(Some(level))` for that level.
+fn effort_choice(value: Option<&str>) -> Result<Option<Option<String>>> {
+    let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) else { return Ok(None) };
+    if value == "auto" {
+        return Ok(Some(None));
+    }
+    if !crate::providers::EFFORT_LEVELS.contains(&value) {
+        return Err(ApiError::bad(format!(
+            "effort must be auto or one of {}",
+            crate::providers::EFFORT_LEVELS.join(", ")
+        )));
+    }
+    Ok(Some(Some(value.to_owned())))
+}
+
+/// A permission mode the client offers; Codex has no plan or accept-edits.
+fn permission_choice(provider: tendly_domain::ProviderKind, value: Option<&str>) -> Result<Option<String>> {
+    let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) else { return Ok(None) };
+    let modes = crate::adapters::adapter(provider).map_or(&[][..], |client| client.permission_modes());
+    if !modes.contains(&value) {
+        return Err(ApiError::bad(if modes.is_empty() {
+            format!("{} has no permission modes to choose from", provider.label())
+        } else {
+            format!("permission for {} must be one of {}", provider.label(), modes.join(", "))
+        }));
+    }
+    Ok(Some(value.to_owned()))
+}
+
+/// The upstream permission route, called in-process: it records the mode for
+/// the session's next start, which is the start that follows.
+async fn choose_permission(state: &AppState, id: SessionId, mode: &str) -> Result<()> {
+    use tower::ServiceExt;
+    let request = axum::http::Request::post(format!("/api/sessions/{id}/conversation/permission"))
+        .header(axum::http::header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(json!({ "mode": mode }).to_string()))
+        .map_err(ApiError::internal)?;
+    let response = crate::conversations::routes()
+        .with_state(state.clone())
+        .oneshot(request)
+        .await
+        .map_err(ApiError::internal)?;
+    if !response.status().is_success() {
+        return Err(ApiError::internal(format!("permission mode was not applied ({})", response.status())));
+    }
+    Ok(())
 }
 
 /// "O que a gente faz agora?": a new structured conversation that starts with
-/// the prompt typed on the home page. It is kept, not temporary.
+/// the prompt typed on the home page. It is kept, not temporary. Like
+/// `agent_sessions::start_in`, but with the effort and permission the person
+/// chose next to the prompt.
 async fn start(State(state): State<AppState>, Json(request): Json<StartRequest>) -> Result<Json<Value>> {
     let prompt = request.prompt.trim().to_owned();
     if prompt.is_empty() {
         return Err(ApiError::bad("Type what the agent should do"));
     }
     let title: String = prompt.lines().next().unwrap_or("").chars().take(60).collect();
-    let arguments = json!({
-        "provider": request.provider,
-        "prompt": prompt,
-        "title": title,
-        "keep": true,
-        "endpoint_id": request.endpoint_id,
-        "model": request.model,
-    });
+    let arguments = json!({ "provider": request.provider, "prompt": prompt, "title": title, "keep": true });
+    // Checks the provider and the prompt the same way an agent's start is checked.
     let start = crate::agent_sessions::start_of(&arguments, true)?;
-    let started = crate::agent_sessions::start_in(
-        &state,
-        request.workspace_id,
-        start,
-        None,
+    let effort = effort_choice(request.effort.as_deref())?;
+    let permission = permission_choice(start.provider, request.permission.as_deref())?;
+    let mut input = json!({
+        "interaction_mode": "structured",
+        "provider": start.provider,
+        "title": start.title,
+        "endpoint_profile_id": request.endpoint_id.filter(|v| !v.trim().is_empty()),
+        "model": request.model.filter(|v| !v.trim().is_empty()),
+        "ephemeral": false,
+    });
+    if let Some(effort) = effort {
+        input["effort"] = json!(effort);
+    }
+    let input: crate::CreateSession =
+        serde_json::from_value(input).map_err(|error| ApiError::bad(error.to_string()))?;
+    let (_, Json(created)) =
+        crate::create_session(State(state.clone()), Path(request.workspace_id), Json(input)).await?;
+    let id = created.id;
+    if let Some(mode) = permission {
+        if let Err(error) = choose_permission(&state, id, &mode).await {
+            let _ = db(&state, move |s| s.delete_session(id)).await;
+            return Err(error);
+        }
+    }
+    crate::conversations::open(&state, id).await?;
+    crate::conversations::say(&state, id, start.prompt).await?;
+    state.activity.notify_with(
         json!({ "kind": "you" }),
-        |_| async { Ok(()) },
-    )
-    .await?;
-    Ok(Json(started))
+        "Started session “{title}”",
+        json!({ "title": created.title }),
+        None,
+        Some(json!({ "session_id": id })),
+    );
+    Ok(Json(json!({
+        "started": {
+            "id": id, "title": created.title, "provider": created.provider, "temporary": false,
+            "worktree": null, "branch": null, "base": null, "preparing": false,
+        },
+    })))
 }
 
 fn now() -> String {
@@ -349,5 +429,30 @@ fn walk(root: &FsPath, relative: PathBuf, depth: usize, found: &mut Vec<(SystemT
                 found.push((modified, child));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tendly_domain::ProviderKind;
+
+    #[test]
+    fn hub_start_maps_effort_and_rejects_unknown_levels() {
+        assert_eq!(effort_choice(None).unwrap(), None);
+        assert_eq!(effort_choice(Some(" ")).unwrap(), None);
+        assert_eq!(effort_choice(Some("auto")).unwrap(), Some(None));
+        assert_eq!(effort_choice(Some("high")).unwrap(), Some(Some("high".into())));
+        let error = effort_choice(Some("huge")).unwrap_err();
+        assert!(error.message.contains("effort must be"), "{}", error.message);
+    }
+
+    #[test]
+    fn hub_start_permission_follows_the_client() {
+        assert_eq!(permission_choice(ProviderKind::ClaudeCode, None).unwrap(), None);
+        assert_eq!(permission_choice(ProviderKind::ClaudeCode, Some("plan")).unwrap(), Some("plan".into()));
+        assert_eq!(permission_choice(ProviderKind::Codex, Some("danger")).unwrap(), Some("danger".into()));
+        assert!(permission_choice(ProviderKind::Codex, Some("plan")).is_err());
+        assert!(permission_choice(ProviderKind::ClaudeCode, Some("yolo")).is_err());
     }
 }
