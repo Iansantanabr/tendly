@@ -42,7 +42,7 @@ test('the Apps page has its own way back', () => {
 
 test('every new string has a Brazilian Portuguese translation with the same placeholders', () => {
   const dir = new URL('.', import.meta.url);
-  const translations = { ...JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8')), ...JSON.parse(readFileSync(new URL('apps.pt-BR.json', dir), 'utf8')) };
+  const translations = JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8'));
   const sources = ['AppsPage.vue', 'AppPane.vue', 'AppTile.vue'].map(name => readFileSync(new URL(name, dir), 'utf8')).join('\n');
   const keys = new Set(['Apps', 'App', 'New app', 'New', 'No apps yet. Ask an agent to build one for you.', 'Back to apps']);
   for (const match of sources.matchAll(/\bt\(\s*(["'])((?:\\.|(?!\1).)*)\1/g)) keys.add(match[2].replace(/\\'/g, "'"));
