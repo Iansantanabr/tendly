@@ -5,7 +5,7 @@ import Icon from "../Icon.vue";
 import { errorMessage } from "../api";
 import { copyText } from "../clipboard";
 import { useI18n } from "../../i18n";
-import { MODE_SHORT, VISIBILITY_SHORT, fileName, listPublications, publicLink, unpublish, type Publication } from "./publish";
+import { MODE_SHORT, VISIBILITY_SHORT, fileName, linkLabel, listPublications, publicLink, unpublish, type Publication } from "./publish";
 
 /** `compact` is the short list inside the publish panel; the Settings page shows every column. */
 const props = defineProps<{ compact?: boolean; current?: string | null }>();
@@ -57,8 +57,8 @@ async function remove(item: Publication) {
     <ul v-else-if="items" class="publications-list">
       <li v-for="item in items" :key="item.slug" :class="{ current: item.slug === props.current }">
         <div class="publications-main">
-          <a :href="item.url" target="_blank" rel="noopener" class="publications-name" :title="item.path">{{ fileName(item.path) }}</a>
-          <code class="publications-url" :title="publicLink(item, origin)">{{ item.url }}</code>
+          <a :href="publicLink(item, origin)" target="_blank" rel="noopener" class="publications-name" :title="item.path">{{ fileName(item.path) }}</a>
+          <code class="publications-url" :title="publicLink(item, origin)">{{ linkLabel(item) }}</code>
           <span v-if="!props.compact" class="publications-meta">
             <span class="publications-pill">{{ t(VISIBILITY_SHORT[item.visibility]) }}</span>
             <span class="publications-pill">{{ t(MODE_SHORT[item.mode]) }}</span>
@@ -69,7 +69,7 @@ async function remove(item: Publication) {
         <div class="publications-actions">
           <template v-if="!props.compact">
             <button type="button" class="small-button" :aria-label="t('Copy link to {name}', { name: fileName(item.path) })" @click="copy(item)"><Icon :name="copied === item.slug ? 'check' : 'clipboard'" :size="13" /><span role="status">{{ t(copied === item.slug ? 'Copied' : 'Copy') }}</span></button>
-            <a class="small-button" :href="item.url" target="_blank" rel="noopener" :aria-label="t('Open {name} in a new tab', { name: fileName(item.path) })">{{ t('Open') }}</a>
+            <a class="small-button" :href="publicLink(item, origin)" target="_blank" rel="noopener" :aria-label="t('Open {name} in a new tab', { name: fileName(item.path) })">{{ t('Open') }}</a>
           </template>
           <button v-if="removing === item.slug" type="button" class="small-button" @click="removing = null">{{ t('Cancel') }}</button>
           <button type="button" class="small-button danger" :disabled="!!busy" @click="remove(item)">{{ t(busy === item.slug ? 'Unpublishing…' : removing === item.slug ? 'Confirm unpublish' : 'Unpublish') }}</button>

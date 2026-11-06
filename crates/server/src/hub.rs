@@ -1,7 +1,8 @@
 //! Additions to this fork of Tendly: the home page, the inbox and unread
 //! conversations, and (in later modules) automations, the integration and
 //! skill catalogs, file history, publishing, custom apps, and the phone:
-//! an installable app (`pwa`) and Web Push (`push`).
+//! an installable app (`pwa`) and Web Push (`push`), and the settings a move
+//! to a VPS needs (`settings`: time zone, public link address, dictation).
 //!
 //! Everything here keeps its rows in a database of its own, `hub.db` beside
 //! the main one, so upstream schema migrations never collide with ours.
@@ -20,6 +21,7 @@ mod home;
 mod publish;
 mod push;
 mod pwa;
+pub(crate) mod settings;
 mod spaces;
 pub(crate) mod transcript;
 mod store;
@@ -43,6 +45,7 @@ pub fn open(database: &Path) -> Hub {
 /// Startup work: the folder for conversations without a project exists before
 /// the first browser asks for the workspace list.
 pub fn warm(state: AppState) {
+    settings::ensure_defaults(&state.hub);
     let home_state = state.clone();
     tokio::spawn(async move {
         if let Err(error) = home::ensure_conversations(&home_state).await {
@@ -62,6 +65,7 @@ pub fn routes() -> Router<AppState> {
         .merge(publish::routes())
         .merge(push::routes())
         .merge(pwa::routes())
+        .merge(settings::routes())
         .merge(spaces::routes())
         .merge(transcript::routes())
         .merge(apps::routes())

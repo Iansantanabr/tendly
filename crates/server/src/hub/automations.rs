@@ -5,7 +5,7 @@
 //! The scheduler ticks every 30 s and runs whatever fell due since the last
 //! tick. When the gap is far longer than a tick (the machine slept, the server
 //! was stopped), what was missed is not replayed: the clock just moves on.
-use super::{cs, home};
+use super::{cs, home, settings};
 use crate::{
     ApiError, AppState, Result,
     activity::Answer,
@@ -17,7 +17,8 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use croner::{
     Cron,
     parser::{CronParser, Seconds, Year},
@@ -196,31 +197,41 @@ fn parse_timezone(name: Option<&str>) -> std::result::Result<Option<chrono_tz::T
         Some(name) => name
             .parse::<chrono_tz::Tz>()
             .map(Some)
-            .map_err(|_| format!("Unknown time zone \"{name}\"; use an IANA name such as America/Sao_Paulo, or leave it empty for this machine's")),
+            .map_err(|_| format!("Unknown time zone \"{name}\"; use an IANA name such as America/Sao_Paulo, or leave it empty for the time zone in Tendly's settings")),
     }
 }
 
-/// The first scheduled time strictly after `after`.
-pub(crate) fn next_after(
-    cron: &Cron,
-    timezone: Option<chrono_tz::Tz>,
-    after: DateTime<Utc>,
-) -> Option<DateTime<Utc>> {
-    match timezone {
-        Some(tz) => cron
-            .find_next_occurrence(&after.with_timezone(&tz), false)
-            .ok()
-            .map(|at| at.with_timezone(&Utc)),
-        None => cron
-            .find_next_occurrence(&after.with_timezone(&Local), false)
-            .ok()
-            .map(|at| at.with_timezone(&Utc)),
-    }
+/// The zone an automation's schedule is read in: its own, else the one in
+/// the hub settings. Never the machine's: a VPS clock is in UTC, and "every
+/// day at 9" means 9 where the person is.
+fn zone_of(automation: &Automation, default: Tz) -> Option<Tz> {
+    parse_timezone(automation.timezone.as_deref()).ok().map(|own| own.unwrap_or(default))
+}
+
+/// The first scheduled time strictly after `after`, with the pattern read in `timezone`.
+pub(crate) fn next_after(cron: &Cron, timezone: Tz, after: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    cron.find_next_occurrence(&after.with_timezone(&timezone), false)
+        .ok()
+        .map(|at| at.with_timezone(&Utc))
 }
 
 /// Whether a scheduled time fell in `(from, to]`.
-fn due(cron: &Cron, timezone: Option<chrono_tz::Tz>, from: DateTime<Utc>, to: DateTime<Utc>) -> bool {
+fn due(cron: &Cron, timezone: Tz, from: DateTime<Utc>, to: DateTime<Utc>) -> bool {
     next_after(cron, timezone, from).is_some_and(|at| at <= to)
+}
+
+/// The enabled automations whose schedule fell in `(from, to]`.
+fn fell_due(automations: Vec<Automation>, default: Tz, from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<Automation> {
+    automations
+        .into_iter()
+        .filter(|automation| automation.enabled)
+        .filter(|automation| {
+            let (Ok(cron), Some(timezone)) = (parse_cron(&automation.cron), zone_of(automation, default)) else {
+                return false;
+            };
+            due(&cron, timezone, from, to)
+        })
+        .collect()
 }
 
 /// The span a tick should look at, or `None` when the clock went backwards or
@@ -230,10 +241,9 @@ fn window(last: DateTime<Utc>, now: DateTime<Utc>) -> Option<(DateTime<Utc>, Dat
     (now > last && gap <= MAX_GAP_SECONDS).then_some((last, now))
 }
 
-fn next_run(automation: &Automation) -> Option<String> {
+fn next_run(automation: &Automation, default: Tz) -> Option<String> {
     let cron = parse_cron(&automation.cron).ok()?;
-    let timezone = parse_timezone(automation.timezone.as_deref()).ok()?;
-    next_after(&cron, timezone, Utc::now()).map(|at| at.to_rfc3339())
+    next_after(&cron, zone_of(automation, default)?, Utc::now()).map(|at| at.to_rfc3339())
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +282,7 @@ fn apply(target: &mut Automation, patch: &Map<String, Value>) -> Result<()> {
                     .ok_or_else(|| ApiError::bad("enabled must be true or false"))?
             }
             // Read-only fields a client may send back as it got them.
-            "id" | "created_at" | "updated_at" | "next_run" | "last_run" | "running" => {}
+            "id" | "created_at" | "updated_at" | "next_run" | "last_run" | "running" | "effective_timezone" => {}
             other => return Err(ApiError::bad(format!("Unknown automation field \"{other}\""))),
         }
     }
@@ -356,16 +366,20 @@ async fn draft_update(state: &AppState, id: &str, patch: &Map<String, Value>) ->
 
 async fn save_new(state: &AppState, automation: Automation) -> Result<Value> {
     let saved = automation.clone();
-    cs(state, move |c| insert(c, &saved)).await?;
-    Ok(view(&automation, None))
+    let default = cs(state, move |c| {
+        insert(c, &saved)?;
+        settings::timezone(c)
+    })
+    .await?;
+    Ok(view(&automation, None, default))
 }
 
 async fn save_update(state: &AppState, automation: Automation) -> Result<Value> {
     let saved = automation.clone();
     cs(state, move |c| update(c, &saved)).await?;
     let id = automation.id.clone();
-    let last = cs(state, move |c| last_run(c, &id)).await?;
-    Ok(view(&automation, last.as_ref()))
+    let (last, default) = cs(state, move |c| Ok((last_run(c, &id)?, settings::timezone(c)?))).await?;
+    Ok(view(&automation, last.as_ref(), default))
 }
 
 // ---------------------------------------------------------------------------
@@ -505,19 +519,22 @@ fn run_summary(run: &Run) -> Value {
     })
 }
 
-fn view(automation: &Automation, last: Option<&Run>) -> Value {
+/// `default` is the hub's time zone, which the schedule follows when the
+/// automation names none; `effective_timezone` says which one that is.
+fn view(automation: &Automation, last: Option<&Run>, default: Tz) -> Value {
     let mut value = serde_json::to_value(automation).unwrap_or_else(|_| json!({}));
-    value["next_run"] = json!(if automation.enabled { next_run(automation) } else { None });
+    value["next_run"] = json!(if automation.enabled { next_run(automation, default) } else { None });
+    value["effective_timezone"] = json!(zone_of(automation, default).map(|zone| zone.name()));
     value["last_run"] = last.map(run_summary).unwrap_or(Value::Null);
     value["running"] = json!(is_running(&automation.id));
     value
 }
 
 pub(crate) async fn list_views(state: &AppState) -> Result<Vec<Value>> {
-    let (automations, last) = cs(state, |c| Ok((list_all(c)?, last_runs(c)?))).await?;
+    let (automations, last, default) = cs(state, |c| Ok((list_all(c)?, last_runs(c)?, settings::timezone(c)?))).await?;
     Ok(automations
         .iter()
-        .map(|a| view(a, last.iter().find(|run| run.automation_id == a.id)))
+        .map(|a| view(a, last.iter().find(|run| run.automation_id == a.id), default))
         .collect())
 }
 
@@ -825,17 +842,15 @@ pub fn start_scheduler(state: AppState) {
 }
 
 async fn tick(state: &AppState, from: DateTime<Utc>, to: DateTime<Utc>) {
-    let automations = match cs(state, list_all).await {
-        Ok(list) => list,
+    let (automations, default) = match cs(state, |c| Ok((list_all(c)?, settings::timezone(c)?))).await {
+        Ok(read) => read,
         Err(error) => {
             tracing::warn!(?error, "automations: could not read the schedule");
             return;
         }
     };
-    for automation in automations.into_iter().filter(|a| a.enabled) {
-        let Ok(cron) = parse_cron(&automation.cron) else { continue };
-        let Ok(timezone) = parse_timezone(automation.timezone.as_deref()) else { continue };
-        if !due(&cron, timezone, from, to) || is_running(&automation.id) {
+    for automation in fell_due(automations, default, from, to) {
+        if is_running(&automation.id) {
             continue;
         }
         let id = automation.id.clone();
@@ -919,7 +934,7 @@ fn fields() -> Value {
         "description": { "type": "string" },
         "kind": { "type": "string", "enum": ["script", "agent"], "description": "script runs a shell command; agent starts a Claude Code or Codex conversation with a prompt." },
         "cron": { "type": "string", "description": "Five-field cron: minute hour day-of-month month day-of-week, e.g. \"0 9 * * 1-5\" (weekdays 9:00), \"0 * * * *\" (hourly)." },
-        "timezone": { "type": ["string", "null"], "description": "IANA time zone such as America/Sao_Paulo; null for this machine's." },
+        "timezone": { "type": ["string", "null"], "description": "IANA time zone such as America/Sao_Paulo; null for the one set in Tendly's settings (Settings → Addresses and time zone)." },
         "workspace_id": { "type": ["string", "null"], "description": "Workspace to run in (see tendly_list what=workspaces). null: scripts run in the home folder, agents in a conversation without a project." },
         "command": { "type": ["string", "null"], "description": "For kind=script: the shell command, run with the person's login shell. Times out after 10 minutes." },
         "prompt": { "type": ["string", "null"], "description": "For kind=agent: what the agent is asked each time." },
@@ -1022,7 +1037,6 @@ pub(crate) async fn call(state: &AppState, caller: Caller, name: &str, arguments
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
 
     fn utc(text: &str) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339(text).unwrap().with_timezone(&Utc)
@@ -1031,7 +1045,7 @@ mod tests {
     #[test]
     fn hub_cron_next_run_follows_the_pattern_and_time_zone() {
         let weekdays = parse_cron("0 9 * * 1-5").unwrap();
-        let utc_tz = Some(chrono_tz::UTC);
+        let utc_tz = chrono_tz::UTC;
         // Friday 2026-11-06 10:00 UTC: the next is Monday 9:00.
         assert_eq!(next_after(&weekdays, utc_tz, utc("2026-11-06T10:00:00Z")), Some(utc("2026-11-09T09:00:00Z")));
         // Strictly after: exactly 9:00 moves on to the next day.
@@ -1040,12 +1054,8 @@ mod tests {
         assert_eq!(next_after(&hourly, utc_tz, utc("2026-11-05T09:59:30Z")), Some(utc("2026-11-05T10:00:00Z")));
         // 9:00 in São Paulo (UTC-3, no daylight saving) is 12:00 UTC.
         let daily = parse_cron("0 9 * * *").unwrap();
-        let sao_paulo = parse_timezone(Some("America/Sao_Paulo")).unwrap();
+        let sao_paulo = parse_timezone(Some("America/Sao_Paulo")).unwrap().unwrap();
         assert_eq!(next_after(&daily, sao_paulo, utc("2026-11-05T00:00:00Z")), Some(utc("2026-11-05T12:00:00Z")));
-        // Local time by default.
-        let local = Local.with_ymd_and_hms(2026, 3, 2, 8, 30, 0).unwrap();
-        let expected = Local.with_ymd_and_hms(2026, 3, 2, 9, 0, 0).unwrap().with_timezone(&Utc);
-        assert_eq!(next_after(&daily, None, local.with_timezone(&Utc)), Some(expected));
         assert!(parse_cron("@hourly").is_ok());
     }
 
@@ -1062,7 +1072,7 @@ mod tests {
     #[test]
     fn hub_due_only_inside_the_window_and_gaps_are_not_replayed() {
         let hourly = parse_cron("0 * * * *").unwrap();
-        let tz = Some(chrono_tz::UTC);
+        let tz = chrono_tz::UTC;
         assert!(due(&hourly, tz, utc("2026-11-05T09:59:45Z"), utc("2026-11-05T10:00:15Z")));
         assert!(due(&hourly, tz, utc("2026-11-05T09:59:45Z"), utc("2026-11-05T10:00:00Z")));
         assert!(!due(&hourly, tz, utc("2026-11-05T10:00:00Z"), utc("2026-11-05T10:00:30Z")));
@@ -1071,6 +1081,77 @@ mod tests {
         assert!(window(last, utc("2026-11-05T09:00:30Z")).is_some());
         assert!(window(last, utc("2026-11-05T17:00:00Z")).is_none(), "slept for hours");
         assert!(window(last, utc("2026-11-05T08:59:00Z")).is_none(), "clock went back");
+    }
+
+    /// The move to a VPS: the machine's clock is in UTC, the person is not.
+    #[test]
+    fn hub_schedule_follows_the_settings_time_zone_not_the_machines() {
+        let hub = crate::hub::HubStore::memory();
+        let daily = |id: &str, timezone: Option<&str>| {
+            let mut a = script("true");
+            a.id = id.into();
+            a.cron = "0 9 * * *".into();
+            a.timezone = timezone.map(str::to_owned);
+            a
+        };
+        let all = || vec![daily("plain", None), daily("lisbon", Some("Europe/Lisbon")), daily("utc", Some("UTC"))];
+        let ids = |due: Vec<Automation>| due.into_iter().map(|a| a.id).collect::<Vec<_>>();
+        let around = |time: &str| {
+            let at = utc(time);
+            (at - chrono::Duration::seconds(15), at + chrono::Duration::seconds(15))
+        };
+
+        // Nothing stored yet: São Paulo, where 9:00 is 12:00 UTC all year.
+        let default = hub.with(settings::timezone).unwrap();
+        assert_eq!(default.name(), "America/Sao_Paulo");
+        let (from, to) = around("2026-11-05T12:00:00Z");
+        assert_eq!(ids(fell_due(all(), default, from, to)), ["plain"], "9:00 in São Paulo");
+        let (from, to) = around("2026-11-05T09:00:00Z");
+        assert_eq!(ids(fell_due(all(), default, from, to)), ["lisbon", "utc"], "9:00 UTC is 6:00 in São Paulo");
+        // A whole day of 30 s ticks runs it exactly once, at 12:00 UTC.
+        let plain = daily("plain", None);
+        let mut ran = Vec::new();
+        let mut tick = utc("2026-11-05T00:00:00Z");
+        while tick < utc("2026-11-06T00:00:00Z") {
+            let next = tick + chrono::Duration::seconds(30);
+            if !fell_due(vec![plain.clone()], default, tick, next).is_empty() {
+                ran.push(next);
+            }
+            tick = next;
+        }
+        assert_eq!(ran, [utc("2026-11-05T12:00:00Z")]);
+        let shown = view(&plain, None, default);
+        assert_eq!(shown["effective_timezone"], "America/Sao_Paulo");
+        let next = DateTime::parse_from_rfc3339(shown["next_run"].as_str().unwrap()).unwrap().with_timezone(&default);
+        assert_eq!(next.format("%H:%M").to_string(), "09:00");
+        assert_eq!(view(&daily("lisbon", Some("Europe/Lisbon")), None, default)["effective_timezone"], "Europe/Lisbon");
+
+        // The person changes the setting: the same automation follows it.
+        hub.with(|c| c.execute("INSERT INTO hub_settings(key, value, updated_at) VALUES ('timezone', 'Asia/Tokyo', 'now')", []))
+            .unwrap();
+        let tokyo = hub.with(settings::timezone).unwrap();
+        let (from, to) = around("2026-11-05T00:00:00Z");
+        assert_eq!(ids(fell_due(all(), tokyo, from, to)), ["plain"], "9:00 in Tokyo");
+        let (from, to) = around("2026-11-05T12:00:00Z");
+        assert!(fell_due(all(), tokyo, from, to).is_empty());
+
+        // Off, or with a schedule that no longer parses: never due.
+        let mut off = daily("off", None);
+        off.enabled = false;
+        let mut broken = daily("broken", None);
+        broken.cron = "nonsense".into();
+        let mut lost = daily("lost", Some("Mars/Olympus"));
+        lost.enabled = true;
+        let (from, to) = around("2026-11-05T12:00:00Z");
+        assert!(fell_due(vec![off, broken, lost], default, from, to).is_empty());
+    }
+
+    /// The schedule code must not consult the machine's zone at all.
+    #[test]
+    fn hub_schedule_code_never_reads_the_machine_clock_zone() {
+        let source = include_str!("automations.rs");
+        let code = source.split("#[cfg(test)]").next().unwrap();
+        assert!(!code.contains("Local"), "chrono::Local would follow the VPS clock (UTC)");
     }
 
     #[test]

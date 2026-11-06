@@ -366,3 +366,78 @@ async fn hub_publish_wrong_passwords_are_rate_limited() {
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     assert!(body.contains("Too many attempts"));
 }
+
+/// On the VPS: `public_base_url` is the pages' own domain.
+#[tokio::test]
+async fn hub_publish_links_use_the_public_address_from_the_settings() {
+    let f = fixture();
+    f.write("report.html", "<p>report</p>");
+    f.write("notes.md", "# notes");
+    f.write("team.html", "<p>team</p>");
+    let (status, p) = f.publish(json!({"path": "report.html", "visibility": "public", "mode": "live", "slug": "report"})).await;
+    assert_eq!(status, StatusCode::OK, "{p}");
+    assert_eq!(p["url"], "/p/report");
+    assert_eq!(p["public_url"], Value::Null, "no public address yet: the browser uses its own");
+
+    let (status, _) = f.api("PUT", "/api/hub/settings", json!({"public_base_url": "https://pub.example.com/"})).await;
+    assert_eq!(status, StatusCode::OK);
+    // Every route that returns a publication says the same thing.
+    let (_, p) = f
+        .publish(json!({"path": "notes.md", "visibility": "password", "password": "open sesame", "mode": "frozen", "slug": "notes"}))
+        .await;
+    assert_eq!(p["public_url"], "https://pub.example.com/p/notes");
+    let (_, p) = f.api("PATCH", "/api/hub/publications/notes", json!({"slug": "meeting-notes"})).await;
+    assert_eq!((p["url"].as_str(), p["public_url"].as_str()), (Some("/p/meeting-notes"), Some("https://pub.example.com/p/meeting-notes")));
+    let (_, p) = f.api("POST", "/api/hub/publications/meeting-notes/refresh", Value::Null).await;
+    assert_eq!(p["public_url"], "https://pub.example.com/p/meeting-notes");
+    let (_, p) = f
+        .api("GET", &format!("/api/hub/publications/for?workspace_id={}&path=report.html", f.workspace), Value::Null)
+        .await;
+    assert_eq!(p["public_url"], "https://pub.example.com/p/report");
+
+    // Team-only: the sign-in lives on the app's address, so the link stays there.
+    let (_, team) = f.publish(json!({"path": "team.html", "visibility": "team", "mode": "live", "slug": "team-page"})).await;
+    assert_eq!(team["public_url"], Value::Null);
+    let (_, list) = f.api("GET", "/api/hub/publications", Value::Null).await;
+    let link = |slug: &str| {
+        list.as_array().unwrap().iter().find(|p| p["slug"] == slug).unwrap()["public_url"].clone()
+    };
+    assert_eq!(link("report"), "https://pub.example.com/p/report");
+    assert_eq!(link("meeting-notes"), "https://pub.example.com/p/meeting-notes");
+    assert_eq!(link("team-page"), Value::Null);
+    // Opening it up moves the link to the public address; closing it moves it back.
+    let (_, p) = f.api("PATCH", "/api/hub/publications/team-page", json!({"visibility": "public"})).await;
+    assert_eq!(p["public_url"], "https://pub.example.com/p/team-page");
+    let (_, p) = f.api("PATCH", "/api/hub/publications/team-page", json!({"visibility": "team"})).await;
+    assert_eq!(p["public_url"], Value::Null);
+
+    // Emptying the setting: back to the browser's own address.
+    f.api("PUT", "/api/hub/settings", json!({"public_base_url": ""})).await;
+    let (_, list) = f.api("GET", "/api/hub/publications", Value::Null).await;
+    assert!(list.as_array().unwrap().iter().all(|p| p["public_url"].is_null()), "{list}");
+}
+
+/// Behind Caddy the server itself speaks plain HTTP; the proxy says the visitor used HTTPS.
+#[tokio::test]
+async fn hub_publish_password_cookie_is_secure_behind_an_https_proxy() {
+    let f = fixture();
+    f.write("x.txt", "x");
+    f.publish(json!({"path": "x.txt", "visibility": "password", "password": "right one", "mode": "live", "slug": "proxied-page"}))
+        .await;
+    let plain = [("content-type", "application/x-www-form-urlencoded")];
+    let (status, headers, _) = f.visit("POST", "/p/proxied-page", &plain, "password=right+one").await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(!headers[header::SET_COOKIE].to_str().unwrap().contains("Secure"), "plain http on this machine");
+    let proxied = [("content-type", "application/x-www-form-urlencoded"), ("x-forwarded-proto", "https")];
+    let (status, headers, _) = f.visit("POST", "/p/proxied-page", &proxied, "password=right+one").await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(headers[header::SET_COOKIE].to_str().unwrap().ends_with("; Secure"));
+
+    let mut map = HeaderMap::new();
+    assert!(!over_https(&map, false));
+    assert!(over_https(&map, true), "the tailnet is always https");
+    map.insert("x-forwarded-proto", HeaderValue::from_static("HTTPS, http"));
+    assert!(over_https(&map, false));
+    map.insert("x-forwarded-proto", HeaderValue::from_static("http"));
+    assert!(!over_https(&map, false));
+}

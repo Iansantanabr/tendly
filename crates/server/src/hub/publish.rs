@@ -23,6 +23,13 @@
 //! guard would refuse them all. Every other file type gets the same locked
 //! `sandbox; default-src 'none'` as the app's own preview (PDF excepted, which
 //! a sandboxed document cannot display).
+//!
+//! On a VPS the pages have an address of their own (`hub_settings`'
+//! `public_base_url`, a domain whose proxy forwards only `/p/*`). Every
+//! publication the API returns then carries `public_url`, the absolute link to
+//! share. A team-only page is the exception: only a browser signed in to the
+//! app may see it, and that sign-in lives on the app's own address, so its
+//! link stays there (`public_url` is null and the client uses its own origin).
 use crate::{ApiError, AppState, Result, security::ViaTailnet, workspace_io};
 use axum::{
     Extension, Form, Json, Router,
@@ -75,6 +82,9 @@ pub(crate) struct Publication {
     pub has_password: bool,
     /// Where it is served, relative to this server: `/p/<slug>`.
     pub url: String,
+    /// The absolute link to share, when a public address is set in the hub
+    /// settings and this page can be seen there; see the module comment.
+    pub public_url: Option<String>,
     #[serde(skip)]
     password_hash: Option<String>,
 }
@@ -87,6 +97,7 @@ fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Publication> {
     let password_hash: Option<String> = row.get(4)?;
     Ok(Publication {
         url: format!("/p/{slug}"),
+        public_url: None,
         slug,
         workspace_id: row.get(1)?,
         path: row.get(2)?,
@@ -344,6 +355,7 @@ async fn create(state: &AppState, workspace: String, path: String, input: Change
     let stamp = now();
     let mut publication = Publication {
         url: format!("/p/{slug}"),
+        public_url: None,
         slug,
         workspace_id: workspace,
         path,
@@ -435,8 +447,26 @@ fn validate_changes(input: &Changes) -> Result<()> {
     Ok(())
 }
 
+impl Publication {
+    /// Fills `public_url` from the public address in the hub settings, if any.
+    fn linked(mut self, base: Option<&str>) -> Self {
+        self.public_url = base
+            .filter(|_| self.visibility != "team")
+            .map(|base| super::settings::absolute(base, &self.url));
+        self
+    }
+}
+
+/// A publication as the API returns it, with its link to share.
+async fn linked(state: &AppState, publication: Publication) -> Result<Json<Publication>> {
+    let base = super::cs(state, super::settings::public_base_url).await?;
+    Ok(Json(publication.linked(base.as_deref())))
+}
+
 async fn list_route(State(state): State<AppState>) -> Result<Json<Vec<Publication>>> {
-    Ok(Json(super::cs(&state, all).await?))
+    let (publications, base) =
+        super::cs(&state, |c| Ok((all(c)?, super::settings::public_base_url(c)?))).await?;
+    Ok(Json(publications.into_iter().map(|p| p.linked(base.as_deref())).collect()))
 }
 
 #[derive(Deserialize)]
@@ -447,7 +477,11 @@ struct ForQuery {
 
 async fn for_route(State(state): State<AppState>, Query(q): Query<ForQuery>) -> Result<Json<Option<Publication>>> {
     let path = normal_path(&q.path)?;
-    Ok(Json(super::cs(&state, move |c| by_file(c, &q.workspace_id, &path)).await?))
+    let (found, base) = super::cs(&state, move |c| {
+        Ok((by_file(c, &q.workspace_id, &path)?, super::settings::public_base_url(c)?))
+    })
+    .await?;
+    Ok(Json(found.map(|p| p.linked(base.as_deref()))))
 }
 
 async fn upsert_route(State(state): State<AppState>, Json(input): Json<Upsert>) -> Result<Json<Publication>> {
@@ -465,10 +499,11 @@ async fn upsert_route(State(state): State<AppState>, Json(input): Json<Upsert>) 
     workspace_file(&state, &workspace, &path).await?;
     let (w, p) = (workspace.clone(), path.clone());
     let existing = super::cs(&state, move |c| by_file(c, &w, &p)).await?;
-    Ok(Json(match existing {
+    let saved = match existing {
         Some(found) => update(&state, found, changes).await?,
         None => create(&state, workspace, path, changes).await?,
-    }))
+    };
+    linked(&state, saved).await
 }
 
 async fn find(state: &AppState, slug: String) -> Result<Publication> {
@@ -486,7 +521,8 @@ async fn patch_route(
     changes.password = changes.password.filter(|p| !p.is_empty());
     let _guard = WRITES.lock().await;
     let found = find(&state, slug).await?;
-    Ok(Json(update(&state, found, changes).await?))
+    let saved = update(&state, found, changes).await?;
+    linked(&state, saved).await
 }
 
 async fn refresh_route(State(state): State<AppState>, UrlPath(slug): UrlPath<String>) -> Result<Json<Publication>> {
@@ -500,7 +536,7 @@ async fn refresh_route(State(state): State<AppState>, UrlPath(slug): UrlPath<Str
     p.frozen_at = Some(p.updated_at.clone());
     let row = p.clone();
     super::cs(&state, move |c| save(c, Some(&row.slug), &row)).await?;
-    Ok(Json(p))
+    linked(&state, p).await
 }
 
 async fn delete_route(State(state): State<AppState>, UrlPath(slug): UrlPath<String>) -> Result<StatusCode> {
@@ -728,13 +764,26 @@ struct PasswordForm {
     password: String,
 }
 
+/// Whether the visitor reached this over HTTPS: the tailnet always is, and a
+/// reverse proxy in front (Caddy on the VPS) says so in `X-Forwarded-Proto`.
+/// It only decides whether the visitor's own cookie is marked `Secure`, so a
+/// client that lies about it changes nothing but its own cookie.
+pub(crate) fn over_https(headers: &HeaderMap, via_tailnet: bool) -> bool {
+    via_tailnet
+        || headers
+            .get("x-forwarded-proto")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.split(',').next().is_some_and(|first| first.trim().eq_ignore_ascii_case("https")))
+}
+
 async fn password_route(
     State(state): State<AppState>,
     UrlPath(slug): UrlPath<String>,
     via: Option<Extension<ViaTailnet>>,
+    headers: HeaderMap,
     Form(form): Form<PasswordForm>,
 ) -> Response {
-    match check_password(&state, slug, form.password, via.is_some()).await {
+    match check_password(&state, slug, form.password, over_https(&headers, via.is_some())).await {
         Ok(response) => response,
         Err(_) => not_found(),
     }

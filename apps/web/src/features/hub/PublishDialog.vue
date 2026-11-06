@@ -1,14 +1,15 @@
 <script setup lang="ts">
 /** Publish one file at /p/{slug}: who sees it and when it updates. */
-import { computed, nextTick, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import Icon from "../Icon.vue";
 import { errorMessage } from "../api";
 import { copyText } from "../clipboard";
 import { useI18n } from "../../i18n";
 import {
-  MODES, VISIBILITIES, changes, fileName, problem, publicLink, publicationFor, publish, publishAgentPrompt, refreshPublication,
+  MODES, VISIBILITIES, changes, fileName, problem, publicLink, publicationFor, publish, publishAgentPrompt, reachNote, refreshPublication,
   tidySlug, unpublish, updatePublication, type Publication, type PublishMode, type Visibility,
 } from "./publish";
+import { loadHubSettings, publicBaseUrl } from "./settings";
 import { generatePassword } from "./password";
 import { AccountChoiceRequired, startConversation } from "./start";
 import PublicationsList from "./PublicationsList.vue";
@@ -30,6 +31,7 @@ const passwordInput = ref<HTMLInputElement>();
 const asking = ref(false);
 
 const origin = typeof location === "undefined" ? "" : location.origin;
+onMounted(() => { void loadHubSettings(); });
 const link = computed(() => current.value ? publicLink(current.value, origin) : "");
 const invalid = computed(() => problem(form, current.value?.has_password ?? false, t));
 const dirty = computed(() => !!current.value && Object.keys(changes(current.value, form)).length > 0);
@@ -186,7 +188,7 @@ async function askAgent() {
         </template>
       </div>
       <p v-if="current && removing === current.slug" class="publish-hint" role="alert">{{ t('Unpublish {name}? The link stops working.', { name: fileName(current.path) }) }}</p>
-      <p class="publish-hint">{{ t('On this Mac the link opens only on this machine or your Tailscale network.') }}</p>
+      <p class="publish-hint">{{ reachNote(publicBaseUrl, t) }}</p>
     </form>
 
     <details class="publish-others" @toggle="toggleOthers">

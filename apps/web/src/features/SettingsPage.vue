@@ -11,6 +11,7 @@ import UpdatePanel from './UpdatePanel.vue';
 import RemoteAccessPanel from './RemoteAccessPanel.vue';
 import MachinesPanel from './MachinesPanel.vue';
 import PublishedPanel from './hub/PublishedPanel.vue';
+import AddressesPanel from './hub/AddressesPanel.vue';
 import NotificationsPanel from './hub/NotificationsPanel.vue';
 import { backendCapabilities } from './backend-capabilities';
 import { useI18n } from '../i18n';
@@ -54,10 +55,11 @@ const removeGuard = useRouter().beforeEach((to, from) => {
   return new Promise<boolean>(resolve => page.requestLeave(() => resolve(true)));
 });
 onBeforeUnmount(removeGuard);
-/** The hub's own sections (/settings/notifications, /settings/published), listed after the upstream ones. */
+/** The hub's own sections (/settings/notifications, /settings/published, /settings/addresses), listed after the upstream ones. */
 const HUB_SECTIONS = [
   { id: 'notifications', icon: 'bell', label: 'Notifications' },
   { id: 'published', icon: 'globe', label: 'Published files' },
+  { id: 'addresses', icon: 'clock', label: 'Addresses and time zone' },
 ] as const;
 const hubSection = computed(() => HUB_SECTIONS.find(entry => entry.id === props.section)?.id);
 function openHub(id: SettingsSection) { if (hubSection.value !== id) emit('navigate', id); }
@@ -80,6 +82,7 @@ function select(next: SettingsSection) { if (hubSection.value || next !== sectio
       <div class="settings-page">
         <NotificationsPanel v-if="hubSection==='notifications'" @remote="select('remote')"/>
         <PublishedPanel v-else-if="hubSection==='published'"/>
+        <AddressesPanel v-else-if="hubSection==='addresses'"/>
         <PreferencesPanel v-else-if="section==='preferences'" :profiles="profiles"/>
         <AgentClientsPanel v-else-if="section==='agents'"/>
         <ProfilesDialog v-else-if="section==='endpoints'" ref="profilesPage" embedded :profiles="profiles" @close="emit('back')" @changed="emit('changed', $event)" @accounts="select('accounts')"/>

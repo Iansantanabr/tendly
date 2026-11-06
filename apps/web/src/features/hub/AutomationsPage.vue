@@ -14,6 +14,7 @@ import {
   CRON_PRESETS, automationRuns, createAutomation, deleteAutomation, duration, editPrompt, lastResult, listAutomations,
   presetLabel, runAutomation, updateAutomation, type Automation, type AutomationDraft, type AutomationKind, type AutomationRun,
 } from "./automations";
+import { hubTimezone, loadHubSettings } from "./settings";
 
 /** Scheduled scripts and agent routines: what runs when, and how it went. */
 const props = defineProps<{ workspaces: Workspace[]; sessions: Session[]; profiles: EndpointProfile[] }>();
@@ -49,7 +50,7 @@ async function refresh() {
   clearTimeout(soon);
   if (automations.value.some(a => a.running || a.last_run?.status === "running")) soon = setTimeout(refresh, 3000);
 }
-onMounted(() => { void loadConversationsWorkspace(); void refresh(); poll = setInterval(refresh, 30_000); });
+onMounted(() => { void loadHubSettings(); void loadConversationsWorkspace(); void refresh(); poll = setInterval(refresh, 30_000); });
 onBeforeUnmount(() => { clearInterval(poll); clearTimeout(soon); });
 
 async function act(id: string, label: string, work: () => Promise<unknown>) {
@@ -162,7 +163,7 @@ async function save() {
           </label>
           <label class="auto-field"><span>{{ t('Cron') }}</span><input v-model="form.cron" class="mono" type="text" required spellcheck="false" placeholder="0 9 * * 1-5" /></label>
         </div>
-        <p class="auto-hint">{{ t('Five fields: minute, hour, day of month, month, day of week. In this machine\'s time zone.') }}</p>
+        <p class="auto-hint">{{ t('Five fields: minute, hour, day of month, month, day of week. In the time zone {zone}, set in Settings → Addresses and time zone.', { zone: hubTimezone }) }}</p>
         <label class="auto-field"><span>{{ t('Runs in') }}</span>
           <select v-model="form.workspace_id">
             <option :value="null">{{ t('No project') }}</option>

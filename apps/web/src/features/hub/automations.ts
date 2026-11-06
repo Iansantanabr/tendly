@@ -24,6 +24,8 @@ export interface Automation {
   kind: AutomationKind;
   cron: string;
   timezone: string | null;
+  /** The zone the schedule is read in: its own, else the one in the hub settings. */
+  effective_timezone?: string | null;
   workspace_id: string | null;
   command: string | null;
   prompt: string | null;
@@ -98,7 +100,7 @@ export function editable(automation: Automation) {
 }
 
 /** The first message of an "Edit with chat" conversation. */
-export function editPrompt(automation: Automation, t: Translate): string {
+export function editPrompt(automation: Automation, t: Translate, zone = automation.effective_timezone ?? "America/Sao_Paulo"): string {
   return [
     t("I want to change my automation “{name}”. This is how it is now:", { name: automation.name }),
     "",
@@ -106,6 +108,6 @@ export function editPrompt(automation: Automation, t: Translate): string {
     JSON.stringify(editable(automation), null, 2),
     "```",
     "",
-    t("Ask me what to change if I have not said it yet. Then save the change with the tendly_automation_update tool, using this id; do not create a new automation. The schedule is a five-field cron in this machine's time zone unless timezone says otherwise."),
+    t("Ask me what to change if I have not said it yet. Then save the change with the tendly_automation_update tool, using this id; do not create a new automation. The schedule is a five-field cron in the time zone of Tendly's settings ({zone}) unless timezone says otherwise.", { zone }),
   ].join("\n");
 }

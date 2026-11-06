@@ -107,6 +107,12 @@ const MIGRATIONS: &[&str] = &[
         vapid_public TEXT NOT NULL,
         vapid_private TEXT NOT NULL
     );",
+    // 7: the fork's own settings (time zone, public link address, dictation)
+    "CREATE TABLE hub_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );",
 ];
 
 pub struct HubStore {
@@ -294,7 +300,7 @@ mod tests {
         store
             .with(|c| {
                 let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-                assert_eq!(version, 6);
+                assert_eq!(version as usize, MIGRATIONS.len());
                 let space: String = c.query_row("SELECT name FROM spaces", [], |r| r.get(0))?;
                 assert_eq!(space, "Ads report");
                 let title: String = c.query_row("SELECT title FROM notifications", [], |r| r.get(0))?;
@@ -320,6 +326,50 @@ mod tests {
                         .is_err(),
                     "one key pair"
                 );
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_six_database_upgrades_to_settings() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..6] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 6i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO automations(id, name, kind, cron, enabled, created_at, updated_at)
+                 VALUES ('kept', 'Morning report', 'script', '0 9 * * *', 1, 'now', 'now')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO push_subscriptions(id, endpoint, p256dh, auth, created_at) VALUES ('kept', 'https://push.example/1', 'p', 'a', 'now')",
+                [],
+            )
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version, 7);
+                let (name, timezone): (String, Option<String>) =
+                    c.query_row("SELECT name, timezone FROM automations", [], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                assert_eq!((name.as_str(), timezone), ("Morning report", None));
+                let device: String = c.query_row("SELECT id FROM push_subscriptions", [], |r| r.get(0))?;
+                assert_eq!(device, "kept");
+                // The migration seeds nothing: the defaults are the code's.
+                let rows: i64 = c.query_row("SELECT count(*) FROM hub_settings", [], |r| r.get(0))?;
+                assert_eq!(rows, 0);
+                let put = |key: &str, value: &str| {
+                    c.execute("INSERT INTO hub_settings(key, value, updated_at) VALUES (?1, ?2, 'now')", [key, value])
+                };
+                put("timezone", "America/Sao_Paulo")?;
+                assert!(put("timezone", "UTC").is_err(), "one row per key");
+                put("dictation", "off")?;
                 Ok(())
             })
             .unwrap();

@@ -16,6 +16,12 @@ export interface Publication {
   has_password: boolean;
   /** Relative to this server: `/p/<slug>`. */
   url: string;
+  /**
+   * The absolute link to share, when a public address is set in Settings →
+   * Addresses and time zone. Null without one, and for "Only the team" pages,
+   * which stay on the app's own address (the sign-in lives there).
+   */
+  public_url?: string | null;
 }
 
 export interface PublicationChanges {
@@ -60,8 +66,20 @@ export const refreshPublication = (slug: string) =>
 export const unpublish = (slug: string) =>
   request<void>(`/hub/publications/${encodeURIComponent(slug)}`, json("DELETE"));
 
-/** The full address to share. */
-export const publicLink = (publication: Pick<Publication, "url">, origin: string) => `${origin.replace(/\/$/, "")}${publication.url}`;
+/** The full address to share: the public one the server built, else this browser's own. */
+export const publicLink = (publication: Pick<Publication, "url" | "public_url">, origin: string) =>
+  publication.public_url || `${origin.replace(/\/$/, "")}${publication.url}`;
+
+/** The link as a list shows it: without the scheme when it is on the public address, else the path. */
+export const linkLabel = (publication: Pick<Publication, "url" | "public_url">) =>
+  publication.public_url ? publication.public_url.replace(/^https?:\/\//, "") : publication.url;
+
+/** Where published links can be opened from, in words; `base` is the public address or "". */
+export function reachNote(base: string, t: (source: string, values?: Record<string, string | number>) => string): string {
+  return base
+    ? t("Links use the public address {address} (Settings → Addresses and time zone). “Only the team” links keep Tendly’s own address.", { address: base.replace(/^https?:\/\//, "") })
+    : t("On this Mac the link opens only on this machine or your Tailscale network.");
+}
 
 export const validSlug = (slug: string) => /^[a-z0-9-]{3,64}$/.test(slug);
 

@@ -1,11 +1,21 @@
 <script setup lang="ts">
+import { onMounted, watch } from "vue";
 import Icon from "../Icon.vue";
 import { useI18n } from "../../i18n";
 import type { Dictation } from "./dictation";
+import { dictationAllowed, loadHubSettings } from "./settings";
 
-/** The microphone toggle of a composer. Hidden where the browser has no speech recognition. */
+/**
+ * The microphone toggle of a composer. Hidden where the browser has no speech
+ * recognition, and when dictation is switched off in Settings → Addresses and
+ * time zone (it stays hidden until that setting has been read).
+ */
 const props = defineProps<{ dictation: Dictation; disabled?: boolean }>();
 const { t } = useI18n();
+// On mount, not during render: drawing a composer never makes a request by itself.
+onMounted(() => { void loadHubSettings(); });
+// Switched off while listening (in another window, say): stop sending audio.
+watch(dictationAllowed, allowed => { if (!allowed && props.dictation.listening.value) props.dictation.stop(); });
 function escape(event: KeyboardEvent) {
   if (!props.dictation.listening.value) return;
   event.preventDefault(); event.stopPropagation();
@@ -15,7 +25,7 @@ function escape(event: KeyboardEvent) {
 
 <template>
   <button
-    v-if="dictation.supported"
+    v-if="dictation.supported && dictationAllowed"
     type="button"
     :class="['dictation-button', { listening: dictation.listening.value }]"
     :aria-pressed="dictation.listening.value"
