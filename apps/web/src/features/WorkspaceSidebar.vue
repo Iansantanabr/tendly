@@ -286,8 +286,17 @@ defineExpose({ revealSession });
 .workspace-disclosure,.workspace-more-button,.workspace-active-count{flex-shrink:0}
 .workspace-group-header>.workspace-new-action{flex-shrink:0;width:24px;height:24px;padding:4px;color:var(--teal)}
 @media(pointer:coarse){.workspace-group-header>.workspace-new-action{width:36px;height:44px}.workspace-group-title{padding:6px 0}}
-.sidebar-view-switch { display: flex; min-width: 0; overflow: hidden; gap: 2px; margin: 6px 10px 4px; padding: 3px; border-radius: var(--radius-md); background: var(--fill-hover); }
-.sidebar-view-switch button { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); font: inherit; font-size: .85rem; cursor: pointer; }
+.sidebar-view-switch { container-type: inline-size; display: flex; flex-shrink: 0; min-width: 0; overflow: hidden; gap: 2px; margin: 6px 4px 4px; padding: 3px; border-radius: var(--radius-md); background: var(--fill-hover); }
+.sidebar-view-switch button { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 8px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); font: inherit; font-size: .85rem; cursor: pointer; }
+/* Fork: the menu above (Home … Apps) is tall. In a short window the lists below it
+   were squeezed to nothing and the footer fell off the bottom: keep the lists at
+   least 180px tall and let the whole sidebar scroll instead. */
+.workspace-sidebar { overflow-y: auto; }
+.workspace-sidebar > .workspace-groups { flex: 1 0 180px; }
+/* A narrow sidebar has room for both names or for icons, not both: keep the names. */
+@container (max-width: 230px) { .sidebar-view-switch .switch-icon { display: none; } .sidebar-view-switch button { padding: 5px 4px; font-size: var(--text-xs); } }
+/* The strip clips its overflow: draw the focus ring inside the tab, not cut off around it. */
+.sidebar-view-switch button:focus-visible { outline-offset: -2px; }
 .sidebar-view-switch button.current { background: var(--elevated); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
 .unread-badge { background: var(--accent); color: var(--on-accent); }
 .switch-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

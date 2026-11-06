@@ -60,7 +60,7 @@ const zoneSelect = ref<HTMLSelectElement>();
 function showChosenZone(tries = 20) {
   const box = zoneSelect.value, option = box?.selectedOptions[0];
   // While the page slides in the list has no size yet: try again next frame.
-  if (!box || !option || !box.clientHeight) { if (tries > 0) requestAnimationFrame(() => showChosenZone(tries - 1)); return; }
+  if (!box || !option || !box.clientHeight) { if (tries > 0 && box) setTimeout(() => showChosenZone(tries - 1), 50); return; }
   box.scrollTop = option.offsetTop - box.offsetTop - box.clientHeight / 2 + option.offsetHeight / 2;
 }
 watch(() => [zoneList.value, ready.value], () => { void nextTick(() => showChosenZone()); }, { flush: "post", immediate: true });

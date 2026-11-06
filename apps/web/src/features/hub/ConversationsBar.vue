@@ -80,7 +80,7 @@ function reply(s: Session) {
 .conv-search:focus-within { background: var(--surface); border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
 .conv-search:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .conv-search input { width: 100%; min-width: 0; padding: 0; border: 0; background: none; font-size: var(--text-sm); color: var(--ink); outline: 0; }
-.conversations-bar { display: grid; align-content: start; gap: 6px; overflow: auto; min-height: 0; padding-bottom: 12px; }
+.conversations-bar { flex: 1 0 180px; display: grid; align-content: start; gap: 6px; overflow: auto; min-height: 0; padding-bottom: 12px; }
 .conv-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 10px; font-size: var(--text-xs); color: var(--muted); }
 .conv-mark { border: 0; background: none; padding: 2px 0; color: var(--muted); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .conv-mark:hover { color: var(--ink); }
