@@ -11,6 +11,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+mod apps;
 pub(crate) mod automations;
 mod catalog;
 mod history;
@@ -54,6 +55,7 @@ pub fn routes() -> Router<AppState> {
         .merge(catalog::routes())
         .merge(history::routes())
         .merge(publish::routes())
+        .merge(apps::routes())
 }
 
 /// Runs a blocking operation against the Hub database off the async runtime.

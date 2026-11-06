@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <script src="/api/hub/apps/sdk.js"></script>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f5; --card: #ffffff; --text: #1f2328; --muted: #6b7280;
+      --line: #e5e7eb; --accent: {{ACCENT}};
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #16181c; --card: #1f2227; --text: #e6e6e6; --muted: #9ca3af; --line: #2d3139; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { max-width: 640px; margin: 0 auto; padding: 24px 16px; display: grid; gap: 16px; }
+    header { display: flex; align-items: center; gap: 12px; }
+    .badge {
+      width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+      background: var(--accent); color: #fff; font-weight: 700;
+    }
+    h1 { font-size: 20px; margin: 0; }
+    p { margin: 0; color: var(--muted); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .count { font-size: 32px; font-weight: 700; min-width: 3ch; font-variant-numeric: tabular-nums; }
+    button {
+      font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+      border-radius: 8px; padding: 6px 14px; cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    textarea {
+      font: inherit; width: 100%; min-height: 96px; resize: vertical; padding: 8px 10px;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text);
+    }
+    .status { font-size: 13px; color: var(--muted); min-height: 1.5em; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="badge" aria-hidden="true">{{LETTER}}</div>
+      <div>
+        <h1>{{NAME}}</h1>
+        <p>{{DESCRIPTION}}</p>
+      </div>
+    </header>
+    <section class="card">
+      <strong>Counter</strong>
+      <div class="row">
+        <span class="count" id="count">0</span>
+        <button class="primary" id="plus">+1</button>
+        <button id="reset">Reset</button>
+      </div>
+    </section>
+    <section class="card">
+      <label for="note"><strong>Note</strong></label>
+      <textarea id="note" placeholder="Write something; it is saved in this app's data folder."></textarea>
+    </section>
+    <div class="status" id="status"></div>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const status = (text) => { $('status').textContent = text; };
+    let count = 0;
+    let timer;
+
+    async function load() {
+      try {
+        count = await tendly.data.get('counter', 0);
+        $('count').textContent = count;
+        $('note').value = await tendly.data.get('note', '');
+      } catch (error) {
+        status('Could not load: ' + error.message);
+      }
+    }
+    async function saveCount(value) {
+      count = value;
+      $('count').textContent = count;
+      try { await tendly.data.set('counter', count); status('Saved'); }
+      catch (error) { status('Could not save: ' + error.message); }
+    }
+    $('plus').addEventListener('click', () => saveCount(count + 1));
+    $('reset').addEventListener('click', () => saveCount(0));
+    $('note').addEventListener('input', () => {
+      clearTimeout(timer);
+      status('Typing...');
+      timer = setTimeout(async () => {
+        try { await tendly.data.set('note', $('note').value); status('Saved'); }
+        catch (error) { status('Could not save: ' + error.message); }
+      }, 500);
+    });
+    load();
+  </script>
+</body>
+</html>
