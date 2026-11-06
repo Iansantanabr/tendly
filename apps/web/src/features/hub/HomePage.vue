@@ -21,6 +21,7 @@ import { speechLang, useDictation } from "./dictation";
 import DictationButton from "./DictationButton.vue";
 import DictationStatus from "./DictationStatus.vue";
 import ConversationChips from "./ConversationChips.vue";
+import InstallHint from "./InstallHint.vue";
 
 /**
  * Início: where a day starts. A box to ask for something new, what is running,
@@ -226,6 +227,8 @@ const suggestions = computed(() => [
         <p v-if="permission === 'danger'" class="inline-notice">{{ t(PERMISSION_NOTES.danger) }}</p>
         <p v-if="error" class="inline-error" role="alert">{{ error }}</p>
       </form>
+
+      <InstallHint dismissible />
 
       <div class="home-suggestions">
         <button v-for="s in suggestions" :key="s" type="button" class="home-suggestion" @click="prompt = s"><Icon name="chat" :size="14" />{{ s }}</button>

@@ -38,10 +38,14 @@ export async function loadConversationsWorkspace() {
   return inbox.conversationsWorkspaceId;
 }
 
-export async function refreshInbox() {
+/**
+ * `focused` is the conversation the person is looking at right now, if any
+ * (see presence.ts): the server holds back the phone's push for that one.
+ */
+export async function refreshInbox(focused?: string) {
   try {
     const [list, activity] = await Promise.all([
-      request<{ items: InboxItem[]; unread: number }>("/hub/inbox"),
+      request<{ items: InboxItem[]; unread: number }>(focused ? `/hub/inbox?focused=${encodeURIComponent(focused)}` : "/hub/inbox"),
       request<{ sessions: SessionActivity[] }>("/hub/activity"),
     ]);
     inbox.items = list.items;

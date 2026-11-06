@@ -24,6 +24,7 @@ import { onConversationStarted, startProfiles } from "./features/hub/start";
 import AppsPage from "./features/hub/AppsPage.vue";
 import { refreshApps, type HubApp } from "./features/hub/apps";
 import { inbox, isUnread, markSeen, refreshInbox } from "./features/hub/inbox";
+import { presentSession } from "./features/hub/presence";
 import { contextFromPanes, openContext } from "./features/hub/open-context";
 import SpaceMenu from "./features/hub/SpaceMenu.vue";
 import { spaceFromQuery, useSpaces, withoutSpaceQuery } from "./features/hub/spaces";
@@ -867,7 +868,7 @@ async function pingHost() {
 onMounted(() => {
   void bootstrap();
   void pingHost();
-  pollTimer = setInterval(() => { if (!document.hidden && !showAuth.value) { void refreshSessions(); void pingHost(); for (const id of trackedPlaces()) void refreshGit(id); void refreshInbox().then(seeFocused); } }, 5000);
+  pollTimer = setInterval(() => { if (!document.hidden && !showAuth.value) { void refreshSessions(); void pingHost(); for (const id of trackedPlaces()) void refreshGit(id); void refreshInbox(presentSession(selectedSessionId.value, !!page.value)).then(seeFocused); } }, 5000);
   void refreshInbox();
   window.addEventListener("beforeunload", beforeUnload); window.addEventListener("resize", adaptDrawers);
   stopPageReturn = onPageReturn(stale => fileWatch.wake(stale));

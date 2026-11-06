@@ -91,6 +91,22 @@ const MIGRATIONS: &[&str] = &[
         updated_at TEXT NOT NULL,
         UNIQUE (name)
     );",
+    // 6: Web Push (the VAPID private key and each auth secret are stored sealed)
+    "CREATE TABLE push_subscriptions (
+        id TEXT PRIMARY KEY,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        label TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        last_ok_at TEXT,
+        failures INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE push_keys (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        vapid_public TEXT NOT NULL,
+        vapid_private TEXT NOT NULL
+    );",
 ];
 
 pub struct HubStore {
@@ -235,7 +251,7 @@ mod tests {
         store
             .with(|c| {
                 let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
-                assert_eq!(version, 5);
+                assert_eq!(version as usize, MIGRATIONS.len());
                 let slug: String = c.query_row("SELECT slug FROM publications", [], |r| r.get(0))?;
                 assert_eq!(slug, "kept-1234");
                 let title: String = c.query_row("SELECT title FROM notifications", [], |r| r.get(0))?;
@@ -253,6 +269,57 @@ mod tests {
                 insert("e", &"é".repeat(80))?;
                 let position: i64 = c.query_row("SELECT position FROM spaces WHERE id='a'", [], |r| r.get(0))?;
                 assert_eq!(position, 0);
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_five_database_upgrades_to_push() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..5] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 5i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO spaces(id, name, layout, created_at, updated_at) VALUES ('kept', 'Ads report', '{}', 'now', 'now')",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute("INSERT INTO notifications(kind, title, created_at) VALUES ('waiting', 'kept', 'now')", [])
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version, 6);
+                let space: String = c.query_row("SELECT name FROM spaces", [], |r| r.get(0))?;
+                assert_eq!(space, "Ads report");
+                let title: String = c.query_row("SELECT title FROM notifications", [], |r| r.get(0))?;
+                assert_eq!(title, "kept");
+                let insert = |id: &str, endpoint: &str| {
+                    c.execute(
+                        "INSERT INTO push_subscriptions(id, endpoint, p256dh, auth, created_at) VALUES (?1, ?2, 'p', 'a', 'now')",
+                        [id, endpoint],
+                    )
+                };
+                insert("a", "https://push.example/1")?;
+                assert!(insert("b", "https://push.example/1").is_err(), "one row per endpoint");
+                insert("b", "https://push.example/2")?;
+                let (label, failures, last_ok): (String, i64, Option<String>) = c.query_row(
+                    "SELECT label, failures, last_ok_at FROM push_subscriptions WHERE id = 'a'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )?;
+                assert_eq!((label.as_str(), failures, last_ok), ("", 0, None));
+                c.execute("INSERT INTO push_keys(id, vapid_public, vapid_private) VALUES (1, 'pub', 'sealed')", [])?;
+                assert!(
+                    c.execute("INSERT INTO push_keys(id, vapid_public, vapid_private) VALUES (2, 'pub', 'sealed')", [])
+                        .is_err(),
+                    "one key pair"
+                );
                 Ok(())
             })
             .unwrap();

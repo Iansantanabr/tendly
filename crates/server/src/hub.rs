@@ -1,6 +1,7 @@
 //! Additions to this fork of Tendly: the home page, the inbox and unread
 //! conversations, and (in later modules) automations, the integration and
-//! skill catalogs, file history, publishing and custom apps.
+//! skill catalogs, file history, publishing, custom apps, and the phone:
+//! an installable app (`pwa`) and Web Push (`push`).
 //!
 //! Everything here keeps its rows in a database of its own, `hub.db` beside
 //! the main one, so upstream schema migrations never collide with ours.
@@ -17,6 +18,8 @@ mod catalog;
 mod history;
 mod home;
 mod publish;
+mod push;
+mod pwa;
 mod spaces;
 pub(crate) mod transcript;
 mod store;
@@ -57,6 +60,8 @@ pub fn routes() -> Router<AppState> {
         .merge(catalog::routes())
         .merge(history::routes())
         .merge(publish::routes())
+        .merge(push::routes())
+        .merge(pwa::routes())
         .merge(spaces::routes())
         .merge(transcript::routes())
         .merge(apps::routes())

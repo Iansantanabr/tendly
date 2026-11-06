@@ -10,9 +10,10 @@ import { installMenuDismissal } from "./features/dismiss-menus";
 import { installRovingKeys } from "./features/roving-keys";
 import { installContextMenuPolicy } from "./features/native-context-menu";
 import { router } from "./router";
+import { installPhoneSupport } from "./features/hub/pwa";
 
 holdPageScale();
 installMenuDismissal();
 installRovingKeys();
 installContextMenuPolicy();
-void linkSignIn.then(() => createApp(App).use(router).mount("#root"));
+void linkSignIn.then(() => { createApp(App).use(router).mount("#root"); installPhoneSupport(router); });

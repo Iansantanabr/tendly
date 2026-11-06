@@ -11,6 +11,7 @@ import UpdatePanel from './UpdatePanel.vue';
 import RemoteAccessPanel from './RemoteAccessPanel.vue';
 import MachinesPanel from './MachinesPanel.vue';
 import PublishedPanel from './hub/PublishedPanel.vue';
+import NotificationsPanel from './hub/NotificationsPanel.vue';
 import { backendCapabilities } from './backend-capabilities';
 import { useI18n } from '../i18n';
 
@@ -53,27 +54,32 @@ const removeGuard = useRouter().beforeEach((to, from) => {
   return new Promise<boolean>(resolve => page.requestLeave(() => resolve(true)));
 });
 onBeforeUnmount(removeGuard);
-/** "Published" (hub): a section of its own at /settings/published, listed apart from the upstream ones. */
-const published = computed(() => props.section === 'published');
-function openPublished() { if (!published.value) emit('navigate', 'published'); }
-function select(next: SettingsSection) { if (published.value || next !== section.value) emit('navigate', next); }
+/** The hub's own sections (/settings/notifications, /settings/published), listed after the upstream ones. */
+const HUB_SECTIONS = [
+  { id: 'notifications', icon: 'bell', label: 'Notifications' },
+  { id: 'published', icon: 'globe', label: 'Published files' },
+] as const;
+const hubSection = computed(() => HUB_SECTIONS.find(entry => entry.id === props.section)?.id);
+function openHub(id: SettingsSection) { if (hubSection.value !== id) emit('navigate', id); }
+function select(next: SettingsSection) { if (hubSection.value || next !== section.value) emit('navigate', next); }
 </script>
 
 <template>
   <PageShell named-above :title="t('Settings')" @back="emit('back')">
     <div class="settings-layout">
       <nav class="settings-nav" data-arrow-nav :aria-label="t('Settings sections')">
-        <button v-for="entry in SECTIONS" :key="entry.id" type="button" :class="['settings-nav-item',{selected:!published&&section===entry.id}]" :aria-current="!published&&section===entry.id?'page':undefined" @click="select(entry.id)">
+        <button v-for="entry in SECTIONS" :key="entry.id" type="button" :class="['settings-nav-item',{selected:!hubSection&&section===entry.id}]" :aria-current="!hubSection&&section===entry.id?'page':undefined" @click="select(entry.id)">
           <Icon :name="entry.icon" :size="16"/>
           <strong>{{ t(entry.label) }}</strong>
         </button>
-        <button type="button" :class="['settings-nav-item',{selected:published}]" :aria-current="published?'page':undefined" @click="openPublished">
-          <Icon name="globe" :size="16"/>
-          <strong>{{ t('Published files') }}</strong>
+        <button v-for="entry in HUB_SECTIONS" :key="entry.id" type="button" :class="['settings-nav-item',{selected:hubSection===entry.id}]" :aria-current="hubSection===entry.id?'page':undefined" @click="openHub(entry.id)">
+          <Icon :name="entry.icon" :size="16"/>
+          <strong>{{ t(entry.label) }}</strong>
         </button>
       </nav>
       <div class="settings-page">
-        <PublishedPanel v-if="published"/>
+        <NotificationsPanel v-if="hubSection==='notifications'" @remote="select('remote')"/>
+        <PublishedPanel v-else-if="hubSection==='published'"/>
         <PreferencesPanel v-else-if="section==='preferences'" :profiles="profiles"/>
         <AgentClientsPanel v-else-if="section==='agents'"/>
         <ProfilesDialog v-else-if="section==='endpoints'" ref="profilesPage" embedded :profiles="profiles" @close="emit('back')" @changed="emit('changed', $event)" @accounts="select('accounts')"/>

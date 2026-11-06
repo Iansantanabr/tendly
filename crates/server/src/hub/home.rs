@@ -187,6 +187,7 @@ pub(crate) async fn notify(
     title: String,
     body: String,
 ) {
+    let (push_title, push_detail) = (title.clone(), body.clone());
     let result = cs(state, move |c| {
         // A conversation keeps one unread entry of each kind; the newest wins.
         if let Some(id) = session {
@@ -209,6 +210,9 @@ pub(crate) async fn notify(
     if let Err(error) = result {
         tracing::warn!(?error, "could not record notification");
     }
+    // The same news, on the devices that asked for it. Sent from a task of
+    // its own, so the turn that ended is never kept waiting on a push service.
+    super::push::dispatch(state, kind, session, &push_title, &push_detail);
 }
 
 async fn session_title(state: &AppState, id: SessionId) -> String {
@@ -220,7 +224,17 @@ async fn session_title(state: &AppState, id: SessionId) -> String {
         .unwrap_or_default()
 }
 
-async fn inbox(State(state): State<AppState>) -> Result<Json<Value>> {
+#[derive(Deserialize)]
+struct InboxQuery {
+    /// The conversation this browser has on screen, in a focused window, with
+    /// the person there: no push is sent for it while that stays true.
+    focused: Option<String>,
+}
+
+async fn inbox(State(state): State<AppState>, Query(query): Query<InboxQuery>) -> Result<Json<Value>> {
+    if let Some(session) = query.focused.as_deref() {
+        super::push::looking_at(session);
+    }
     let (items, unread) = cs(&state, |c| {
         let mut stmt = c.prepare(
             "SELECT id, kind, session_id, title, body, created_at, read_at
