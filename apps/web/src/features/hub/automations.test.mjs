@@ -36,15 +36,13 @@ test('edit with chat hands the agent the automation and the tool to save it', ()
 
 test('every new string has a Brazilian Portuguese translation with the same placeholders', () => {
   const dir = new URL('.', import.meta.url);
-  const translations = JSON.parse(readFileSync(new URL('automations.pt-BR.json', dir), 'utf8'));
-  const shared = JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8'));
+  const translations = JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8'));
   const sources = ['AutomationsPage.vue', 'automations.ts'].map(name => readFileSync(new URL(name, dir), 'utf8')).join('\n');
   const keys = new Set();
   for (const match of sources.matchAll(/\bt\(\s*(["'])((?:\\.|(?!\1).)*)\1/g)) keys.add(match[2].replace(/\\'/g, "'"));
   for (const match of sources.matchAll(/label: "([^"]+)"/g)) keys.add(match[1]);
   const placeholders = text => (text.match(/\{\w+\}/g) ?? []).sort();
   for (const key of keys) {
-    if (!(key in translations) && key in shared) continue; // Tendly translates it already.
     assert.ok(key in translations, `missing pt-BR for ${JSON.stringify(key)}`);
     assert.deepEqual(placeholders(translations[key]), placeholders(key), key);
   }

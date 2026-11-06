@@ -22,18 +22,22 @@ Plano completo: `~/.claude/plans/users-iansantana-desktop-portuguese-aut-ticklis
 - Dev rápido da interface: `pnpm build:web`, copiar `apps/web/dist` para `~/.tendly/web` e `tendly-server restart` (o disco só é lido se existir no start). Ao fechar a fase, apagar `~/.tendly/web`.
 - Chips de contexto: `features/hub/open-context.ts` (App.vue alimenta a partir das abas abertas; ChatSessionPane mostra "+ arquivo").
 - Teste Rust `task_tests` (worktree) pode estourar 20 s com a suíte toda em paralelo; passa sozinho. Não é do fork.
+- Traduções: arquivo único `i18n/pt-BR.json`, indentado com 1 espaço e sem quebra de linha no fim (manter esse formato ao editar por script).
+- `cargo check` precisa de `apps/web/dist` existir (RustEmbed); num clone novo, rodar `pnpm build:web` antes.
 - Ícones novos em `features/Icon.vue`: home, bell, chat, arrowUp, plug, sparkles, timer, apps.
 
 ## API nova (`/api/hub/...`)
 - `GET conversations` → workspace oculto de conversas sem projeto (`<state>/conversations`, criado também no start via `hub::warm`)
 - `GET inbox`, `POST inbox/read {ids|all}`, `GET activity`, `POST activity/seen-all`, `POST sessions/{id}/seen`
 - `GET recent-files?limit=`, `POST start {workspace_id, provider, prompt}` (usa `agent_sessions::start_in`)
+- Automações (`hub/automations.rs`, migração 2): `GET|POST automations`, `PATCH|DELETE automations/{id}`, `POST automations/{id}/run`, `GET automations/{id}/runs?limit=`. Agendador tokio a cada 30 s (croner); lacuna > 5 min (Mac dormindo) não é recuperada. Script: `$SHELL -l -c`, timeout 10 min, últimos 64 KB. Agente: `start_in`. Ferramentas MCP `tendly_automation_list|create|update` em `agent.rs` (criar/alterar script pede confirmação na janela).
+- Catálogos (`hub/catalog/`): `GET catalog/integrations?refresh=1` (`claude mcp list` 20 s + cache 10 min, `~/.claude.json`, `~/.codex/config.toml`, `.mcp.json`; segredos removidos), `GET catalog/skills` (`~/.claude/skills`, plugins, `.claude/skills` dos workspaces, `~/.codex/skills`).
 
 ## Status
 - [x] Fase 0: Rust, branch `ian`, build.sh, primeiro build ok
 - [x] Fase 1: Início, sino, não lidas, barra Conversas, chips de contexto no chat (testado no navegador; 790 testes web ok)
 - [x] Pendência da Fase 1 (pedido do Ian): a aba Conversas mostra só conversas SEM projeto e tem "Nova conversa". Implementação: workspace oculto em `~/.tendly/conversations` criado pelo servidor (`GET /api/hub/conversations`), filtrado da lista de Workspaces; Início com opção "Sem projeto".
 - Regra do Ian: depois de compilar, sempre reiniciar o servidor (`~/tendly-src/bin/tendly-server restart`) e conferir no navegador.
-- [ ] Fase 2: automações, integrações, habilidades
+- [x] Fase 2: automações (`/automacoes`), integrações (`/integracoes`), habilidades (`/habilidades`). Testado no navegador: rotina `* * * * *` rodou sozinha e apareceu no histórico; 50 integrações e 166 habilidades listadas. 794 testes web e 24 testes hub ok.
 - [ ] Fase 3: histórico e publicação de arquivos
 - [ ] Fase 4: apps personalizados
