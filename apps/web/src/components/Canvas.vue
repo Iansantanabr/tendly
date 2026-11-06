@@ -202,7 +202,9 @@ function openPaneAt(targetId: string | undefined, pane: PaneNode) {
 }
 /** Open beside `targetId`, in a split of its own on the right: a conversation about an app, next to the app. */
 function openBeside(targetId: string | undefined, pane: PaneNode) {
-  if (!targetId || findNode(working.value.root, pane.id) || !findNode(working.value.root, targetId)) { openPane(pane); return; }
+  // The new session may already have been opened on arrival (in the app's
+  // stack); docking moves it, as dragging its tab would.
+  if (!targetId || targetId === pane.id || !findNode(working.value.root, targetId)) { openPane(pane); return; }
   drop(targetId, pane, "right");
 }
 function openPane(pane: PaneNode) {
