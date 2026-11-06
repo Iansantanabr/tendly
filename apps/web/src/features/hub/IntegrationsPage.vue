@@ -5,6 +5,7 @@ import PageShell from "../PageShell.vue";
 import Icon from "../Icon.vue";
 import { useI18n } from "../../i18n";
 import { shortAgo } from "./inbox";
+import EnvKeysSection from "./EnvKeysSection.vue";
 import { CLAUDE_CONNECTORS_URL, authorizeInClaudeAi, groupBy, loadIntegrations, type Integration, type IntegrationList } from "./catalog";
 
 /** MCP servers the agents on this machine can reach. Read only. */
@@ -103,6 +104,8 @@ function transportLabel(server: Integration) {
           </li>
         </ul>
       </section>
+
+      <EnvKeysSection :workspaces="workspaces" />
     </div>
   </PageShell>
 </template>

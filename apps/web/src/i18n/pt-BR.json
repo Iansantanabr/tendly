@@ -2752,5 +2752,12 @@
  "Links use the public address {address} (Settings → Addresses and time zone). “Only the team” links keep Tendly’s own address.": "Os links usam o endereço público {address} (Configurações → Endereços e fuso horário). Os links “Só a equipe” continuam no endereço do próprio Tendly.",
  "Five fields: minute, hour, day of month, month, day of week. In the time zone {zone}, set in Settings → Addresses and time zone.": "Cinco campos: minuto, hora, dia do mês, mês, dia da semana. No fuso horário {zone}, definido em Configurações → Endereços e fuso horário.",
  "Ask me what to change if I have not said it yet. Then save the change with the tendly_automation_update tool, using this id; do not create a new automation. The schedule is a five-field cron in the time zone of Tendly's settings ({zone}) unless timezone says otherwise.": "Se eu ainda não disse o que mudar, me pergunte. Depois salve a mudança com a ferramenta tendly_automation_update, usando este id; não crie uma automação nova. O horário é um cron de cinco campos no fuso horário das configurações do Tendly ({zone}), a não ser que timezone diga outra coisa.",
- "The agent said": "O agente disse"
+ "The agent said": "O agente disse",
+ "Keys found without a registration": "Chaves encontradas sem registro",
+ "Variables found in the .env files of your projects. Tendly reads only their names, never their values. A key that lives only in a file is lost with the file: keep a copy in a password manager.": "Variáveis encontradas nos arquivos .env dos seus projetos. O Tendly lê só os nomes, nunca os valores. Uma chave que existe só num arquivo se perde junto com ele: guarde uma cópia num gerenciador de senhas.",
+ "Looking for .env files…": "Procurando arquivos .env…",
+ "No .env file with variables was found in your projects.": "Nenhum arquivo .env com variáveis foi encontrado nos seus projetos.",
+ "Keys": "Chaves",
+ "Other variables": "Outras variáveis",
+ "This project has more .env files than are shown here.": "Este projeto tem mais arquivos .env do que os mostrados aqui."
 }

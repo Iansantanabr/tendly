@@ -109,3 +109,46 @@ async fn hub_catalog_skill_content_is_read_by_id_only() {
     let (status, _) = f.get(&format!("/api/hub/catalog/skills/{id}/content")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn hub_catalog_env_keys_lists_names_by_workspace_and_never_a_value() {
+    let f = fixture();
+    f.write(".env", "STRIPE_SECRET_KEY=sk_live_do-not-show\nPORT=8080\n");
+    f.write("api/.env.local", "DATABASE_URL=postgres://user:pw-hidden@host/db\n");
+    f.write(".env.example", "STRIPE_SECRET_KEY=\n");
+    f.write("node_modules/pkg/.env", "FROM_A_DEPENDENCY=1\n");
+    let (status, body) = f.get("/api/hub/catalog/env-keys").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body,
+        serde_json::json!({ "workspaces": [{
+            "workspace_id": f.workspace,
+            "workspace_name": "Fixture",
+            "truncated": false,
+            "files": [
+                { "path": ".env", "names": [
+                    { "name": "STRIPE_SECRET_KEY", "secret": true },
+                    { "name": "PORT", "secret": false },
+                ] },
+                { "path": "api/.env.local", "names": [{ "name": "DATABASE_URL", "secret": false }] },
+            ],
+        }] })
+    );
+    let text = body.to_string();
+    assert!(!text.contains("do-not-show") && !text.contains("pw-hidden") && !text.contains("8080"));
+
+    // Like the rest of the API, it answers only to the person.
+    let request = Request::builder()
+        .uri("/api/hub/catalog/env-keys")
+        .header("host", HOST)
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = crate::router(f.state.clone()).oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // A workspace with no such file is not listed at all.
+    fs::remove_file(f.dir.join("repo/.env")).unwrap();
+    fs::remove_dir_all(f.dir.join("repo/api")).unwrap();
+    let (_, body) = f.get("/api/hub/catalog/env-keys").await;
+    assert_eq!(body, serde_json::json!({ "workspaces": [] }));
+}

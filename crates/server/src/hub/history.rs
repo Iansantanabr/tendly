@@ -49,7 +49,7 @@ const DAYS_KEPT: i64 = 60;
 /// an install or a generator, not editing: none of them is recorded.
 const MAX_BURST: usize = 200;
 /// Dependency and build output: never versioned.
-const BUILD_DIRS: &[&str] = &[
+pub(super) const BUILD_DIRS: &[&str] = &[
     "node_modules",
     "target",
     "dist",
@@ -174,7 +174,7 @@ pub(crate) fn ignored(relative: &FsPath) -> bool {
 /// Which of these paths the repository ignores (`.gitignore`, the global
 /// excludes, `info/exclude`). Outside a repository, or when Git is missing,
 /// nothing is.
-async fn git_ignored(root: &FsPath, paths: &[String]) -> HashSet<String> {
+pub(super) async fn git_ignored(root: &FsPath, paths: &[String]) -> HashSet<String> {
     if paths.is_empty() || !root.join(".git").exists() {
         return HashSet::new();
     }

@@ -5,7 +5,7 @@
 const HIDDEN: &str = "***";
 
 /// Flag or variable names whose value is a credential.
-fn secret_name(name: &str) -> bool {
+pub(super) fn secret_name(name: &str) -> bool {
     let name = name.trim_start_matches('-').to_ascii_lowercase();
     if name.is_empty() {
         return false;

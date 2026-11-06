@@ -27,6 +27,29 @@ export interface IntegrationList {
   errors: CatalogError[];
 }
 
+/** A variable a `.env` file assigns. Only the name ever leaves the server. */
+export interface EnvName { name: string; /** Reads like a credential (`…_TOKEN`, `…_KEY`). */ secret: boolean }
+export interface EnvFile { /** Relative to the project folder. */ path: string; names: EnvName[] }
+export interface EnvWorkspace { workspace_id: string; workspace_name: string; files: EnvFile[]; truncated: boolean }
+
+export async function loadEnvKeys() {
+  return (await request<{ workspaces: EnvWorkspace[] }>("/hub/catalog/env-keys")).workspaces;
+}
+
+/** How many names read like keys, over every project and file. */
+export function envKeyCount(workspaces: EnvWorkspace[]): number {
+  return workspaces.reduce((sum, workspace) =>
+    sum + workspace.files.reduce((inFile, file) => inFile + file.names.filter(name => name.secret).length, 0), 0);
+}
+
+/** A file's names in two lists: the ones that read like keys, and the rest. */
+export function splitEnvNames(file: Pick<EnvFile, "names">): { keys: string[]; others: string[] } {
+  return {
+    keys: file.names.filter(name => name.secret).map(name => name.name),
+    others: file.names.filter(name => !name.secret).map(name => name.name),
+  };
+}
+
 export type SkillSource = "claude_user" | "claude_plugin" | "workspace" | "codex";
 
 export interface Skill {
