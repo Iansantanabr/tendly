@@ -2533,5 +2533,22 @@
  "It runs on this machine with your permissions, on its schedule, until you turn it off.": "Ele roda nesta máquina com as suas permissões, no horário marcado, até você desligar.",
  "Created automation “{name}”": "Criou a automação “{name}”",
  "Changed automation “{name}”": "Mudou a automação “{name}”",
- "File history": "Histórico do arquivo"
+ "File history": "Histórico do arquivo",
+ "Close file history": "Fechar histórico do arquivo",
+ "Loading versions…": "Carregando versões…",
+ "No versions yet. Tendly keeps a version each time this file changes.": "Nenhuma versão ainda. O Tendly guarda uma versão cada vez que este arquivo muda.",
+ "This version": "Esta versão",
+ "Changes from the previous version": "Mudanças em relação à versão anterior",
+ "Compared with the current file": "Comparada com o arquivo atual",
+ "Show changes": "Mostrar mudanças",
+ "View this version": "Ver esta versão",
+ "Restoring…": "Restaurando…",
+ "Replace draft and restore": "Substituir rascunho e restaurar",
+ "This file has unsaved changes. Restoring replaces your draft with this version.": "Este arquivo tem mudanças não salvas. Restaurar substitui o seu rascunho por esta versão.",
+ "Comparing…": "Comparando…",
+ "Content of this version": "Conteúdo desta versão",
+ "No line changes from the previous version.": "Nenhuma linha mudou em relação à versão anterior.",
+ "Same as the current file.": "Igual ao arquivo atual.",
+ "Agent · {title}": "Agente · {title}",
+ "Outside Tendly": "Fora do Tendly"
 }

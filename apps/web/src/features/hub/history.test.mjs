@@ -41,7 +41,6 @@ test('every new string has a Brazilian Portuguese translation with the same plac
   const dir = new URL('.', import.meta.url);
   const translations = {
     ...JSON.parse(readFileSync(new URL('../../i18n/pt-BR.json', dir), 'utf8')),
-    ...JSON.parse(readFileSync(new URL('history.pt-BR.json', dir), 'utf8')),
   };
   const sources = ['FileHistoryPanel.vue', 'history.ts'].map(name => readFileSync(new URL(name, dir), 'utf8')).join('\n');
   const keys = new Set();
