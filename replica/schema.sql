@@ -1,0 +1,151 @@
+-- hub.db: the fork's own SQLite database, beside Tendly's tendly.db.
+-- Source of truth is MIGRATIONS in crates/server/src/hub/store.rs; this file
+-- mirrors it for planning. Entries 1-4 are live (never edit them); 5-8 are
+-- proposed for the remaining milestones, in the order they would ship.
+--
+-- Conventions (SQLite, not Postgres):
+--   ids      TEXT uuid, or INTEGER AUTOINCREMENT for append-only logs
+--   times    TEXT, RFC 3339 in UTC ("2026-11-06T01:05:14Z"); never local time
+--   enums    CHECK constraints
+--   owner    single user today: the server's token is the only owner. Every
+--            table that will belong to a person later gets `owner_id` when the
+--            multi-user milestone lands (see the end of this file), not before.
+--   access   data-layer checks: security.rs `guard` authenticates every /api/
+--            call; each hub route then validates workspace ids and paths.
+--   foreign keys to Tendly's own tables (sessions, workspaces) live in another
+--            database, so they are soft references checked in code; deleting a
+--            workspace leaves rows that list endpoints skip.
+
+---------------------------------------------------------------- live: 1
+CREATE TABLE notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,            -- turn_done | turn_failed | waiting | automation_done | automation_failed
+    session_id TEXT,               -- soft ref to tendly.db sessions
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    read_at TEXT
+);
+CREATE INDEX notifications_unread ON notifications(read_at, created_at);
+CREATE TABLE session_activity (
+    session_id TEXT PRIMARY KEY,
+    last_turn_at TEXT,
+    last_turn_status TEXT,
+    seen_at TEXT                   -- unread = last_turn_at > seen_at
+);
+
+---------------------------------------------------------------- live: 2
+CREATE TABLE automations (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL CHECK (kind IN ('script', 'agent')),
+    cron TEXT NOT NULL,
+    timezone TEXT,                 -- IANA name; NULL = the hub's time zone (see 7)
+    workspace_id TEXT,
+    command TEXT,
+    prompt TEXT,
+    provider TEXT CHECK (provider IS NULL OR provider IN ('claude_code', 'codex')),
+    endpoint_id TEXT,
+    model TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE automation_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    automation_id TEXT NOT NULL,   -- runs are deleted with their automation, in code
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL CHECK (status IN ('running', 'ok', 'failed', 'timeout')),
+    exit_code INTEGER,
+    output_tail TEXT NOT NULL DEFAULT '',
+    session_id TEXT,               -- agent runs: the conversation it opened ("Rotinas recentes")
+    trigger TEXT NOT NULL CHECK (trigger IN ('schedule', 'manual'))
+);
+CREATE INDEX automation_runs_by_automation ON automation_runs(automation_id, started_at);
+
+---------------------------------------------------------------- live: 3
+CREATE TABLE file_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    blob TEXT NOT NULL,            -- sha256 under <state>/history/blobs
+    size INTEGER NOT NULL,
+    author_kind TEXT NOT NULL CHECK (author_kind IN ('you', 'agent', 'unknown')),
+    session_id TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX file_versions_by_path ON file_versions(workspace_id, path, id);
+
+---------------------------------------------------------------- live: 4
+CREATE TABLE publications (
+    slug TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK (visibility IN ('team', 'password', 'public')),
+    password_hash TEXT,            -- argon2id
+    mode TEXT NOT NULL CHECK (mode IN ('frozen', 'live')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    frozen_at TEXT,
+    UNIQUE (workspace_id, path)
+);
+CREATE TABLE publication_secret (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    secret TEXT NOT NULL           -- HMAC key for password cookies
+);
+
+---------------------------------------------------------------- proposed: 5 (M2, named spaces)
+-- A saved Mesa layout with a name ("Relatório de anúncios"). Loading one
+-- replaces the shared canvas through Tendly's own revisioned save, so two
+-- windows still resolve conflicts the way they do today.
+CREATE TABLE spaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+    layout TEXT NOT NULL,          -- LayoutDocument JSON, validated by canvas.rs rules
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (name)
+);
+
+---------------------------------------------------------------- proposed: 6 (M3, push on phones)
+CREATE TABLE push_subscriptions (
+    id TEXT PRIMARY KEY,
+    endpoint TEXT NOT NULL UNIQUE, -- browser push service URL
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '', -- "iPhone", "Chrome no Mac"
+    created_at TEXT NOT NULL,
+    last_ok_at TEXT,
+    failures INTEGER NOT NULL DEFAULT 0  -- dropped after 410 Gone or 5 failures in a row
+);
+CREATE TABLE push_keys (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    vapid_public TEXT NOT NULL,
+    vapid_private TEXT NOT NULL    -- generated once; rotating it invalidates every subscription
+);
+
+---------------------------------------------------------------- proposed: 7 (M3/M4, hub settings)
+-- Small key/value settings that are the fork's, not Tendly's preferences:
+--   timezone          IANA zone for automations without one (VPS clocks run UTC)
+--   public_base_url   https://apps.example.com for /p/{slug} links (Endereços)
+--   dictation         'browser' | 'off'
+CREATE TABLE hub_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+---------------------------------------------------------------- proposed: 8 (M5, version messages)
+ALTER TABLE file_versions ADD COLUMN message TEXT;  -- "Ajustou o título" from the agent turn that wrote it
+
+---------------------------------------------------------------- later (multi-user, after the VPS)
+-- Not a migration yet. Sketch so today's tables don't paint us into a corner:
+--   people(id, name, email UNIQUE, role CHECK IN ('admin','member'), created_at)
+--   folder_grants(person_id -> people ON DELETE CASCADE, workspace_id, access CHECK IN ('read','write'))
+--   conversation_shares(session_id, person_id -> people ON DELETE CASCADE, role CHECK IN ('read','join'), UNIQUE(session_id, person_id))
+--   conversation_notes(id, session_id, author_id -> people ON DELETE SET NULL, body, created_at)   -- "Entre nós": never sent to the agent
+--   and owner_id (-> people ON DELETE SET NULL) added to automations, publications, spaces, push_subscriptions;
+--   notifications gets person_id so each person has a bell of their own.
