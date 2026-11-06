@@ -13,7 +13,9 @@ use std::{
 
 pub(crate) mod automations;
 mod catalog;
+mod history;
 mod home;
+mod publish;
 mod store;
 
 pub use store::HubStore;
@@ -41,6 +43,7 @@ pub fn warm(state: AppState) {
             tracing::warn!(?error, "could not prepare the conversations folder");
         }
     });
+    history::start(state.clone());
     automations::start_scheduler(state);
 }
 
@@ -49,6 +52,8 @@ pub fn routes() -> Router<AppState> {
         .merge(home::routes())
         .merge(automations::routes())
         .merge(catalog::routes())
+        .merge(history::routes())
+        .merge(publish::routes())
 }
 
 /// Runs a blocking operation against the Hub database off the async runtime.
@@ -66,6 +71,12 @@ pub(crate) async fn cs<T: Send + 'static>(
 /// Called when a structured conversation finishes a turn.
 pub(crate) async fn on_turn_finished(state: &AppState, id: tendly_domain::SessionId, status: &str) {
     home::record_turn(state, id, status).await;
+}
+
+/// Called after the person saves a file from the browser (not an agent edit),
+/// with the content just written.
+pub(crate) async fn on_file_saved(state: &AppState, workspace: tendly_domain::WorkspaceId, path: &str, content: &str) {
+    history::record_saved(state, workspace, path, content).await;
 }
 
 /// Called when a conversation starts waiting on an approval from the person.

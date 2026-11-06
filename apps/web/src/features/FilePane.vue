@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import FileHistoryPanel from "./hub/FileHistoryPanel.vue";
+import PublishDialog from "./hub/PublishDialog.vue";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { CHORDS, formatChord, matches } from "./shortcuts";
 import type { TextFile } from "@tendly/protocol";
@@ -19,6 +21,7 @@ import { useI18n } from "../i18n";
 const { t } = useI18n();
 /** The workspace's name, shown ahead of the path: the pane has no bar of its own for it. */
 /** `checkout`: the worktree a session works in, when the file was opened from there; without it, the workspace directory. */
+const historyOpen = ref(false), publishOpen = ref(false);
 const props = defineProps<{ workspaceId: string; checkout?: string | null; path?: string; workspaceName?: string }>();
 const place = computed(() => placeKey(props.workspaceId, props.checkout));
 const emit = defineEmits<{ saved: []; browse: [] }>();
@@ -399,9 +402,11 @@ onBeforeUnmount(() => { revision++; document.removeEventListener("selectionchang
 <template>
   <div v-if="!path" class="pane-empty"><span class="empty-icon"><Icon name="file" :size="28" /></span><h3>{{ t('Your files, right here') }}</h3><p>{{ t('Open a file from Explorer, or drag it into this pane.') }}</p><button class="secondary-button" @click="emit('browse')">{{ t('Browse files') }}</button></div>
   <div v-else ref="pane" class="file-pane" @keydown="matches($event, CHORDS.save) && ($event.preventDefault(), save())">
-    <div class="content-toolbar"><span class="file-crumbs" :title="workspaceName ? `${workspaceName} / ${path}` : path"><Icon name="folder" :size="12" /><span class="file-crumbs-path">{{ crumbs }}</span><strong>{{ fileName }}</strong><b v-if="dirty" class="dirty-indicator" :title="t('Unsaved changes')">●</b></span><div class="toolbar-buttons"><a class="icon-button" :href="url" download :aria-label="t('Download {path}', { path })"><Icon name="download" :size="15" /></a><div v-if="isMarkdown && kind === 'text'" class="md-modes" role="group" :aria-label="t('Markdown view')"><button v-for="choice in choices" :key="choice.mode" type="button" :class="{ active: view === choice.mode }" :aria-pressed="view === choice.mode" @click="setMode(choice.mode)">{{ t(choice.label) }}</button></div><template v-if="kind === 'text'"><button class="icon-button" :aria-label="t('Reload file from host')" :disabled="loading || saving" @click="reload"><Icon name="refresh" :size="15" /></button><button class="small-button primary" :title="formatChord(CHORDS.save)" :disabled="!dirty || saving || loading" @click="save"><Icon name="save" :size="13" />{{ t(saving ? 'Saving…' : dirty ? 'Save' : 'Saved') }}</button></template></div></div>
+    <div class="content-toolbar"><span class="file-crumbs" :title="workspaceName ? `${workspaceName} / ${path}` : path"><Icon name="folder" :size="12" /><span class="file-crumbs-path">{{ crumbs }}</span><strong>{{ fileName }}</strong><b v-if="dirty" class="dirty-indicator" :title="t('Unsaved changes')">●</b></span><div class="toolbar-buttons"><a class="icon-button" :href="url" download :aria-label="t('Download {path}', { path })"><Icon name="download" :size="15" /></a><template v-if="path && !checkout"><button type="button" :class="['icon-button', { active: historyOpen }]" :aria-label="t('File history')" :title="t('File history')" :aria-pressed="historyOpen" @click="historyOpen = !historyOpen; publishOpen = false"><Icon name="clock" :size="15" /></button><button type="button" :class="['icon-button', { active: publishOpen }]" :aria-label="t('Publish')" :title="t('Publish')" :aria-pressed="publishOpen" @click="publishOpen = !publishOpen; historyOpen = false"><Icon name="globe" :size="15" /></button></template><div v-if="isMarkdown && kind === 'text'" class="md-modes" role="group" :aria-label="t('Markdown view')"><button v-for="choice in choices" :key="choice.mode" type="button" :class="{ active: view === choice.mode }" :aria-pressed="view === choice.mode" @click="setMode(choice.mode)">{{ t(choice.label) }}</button></div><template v-if="kind === 'text'"><button class="icon-button" :aria-label="t('Reload file from host')" :disabled="loading || saving" @click="reload"><Icon name="refresh" :size="15" /></button><button class="small-button primary" :title="formatChord(CHORDS.save)" :disabled="!dirty || saving || loading" @click="save"><Icon name="save" :size="13" />{{ t(saving ? 'Saving…' : dirty ? 'Save' : 'Saved') }}</button></template></div></div>
     <div v-if="error" class="inline-error" role="alert">{{ conflict ? t(error) : error }}</div>
     <div v-if="success" class="inline-success" role="status">{{ t(success) }}</div>
+    <FileHistoryPanel v-if="historyOpen && path" :workspace-id="workspaceId" :path="path" :dirty="dirty" @close="historyOpen = false" @restored="read" />
+    <PublishDialog v-if="publishOpen && path" :workspace-id="workspaceId" :path="path" @close="publishOpen = false" />
     <div v-if="confirmReload" class="confirmation-bar">{{ t('Reloading discards this unsaved draft.') }}<button class="small-button danger" @click="read">{{ t('Discard draft & reload') }}</button><button class="small-button" @click="confirmReload = false">{{ t('Keep draft') }}</button></div>
     <div v-if="loading" class="pane-empty"><p>{{ t('Reading file from host…') }}</p></div>
     <div v-else-if="kind === 'text' && draft.loaded" :class="['text-body', { 'is-split': view === 'split' }]">

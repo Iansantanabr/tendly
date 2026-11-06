@@ -90,17 +90,19 @@ pub(super) async fn write_file(
     Json(input): Json<FileWrite>,
 ) -> Result<Json<workspace_io::TextFile>> {
     let _guard = state.operations.lock().await;
-    Ok(Json(
-        workspace_io::write_file(
-            &checkout_root(&state, id, &checkout).await?,
-            q.path
-                .as_deref()
-                .ok_or_else(|| ApiError::bad("Path required"))?,
-            &input.content,
-            input.expected_version.as_deref(),
-        )
-        .await?,
-    ))
+    let path = q.path.as_deref().ok_or_else(|| ApiError::bad("Path required"))?;
+    let written = workspace_io::write_file(
+        &checkout_root(&state, id, &checkout).await?,
+        path,
+        &input.content,
+        input.expected_version.as_deref(),
+    )
+    .await?;
+    // File history (fork): only the workspace itself, not a worktree checkout.
+    if checkout.is_main() {
+        crate::hub::on_file_saved(&state, id, path, &input.content).await;
+    }
+    Ok(Json(written))
 }
 /// Add an empty file to a workspace. Refuses a name already taken rather than
 /// writing over what holds it.

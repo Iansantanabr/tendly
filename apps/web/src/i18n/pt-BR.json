@@ -2532,5 +2532,6 @@
  "Change the command of “{name}”?": "Mudar o comando de “{name}”?",
  "It runs on this machine with your permissions, on its schedule, until you turn it off.": "Ele roda nesta máquina com as suas permissões, no horário marcado, até você desligar.",
  "Created automation “{name}”": "Criou a automação “{name}”",
- "Changed automation “{name}”": "Mudou a automação “{name}”"
+ "Changed automation “{name}”": "Mudou a automação “{name}”",
+ "File history": "Histórico do arquivo"
 }

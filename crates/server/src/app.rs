@@ -125,6 +125,12 @@ pub(super) async fn root(state: &AppState, id: WorkspaceId) -> Result<PathBuf> {
 pub(super) struct CheckoutParam {
     checkout: Option<String>,
 }
+impl CheckoutParam {
+    /// The workspace's own folder rather than one of its worktrees.
+    pub(super) fn is_main(&self) -> bool {
+        self.checkout.as_deref().is_none_or(str::is_empty)
+    }
+}
 impl<S: Send + Sync> axum::extract::FromRequestParts<S> for CheckoutParam {
     type Rejection = ApiError;
     async fn from_request_parts(parts: &mut axum::http::request::Parts, _: &S) -> Result<Self> {
