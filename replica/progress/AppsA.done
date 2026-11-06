@@ -1,0 +1,72 @@
+AppsA — Etapa A de replica/plan-apps.md: rail de ícones e barra lateral. Concluído em 2026-11-06.
+Os seis itens foram feitos. Nenhuma conversa de agente foi aberta, nenhuma automação rodou, nenhum app seu foi tocado
+(GET /api/hub/apps está vazio: você não tem apps hoje).
+
+ENTREGUE
+1. Rail de ícones na Mesa (janela ≥ 761px, preferência "Ícones"): coluna de 56px com Início, Mesa, Habilidades,
+   Integrações, Automações; ícone de Apps (catálogo); um tile por app (nome ao lado no hover/foco, app em foco
+   destacado, bolinha nos que têm aba aberta, rolagem própria); embaixo sino com número, Reportar um problema,
+   Mais (Todas as sessões, Uso, Sistema) e Configurações.
+   O painel Workspaces/Conversas virou coluna própria ao lado, sem o menu global, com uma alça "‹ / ›" na borda
+   para recolher (o botão do topo e o atalho continuam valendo).
+2. Barra expandida (Início, páginas, gaveta do celular): "Apps ›" (catálogo) + "+" (criar) + lista vertical de até
+   8 apps + "Ver todos", no lugar dos chips em grade.
+3. Preferência "Barra lateral na Mesa: Ícones | Expandida" (padrão Ícones) em hub_settings.mesa_sidebar, validada
+   no servidor. Fica em Configurações → Endereços e fuso horário; atalhos em Mais (rail) e no pé da barra (na Mesa).
+4. Arrastar um tile (do rail ou da lista da barra) para a Mesa abre o app como painel, reusando o arrastar de abas.
+5. Ordem dos apps: Fixar no topo, Mover para cima/baixo, Ocultar. Guardada em hub_settings.app_order
+   ({pinned, order, hidden}); vale no rail, na lista da barra, no cartão Apps do Início e na página Apps
+   (que mostra os ocultos no fim). No rail o menu abre com o botão direito, → ou a tecla de menu; na barra e na
+   página Apps há um botão "…".
+6. Teclado: o rail é uma parada de Tab; ↑/↓ andam (dão a volta), Home/End, Enter abre; todo ícone tem nome acessível.
+
+TESTES
+- Web: 932 ok (26 novos em features/hub/appsA-rail.test.mjs); typecheck ok.
+- Hub: 156 ok (3 novos). Servidor inteiro: 586 ok, 2 ignorados.
+- Contraste: 36 pares, 0 falhas AA nos dois temas (nenhuma cor nova).
+- Servidor rodando depois do build.sh: GET /api/hub/settings traz mesa_sidebar e app_order; PUT com um app fixado
+  e oculto devolve só em hidden; entrada "../../etc/passwd" → 400 sem mudar nada; sem X-Tendly-Client → 403; o JS
+  e o CSS servidos contêm o rail. As chaves de teste foram apagadas (app_order vazio, mesa_sidebar = icons).
+
+TOQUES NO UPSTREAM (listados no FORK.md)
+App.vue (imports, railMode/railGo, loadHubSettings no bootstrap, classe hub-rail-on, <IconRail>, :compact),
+WorkspaceSidebar.vue (prop compact, <SidebarApps> no lugar dos chips, v-if no menu global e no rodapé),
+styles.css (um bloco .hub-rail-on: a grade ganha a coluna do rail). Sem migração no hub.db.
+
+NÃO EXERCITADO AO VIVO (leia antes de confiar)
+- Nada foi visto num navegador. O que só a tela mostra: a posição do rail, da alça do painel, das dicas e dos
+  menus; o arrastar de verdade; foco e setas com teclado real.
+- Não criei app de teste em disco: a sandbox desta rodada não deixa apagar arquivo fora do repositório. A ordem
+  foi testada com apps de mentira (testes web) e com chaves de mentira pela API.
+
+O QUE VOCÊ PRECISA OLHAR NO NAVEGADOR
+1. /mesa, janela larga (≥ 1250px), tema claro: rail à esquerda + painel Workspaces/Conversas ao lado, sem o menu
+   Início…Apps em cima da lista. Passe o mouse em cada ícone (o nome aparece à direita) e clique em cada um.
+2. Alça do painel: círculo "‹" no meio da borda direita do painel. Clique: o painel some, o rail fica e o círculo
+   vira "›" na borda do rail. Confira que redimensionar o painel pela borda continua funcionando.
+3. Crie um app (Apps → "App em branco"), volte à Mesa: o tile aparece no rail. Clique (abre como aba; tile com a
+   barrinha à esquerda). Feche a aba e ARRASTE o tile para a metade direita de um painel: deve dividir ali.
+4. Botão direito no tile → Fixar no topo / Mover / Ocultar. Com dois apps, mova e confira a mesma ordem no rail,
+   na lista da barra (no Início) e no cartão Apps do Início. Oculte um: some dos três e fica na página Apps com
+   o selo "Oculto"; "…" → "Mostrar de novo".
+5. Teclado na Mesa: Tab até o rail (uma parada), ↑/↓, Enter; num tile, → abre as opções, ↑/↓ dentro, Esc volta.
+   O anel de foco aparece por dentro do ícone.
+6. Preferência: rail → "…" (Mais) → "Mostrar a barra completa aqui"; no pé da barra, "Mostrar só ícones aqui".
+   O mesmo em Configurações → Endereços e fuso horário → "Barra lateral na Mesa".
+7. Início, janela normal e janela baixa (~640px de altura): "Apps ›", "+", lista, "Ver todos"; o seletor
+   Workspaces/Conversas inteiro, a lista com pelo menos 180px, a barra rolando.
+8. Mesa com 900px de largura: rail + painel + Mesa cabem. Com 640px e 360px: sem rail, a gaveta abre como antes
+   (agora com a lista de apps no lugar dos chips).
+9. Tema escuro: repita 1, 3 e 4 olhando o ícone atual, o selo do sino, a dica (fundo invertido) e o menu.
+10. Sino: com uma notificação não lida, o número aparece no canto do sino do rail.
+
+DECISÕES QUE VOCÊ PODE QUERER INVERTER (detalhes em replica/progress/AppsA.md)
+- "Fixar" = ir para o começo nos três lugares (rótulo "Fixar no topo"), não "aparecer só se fixado".
+- App novo entra no fim depois que você arruma a ordem; sem ordem arrumada, o mais recente vem primeiro.
+- No rail as opções do app são menu de contexto (não coube um "…" no tile).
+- "Mais" no rail leva a Todas as sessões, Uso e Sistema.
+- A preferência ficou em Endereços e fuso horário, para não criar outra seção nas Configurações.
+- O rail só existe na Mesa; o app em tela cheia com rail é da Etapa B.
+
+BLOQUEADO EM VOCÊ
+Nada. Só a conferência no navegador acima.

@@ -282,4 +282,51 @@ Reportar um problema (M5, `ReportProblem.vue`)
   app        página própria (não usa os tokens do Tendly: roda num iframe): formulário, lista com Aberto/Resolvido, remover em dois cliques, pt/en pelo navegador, claro/escuro
 ```
 
+### Apps A (rail e barra)
+
+```
+Rail de ícones (Apps A, `IconRail.vue`; só na Mesa, janela ≥ 761px, preferência "Ícones")
+  coluna     56px, fundo --glass-side, borda direita --glass-edge; a grade do shell ganha a coluna com a classe .hub-rail-on
+  partes     páginas (Início, Mesa, Habilidades, Integrações, Automações) · divisória · Apps (catálogo) · tiles dos apps (rolam sozinhos, mínimo de 2 visíveis)
+             · pé: sino com selo, Reportar um problema, Mais (Todas as sessões, Uso, Sistema, "Mostrar a barra completa aqui"), Configurações
+  item       40×40 (44 em toque), raio --radius-md; ícone 19px --muted; hover --fill + --ink; atual --selected + --accent (aria-current)
+  tile       AppTile 28px; app em foco: --elevated + contorno --line-strong + barra --accent à esquerda; app com aba aberta: bolinha --accent
+  selo       sino: pílula --accent / --on-accent, "99+" acima de 99; o número também vai no aria-label ("Notificações, 3 não lidas")
+  dica       o nome ao lado do ícone (hover, ou foco pelo teclado), fundo --ink e texto --bg; desenhada no body para a rolagem não cortar
+  menu       sai à direita do item, --surface / --line / --shadow-lg, 220px; fecha com Esc, ←, Tab, clique fora ou ao redimensionar
+  teclado    uma parada de Tab (tabindex itinerante); ↑ ↓ andam e dão a volta, Home/End, Enter abre; → / tecla de menu / Shift+F10 num app abre as opções
+  arrastar   o tile leva `application/tendly-pane` (o mesmo de uma conversa arrastada): soltar numa borda de painel divide ali
+  a11y       <nav aria-label> com role=toolbar vertical dentro; todo botão com aria-label; anel de foco por dentro do item (outline-offset -2px)
+  estados    sem apps (só o ícone Apps), muitos apps (rolagem), janela baixa (o rail inteiro rola), reportando (aria-busy), erro (aviso no menu, role=alert)
+```
+
+```
+Alça do painel (Apps A, dentro do `IconRail.vue`)
+  o que é    o controle de recolher do painel Workspaces/Conversas, que na Mesa é a coluna ao lado do rail
+  onde       círculo de 22px na borda direita do painel, a meia altura; com o painel recolhido fica na borda do rail
+  estados    aberto ("‹", aria-expanded=true), recolhido ("›"); hover --ink + --line-strong; alvo de 44px em toque
+```
+
+```
+Lista de apps na barra (Apps A, `SidebarApps.vue`; barra expandida e gaveta do celular)
+  partes     cabeçalho "Apps ›" (leva ao catálogo) + "+" (catálogo com o cursor no formulário), até 8 linhas tile 20px + nome, "Ver todos" (com o total quando há mais)
+  linha      30px (44 em toque), hover --fill; "…" aparece no hover/foco (sempre em toque); arrastável para a Mesa
+  estados    sem apps (só o cabeçalho), 1–8, mais de 8, menu aberto embaixo da linha
+```
+
+```
+Opções do app (Apps A, `AppOrderMenu.vue`; no rail, na lista da barra e na página Apps)
+  itens      Fixar no topo / Desafixar · Mover para cima · Mover para baixo · Ocultar / Mostrar de novo
+  regras     mover troca com o vizinho do mesmo grupo (fixados entre si, o resto entre si) e desabilita na ponta; ocultar tira do rail, da barra e do Início
+             (continua na página Apps, com o selo "Oculto"); a mudança aparece na hora e volta se o servidor recusar (erro embaixo, role=alert)
+  teclado    ↑ ↓ Home End dentro do menu; depois de mover, o foco fica no mesmo item ou no oposto
+  tokens     item 30px (44 em toque), --text-sm, hover --fill; anel de foco por dentro
+```
+
+```
+Barra lateral na Mesa (Apps A, cartão em `AddressesPanel.vue`)
+  o que é    dois rádios, Ícones (padrão) e Expandida, cada um com uma frase; salva ao escolher; "Salvando…", "Salvo. A Mesa já mostra assim.", erro inline
+  atalhos    rail → Mais → "Mostrar a barra completa aqui"; pé da barra expandida na Mesa → "Mostrar só ícones aqui" (escondido na gaveta do celular)
+```
+
 Fora deste sistema: modais, menus de contexto, árvore de arquivos, terminal e chat são do upstream e seguem como estão.

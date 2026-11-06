@@ -14,7 +14,7 @@ Card Compartilhadas contigo,início,could,yes,no,depende de multiusuário
 Mesa com grade livre de painéis e abas arrastáveis,mesa,must,yes,yes,já é o canvas do Tendly
 Dividir arrastando aba para a borda,mesa,must,yes,yes,Tendly upstream
 Layout salvo como espaço com nome e URL,mesa,should,yes,yes,M2
-Sidebar vira rail de ícones na Mesa,mesa,could,yes,no,P02; Tendly recolhe a sidebar inteira
+Sidebar vira rail de ícones na Mesa,mesa,could,yes,yes,Etapa A (AppsA); P02; preferência Ícones | Expandida em Configurações → Endereços e fuso horário
 Barra Conversas: Não lidas Esperando Rodando Tuas,conversas,must,yes,yes,Fase 1 (ConversationsBar)
 Card Esperando tua resposta com botão Responder,conversas,should,yes,yes,M1
 Marcar todas como lidas na barra,conversas,should,yes,yes,M1
@@ -73,7 +73,7 @@ Catálogo de apps com criar com o agente,apps,must,yes,yes,Fase 4
 App abre como aba da Mesa,apps,must,yes,yes,Fase 4
 Cabeçalho do app com Conversar e Abrir na Mesa,apps,must,yes,yes,Fase 4
 API de dados para o app guardar estado,apps,must,yes,yes,Fase 4
-Apps na sidebar com tile de letra colorida,apps,should,yes,yes,Fase 4
+Apps na sidebar com tile de letra colorida,apps,should,yes,yes,Fase 4; Etapa A: lista vertical na barra e tiles no rail
 Skill que ensina o agente a criar apps,apps,must,yes,yes,Fase 4
 App responsivo em painel estreito,apps,could,yes,no,P13; responsabilidade de cada app
 Versão publicada do app por commit,apps,could,yes,no,P28 Apps nas áreas
@@ -94,9 +94,10 @@ Instalação guiada na VPS por receita,infra,should,yes,partial,M4: deploy/insta
 Rodar 24h num servidor,infra,must,yes,partial,roda no Mac; M4 deixou pronto o kit (deploy/) e o fuso das automações independente do relógio da máquina; falta o Ian contratar a VPS e os domínios
 Apps do negócio da Dobra (Conteúdo Pipeline Workshop Sessões),apps,could,yes,skip,são conteúdo deles; o fork dá a plataforma para criar os seus
 Comunidade cursos e receitas,negócio,could,yes,skip,conteúdo pago da Ratos de IA
-Rail de ícones na Mesa (nav + tiles dos apps + sino),shell,must,yes,no,Etapa A; P02 P11 P13 P29; painel Arquivos/Conversas fica ao lado
-Barra expandida com lista vertical de apps + Ver todos + criar,shell,should,yes,partial,Etapa A; hoje chips em grade (P10 P28)
-Arrastar tile do app para a Mesa,apps,could,yes,no,Etapa A
+Rail de ícones na Mesa (nav + tiles dos apps + sino),shell,must,yes,yes,Etapa A (AppsA); IconRail.vue; painel Workspaces/Conversas ao lado com alça de recolher; teclado (Tab · setas · Enter); sem tema e avatar no rail (o Tendly os tem no topo e nas Configurações)
+Barra expandida com lista vertical de apps + Ver todos + criar,shell,should,yes,yes,Etapa A (AppsA); SidebarApps.vue; até 8 apps · Apps › · + · Ver todos
+Arrastar tile do app para a Mesa,apps,could,yes,yes,Etapa A (AppsA); reusa o arrastar de abas (application/tendly-pane); não visto no navegador
+Ordem dos apps: fixar · mover · ocultar,apps,should,no,yes,Etapa A (AppsA); hub_settings.app_order; vale no rail · barra · Início · página Apps
 App em tela cheia com cabeçalho (Conversar · Abrir na Mesa · recarregar · link · abrir fora),apps,must,yes,no,Etapa B; P29 P31; hoje só como painel
 Conversar abre chat ao lado do app em tela cheia,apps,must,yes,partial,Etapa B; hoje só divide no painel
 App recarrega sozinho quando o agente muda o código,apps,must,yes,no,Etapa B; transcrição "eu recarrego aqui o aplicativo"

@@ -139,6 +139,10 @@ CREATE TABLE push_keys (
 --   public_base_url   https://pub.example.com for /p/{slug} links, or '' (this server's own
 --                     address). The server answers for that host under /p/ only.
 --   dictation         'browser' | 'off'
+--   mesa_sidebar      'icons' | 'expanded' (Apps A): the sidebar on the Mesa; default icons.
+--   app_order         JSON {"pinned": [], "order": [], "hidden": []} (Apps A), each entry
+--                     '<workspace id>/<slug>'; a hidden app is never pinned. No migration:
+--                     both are rows of this table, and a missing row means the default.
 CREATE TABLE hub_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,

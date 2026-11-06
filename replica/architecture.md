@@ -95,7 +95,7 @@ O ditado é só interface: um botão de microfone no composer usa `SpeechRecogni
 
 | método e caminho | faz | entrada | saída |
 | --- | --- | --- | --- |
-| `GET/PUT settings` | `timezone`, `public_base_url`, `dictation` (feito no M4; um valor inválido recusa o pedido inteiro) | `{key: value}` | mapa |
+| `GET/PUT settings` | `timezone`, `public_base_url`, `dictation` (feito no M4; um valor inválido recusa o pedido inteiro). Etapa A dos apps: `mesa_sidebar` (`icons` \| `expanded`) e `app_order` (objeto `{pinned, order, hidden}` de `<workspace>/<slug>`) | `{key: value}` | mapa |
 | `GET settings/timezones` | os fusos que o servidor aceita, para o seletor, e o fuso do relógio da máquina | — | `{zones, server}` |
 
 Fora da API (kit em `deploy/`, feito no M4, ainda não rodado numa VPS):
