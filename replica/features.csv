@@ -1,13 +1,13 @@
 feature,area,priority,original,clone,notes
 Saudação por hora + nome e status dos agentes,início,must,yes,yes,Fase 1 (HomePage)
 Composer do Início com agente e pasta,início,must,yes,yes,Fase 1; usa conta preferida
-Composer do Início com conta modelo esforço e permissão,início,should,yes,partial,só agente e pasta; conta vem das Preferências
+Composer do Início com conta modelo esforço e permissão,início,should,yes,yes,M1
 Opção Sem projeto no Início,início,must,yes,yes,Fase 1 (pasta oculta de conversas)
 Chips de sugestão no Início,início,could,yes,yes,Fase 1
 Card Rodando agora,início,must,yes,yes,Fase 1
 Card Arquivos recentes,início,must,yes,yes,Fase 1 (/api/hub/recent-files)
 Card Tuas últimas conversas,início,must,yes,yes,Fase 1
-Botão Continuar a última conversa,início,should,yes,no,P10
+Botão Continuar a última conversa,início,should,yes,yes,M1
 Card Apps no Início,início,should,yes,yes,Fase 4
 Card Abertas no celular,início,could,yes,no,P10; exige sincronizar abas entre aparelhos
 Card Compartilhadas contigo,início,could,yes,no,depende de multiusuário
@@ -16,9 +16,9 @@ Dividir arrastando aba para a borda,mesa,must,yes,yes,Tendly upstream
 Layout salvo como espaço com nome e URL,mesa,should,yes,partial,Tendly salva o layout mas não nomeia espaços (P05)
 Sidebar vira rail de ícones na Mesa,mesa,could,yes,no,P02; Tendly recolhe a sidebar inteira
 Barra Conversas: Não lidas Esperando Rodando Tuas,conversas,must,yes,yes,Fase 1 (ConversationsBar)
-Card Esperando tua resposta com botão Responder,conversas,should,yes,partial,grupo existe; sem botão Responder inline
-Marcar todas como lidas na barra,conversas,should,yes,partial,existe na página de Notificações
-Seção Rotinas recentes na barra,conversas,should,yes,no,sessões criadas por automações de agente
+Card Esperando tua resposta com botão Responder,conversas,should,yes,yes,M1
+Marcar todas como lidas na barra,conversas,should,yes,yes,M1
+Seção Rotinas recentes na barra,conversas,should,yes,yes,M1
 Ícone do aparelho de origem na conversa,conversas,could,yes,no,P11
 Sino de notificações com não lidas,notificações,must,yes,yes,Fase 1
 Notificação de automação concluída ou falhou,notificações,must,yes,yes,Fase 2
@@ -36,22 +36,22 @@ Ditado por voz embutido,chat,should,yes,no,P01/P10 microfone; Configurações > 
 Colar link de outra conversa como contexto,chat,should,yes,no,ferramenta ler_conversa (P07)
 Várias contas Claude e Codex ao mesmo tempo,contas,must,yes,yes,Tendly endpoints/perfis
 Escolher conta ao abrir nova conversa,contas,must,yes,yes,Tendly CreateSessionDialog
-Uso por conta 5h e semanal no seletor,contas,should,yes,partial,Tendly tem QuotaMeter/Uso; conferir no seletor
+Uso por conta 5h e semanal no seletor,contas,should,yes,yes,M1
 Contas da organização com quem pode usar,contas,could,yes,skip,multiusuário fica para depois da VPS
 Árvore de arquivos com busca e upload,arquivos,must,yes,yes,Tendly FileExplorer
 Renderizado ou Original para HTML e Markdown,arquivos,must,yes,yes,Tendly (markdown); conferir HTML
 Histórico de versões com autor e diff,arquivos,must,yes,yes,Fase 3
 Ver o arquivo como estava e restaurar,arquivos,must,yes,yes,Fase 3
 Mensagem estilo commit em cada versão,arquivos,could,yes,no,P09
-Histórico mostra a conversa que causou a mudança,arquivos,should,yes,partial,mostra o título da sessão; sem link para abrir
+Histórico mostra a conversa que causou a mudança,arquivos,should,yes,yes,M1
 Publicar: só o time / senha / qualquer um,publicar,must,yes,yes,Fase 3
 Publicar: congelado ou ao vivo,publicar,must,yes,yes,Fase 3
 Publicar: link com nome editável,publicar,must,yes,yes,Fase 3
-Publicar: botão Gerar senha,publicar,could,yes,no,P15
-Publicar: Pedir pro agente,publicar,should,yes,no,P15
-Lista de publicados nas Configurações,publicar,should,yes,partial,lista dentro do painel de publicar
+Publicar: botão Gerar senha,publicar,could,yes,yes,M1
+Publicar: Pedir pro agente,publicar,should,yes,yes,M1
+Lista de publicados nas Configurações,publicar,should,yes,yes,M1
 Domínio próprio para os links publicados,publicar,should,yes,no,Configurações > Endereços; depende da VPS
-Markdown publicado renderizado,publicar,should,yes,no,hoje vira texto escapado; adicionar pulldown-cmark
+Markdown publicado renderizado,publicar,should,yes,yes,M1
 Automações com cron toggle próxima execução e log,automações,must,yes,yes,Fase 2
 Editar automação com o chat,automações,must,yes,yes,Fase 2
 Agente cria e altera automações pela conversa,automações,must,yes,yes,Fase 2 (ferramentas tendly_automation_*)
@@ -60,15 +60,15 @@ Automações do time com dono,automações,could,yes,skip,multiusuário
 Inventário de jobs do servidor com Se quebrar,automações,could,yes,no,P19; crons do sistema na VPS
 Integrações: conectores com origem host e status,integrações,must,yes,yes,Fase 2
 Integrações: Testar de novo,integrações,must,yes,yes,Fase 2
-Integrações: Autorizar no claude.ai,integrações,should,yes,partial,mostra dica; sem link direto
+Integrações: Autorizar no claude.ai,integrações,should,yes,yes,M1
 Integrações: Fora de uso,integrações,could,yes,no,P21
 Integrações: chaves encontradas em .env sem registro,integrações,could,yes,no,P21; só nomes de variáveis
 Cofre de chaves 1Password,integrações,could,yes,no,P21
 MCPs de cada pessoa,integrações,could,yes,skip,multiusuário
 Habilidades: lista com busca e origem,habilidades,must,yes,yes,Fase 2
-Habilidades: filtro por pasta e contagem,habilidades,should,yes,partial,busca e contagem sim; filtro por pasta não
-Habilidades: Usar no chat,habilidades,should,yes,no,P22
-Habilidades: Ver (abrir o SKILL.md),habilidades,should,yes,partial,só para skills de workspace
+Habilidades: filtro por pasta e contagem,habilidades,should,yes,yes,M1
+Habilidades: Usar no chat,habilidades,should,yes,yes,M1
+Habilidades: Ver (abrir o SKILL.md),habilidades,should,yes,yes,M1
 Catálogo de apps com criar com o agente,apps,must,yes,yes,Fase 4
 App abre como aba da Mesa,apps,must,yes,yes,Fase 4
 Cabeçalho do app com Conversar e Abrir na Mesa,apps,must,yes,yes,Fase 4
