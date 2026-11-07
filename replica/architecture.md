@@ -27,7 +27,7 @@ Um banco por responsabilidade (upstream vs fork), sem microsserviços.
 
 ## Schema
 
-Tabelas em `hub.db`: migrações 1 a 11 em produção (a 8, `file_versions.message`, e a 9, `pinned_messages`, entraram no M5; a 10, `app_grants` e `app_frame_secret`, na Apps C; a 11, `app_records`, na Apps D).
+Tabelas em `hub.db`: migrações 1 a 12 em produção (a 8, `file_versions.message`, e a 9, `pinned_messages`, entraram no M5; a 10, `app_grants` e `app_frame_secret`, na Apps C; a 11, `app_records`, na Apps D; a 12, `app_shortcuts` e `app_file_removals`, na Apps E).
 Acesso: checagens na camada de dados. O `guard` autentica todo `/api/`, e cada rota do hub valida o id do workspace e o caminho (canonicaliza e confere o prefixo).
 
 O SQL completo está em [`schema.sql`](schema.sql). Restrições importantes:
@@ -172,6 +172,26 @@ Quem confere o quê: o **guard** recusa tudo que vem da moldura para `/api` (ori
 Como uma escrita chega ao outro painel: o app chama `leads.update(...)` → o SDK manda a mensagem para a página → a página faz o `PATCH` → o servidor grava e avisa todas as janelas pelo socket → cada `AppView` daquele app repassa para a própria moldura, se o app se inscreveu naquela coleção → o SDK chama os `subscribe`. O mesmo caminho serve para o que o agente escreve pelas ferramentas MCP e para o que outra janela (o celular) escreve.
 
 Quem confere o quê: o **servidor** valida nomes, tamanho, quantidade, o `rev` e o filtro (os valores e os nomes de campo do `where` são parâmetros de um SQL de forma fixa; não há texto do app dentro do SQL); o tipo de um arquivo enviado vem dos bytes, e o nome guardado é feito no servidor. A **página** só transforma cada chamada num pedido sobre aquele app (nomes conferidos antes de virar caminho) e repassa mudanças só da coleção pedida. A **moldura** continua sem alcançar `/api`: ler, gravar, exportar e enviar arquivo de dentro dela dá 403.
+
+### Apps E: kit, modelos, diagnóstico, versões, atalhos (feito)
+
+| método e caminho | faz | saída |
+| --- | --- | --- |
+| `GET apps/kit.css` · `apps/kit.js` · `apps/kit-demo.html` | o kit de UI dos apps e a página de demonstração; públicos como o `sdk.js` (a moldura lê sem token) | CSS · JS · HTML com o CSP sandbox |
+| `POST apps/{ws}/scaffold` (já existia) | `template` passa a aceitar `blank \| kanban \| table \| calendar \| dashboard \| form \| document \| issues`, e `letter` | 201 o app; 400 lista os modelos |
+| `GET apps` (já existia) | cada app traz `errors` (quantos a última janela relatou) e `errors_at`; `updated_at` é o arquivo mais novo da pasta | — |
+| `GET apps/{ws}/{slug}/diagnostics` | checagem estática da página de entrada (arquivo local que falta, SDK fora de ordem ou ausente, kit sem CSS) + o que a última janela relatou | `{ok, problems: [{kind, message, file}], runtime: null \| {page, reported_at, count, errors}}` |
+| `PUT apps/{ws}/{slug}/diagnostics` | a página que emoldura o app relata os erros vistos (lista inteira; vazia = carregou limpo); memória | `{recorded, count}` |
+| `GET apps/{ws}/{slug}/versions` | as versões do app inteiro: rajadas de versões de arquivo agrupadas por autor + conversa + intervalo (5 min agente, 60 s os outros) | `{versions: [{id, author_kind, session_id, session_title, message, started_at, at, files, count, current}], truncated}` |
+| `POST apps/{ws}/{slug}/versions/{id}/restore` | cada arquivo volta ao conteúdo daquele ponto (versões novas, suas); o criado depois é removido (o conteúdo fica no histórico); `app.json` nunca é removido | `{restored, removed, unchanged, skipped: [{path, reason}]}`; 404 |
+| `GET shortcuts` | os atalhos | `{shortcuts: [{id, name, url, letter, color, position, embed: {allowed, reason, checked_at}, …}], check_fresh_seconds}` |
+| `POST shortcuts` | cria (`name`, `url` http/https sem usuário:senha, `letter?`, `color?`) e já confere se o site deixa embutir | 201 o atalho; 400 |
+| `PATCH shortcuts/{id}` · `DELETE shortcuts/{id}` | muda (trocar a URL zera o veredito) · remove | o atalho · 204 |
+| `POST shortcuts/{id}/check` | confere o site agora: `X-Frame-Options` e `frame-ancestors` do `Content-Security-Policy` (só cabeçalhos, nunca o corpo; 8 s; até 5 redirecionamentos) | o atalho com `embed.reason_text` |
+
+Onde a exclusão de arquivo fica: o histórico de arquivos não registra exclusões, então `live.rs` anota em `app_file_removals` cada arquivo que sumiu numa rajada (com o maior id do histórico naquele momento e a hora). "Estado do app na versão V" = para cada arquivo, a versão mais nova ≤ V, a não ser que haja exclusão anotada depois dela (até V e até 2 s depois do fim de V). Um arquivo apagado e recriado igual ganha uma linha nova no histórico (`keep_again`) para fechar a janela da exclusão.
+
+Quem decide onde o atalho abre: o **servidor** lê os cabeçalhos do site e guarda o veredito; a **página** abre em painel só com `allowed === true` e sem conteúdo misto (Tendly em https e site em http, fora loopback), senão numa aba nova e diz por quê (toast). O painel do atalho é um `iframe` comum (sem sandbox: o site mantém a própria origem e não alcança a página do Tendly, que é outra origem).
 
 ### Webhooks e jobs
 

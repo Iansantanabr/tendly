@@ -69,13 +69,13 @@ Habilidades: lista com busca e origem,habilidades,must,yes,yes,Fase 2
 Habilidades: filtro por pasta e contagem,habilidades,should,yes,yes,M1
 Habilidades: Usar no chat,habilidades,should,yes,yes,M1
 Habilidades: Ver (abrir o SKILL.md),habilidades,should,yes,yes,M1
-Catálogo de apps com criar com o agente,apps,must,yes,yes,Fase 4
+Catálogo de apps com criar com o agente,apps,must,yes,yes,Fase 4; Etapa E: painel com frase · modelo · nome/letra/cor sugeridos; abre app + conversa na Mesa com a primeira mensagem (nada é enviado sozinho)
 App abre como aba da Mesa,apps,must,yes,yes,Fase 4
 Cabeçalho do app com Conversar e Abrir na Mesa,apps,must,yes,yes,Fase 4
 API de dados para o app guardar estado,apps,must,yes,yes,Fase 4
 Apps na sidebar com tile de letra colorida,apps,should,yes,yes,Fase 4; Etapa A: lista vertical na barra e tiles no rail
 Skill que ensina o agente a criar apps,apps,must,yes,yes,Fase 4
-App responsivo em painel estreito,apps,could,yes,partial,P13; responsabilidade de cada app; Etapa C deu tendly.host.pane / onResize (largura · altura · painel ou tela cheia); o kit com barra inferior é da Etapa E
+App responsivo em painel estreito,apps,could,yes,yes,P13; Etapa C deu tendly.host.pane / onResize; Etapa E: o kit (t-app) vira barra inferior abaixo de 640px do próprio app; cada app ainda é responsável pelo resto
 Versão publicada do app por commit,apps,could,yes,no,P28 Apps nas áreas
 Configurações: Contas de IA pessoais,configurações,must,yes,yes,Tendly upstream
 Configurações: Padrão do chat,configurações,should,yes,partial,Tendly Preferências
@@ -114,8 +114,10 @@ Coleções com registros e revisão + ao vivo,apps,should,yes,yes,Etapa D (AppsD
 Subir arquivos/fotos pelo app,apps,could,yes,yes,Etapa D (AppsD); tendly.files.upload/url/list/remove/open; imagens e PDF até 20 MB em apps/<slug>/files/ com nome seguro; url serve de <img src>; não visto no navegador
 Exportar e importar uma coleção do app (JSON · CSV),apps,could,no,yes,Etapa D (AppsD); "…" no cabeçalho do app → Exportar dados… / Importar dados… (adicionar ou substituir com confirmação na tela)
 Agente lê e escreve os registros de um app (MCP),apps,should,yes,yes,Etapa D (AppsD); tendly_app_records_list · get · upsert · delete; um app por chamada; a escrita aparece ao vivo no app aberto; "o agente sugere resposta para o lead"
-Criar com o agente com modelos (kanban · tabela · calendário · painel · formulário · editor),apps,must,yes,partial,Etapa E; hoje blank/issues
-Kit de UI para apps (navegação lateral/inferior · kanban · tabela),apps,should,yes,no,Etapa E; P12 P13 visual coerente
-Versões do app inteiro e voltar,apps,should,yes,partial,Etapa E; P28 No ar · hash; hoje histórico por arquivo
-Adicionar atalho para sistema de fora,apps,could,yes,no,Etapa E; P28
+Criar com o agente com modelos (kanban · tabela · calendário · painel · formulário · editor),apps,must,yes,yes,Etapa E (AppsE); sete modelos em hub/apps/templates/ (+ issues); cada um funciona sozinho com o kit e uma coleção; passam na checagem estática; não vistos no navegador
+Kit de UI para apps (navegação lateral/inferior · kanban · tabela),apps,should,yes,yes,Etapa E (AppsE); kit.css + kit.js servidos pelo Tendly; tokens do Tendly · claro/escuro · t-app · t-kanban · t-table · t-pills · t-modal · t-state · t-chart · t-calendar · toast · confirm; demo em /design; não visto no navegador
+Versões do app inteiro e voltar,apps,should,yes,yes,Etapa E (AppsE); rajadas do histórico agrupadas por autor · conversa · intervalo; "Versões" no cabeçalho; voltar escreve versões novas e nunca apaga o histórico; exclusões anotadas em app_file_removals
+Adicionar atalho para sistema de fora,apps,could,yes,yes,Etapa E (AppsE); hub.db app_shortcuts; catálogo · rail · Início; painel se o site deixa embutir (X-Frame-Options/frame-ancestors lidos no servidor) senão aba nova com o motivo
+Cards do catálogo com rota · "Atualizado há X" · selo de erros,apps,should,yes,yes,Etapa E (AppsE); erros vêm do relato da última janela (PUT diagnostics); apps quebrados com "Pedir correção"
+Checagem do app sem navegador (diagnóstico para o agente),apps,should,no,yes,Etapa E (AppsE); GET apps/{ws}/{slug}/diagnostics: arquivo que falta · SDK fora de ordem · kit sem CSS + o que a última janela relatou; a skill manda rodar depois de cada mudança
 App com servidor (ações · webhooks · jobs · segredos · logs),apps,could,yes,no,Etapa F; Bancada Salvar e renderizar · Pipeline leads · Monitoramento

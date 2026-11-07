@@ -430,4 +430,51 @@ Painel de dados do app (Apps D, `AppDataPanel.vue`, faixa acima do app como a de
   toque      botões, campos e opções com 44px em pointer: coarse
 ```
 
+### Apps E (o construtor)
+
+```
+Painel "Criar com o agente" (Apps E, `CreateAppPanel.vue`, primeiro cartão da página Apps)
+  campos     frase (textarea 2 linhas, até 500) · "Começar de": 7 cartões rádio (tile + nome + dica; escolhido: borda --accent e fundo --accent-soft) ·
+             Nome · Letra (2 chars) · Cor (8 tiles rádio; escolhido: borda --accent) · Projeto (select) · pré-visualização do tile com o nome
+  sugestão   a frase preenche modelo, nome, letra e cor até cada um ser editado à mão (então para de seguir)
+  rodapé     nota "Cria o app… Nada é enviado até você apertar enviar." + botão Criar (primary-button, desabilitado sem nome/projeto)
+  depois     o app abre na Mesa à esquerda, a conversa à direita com a primeira mensagem no composer
+  toque      cartões e tiles com 44px em pointer: coarse; em ≤ 640px os modelos ficam em uma coluna
+```
+
+```
+Cartão do app no catálogo (Apps E, `AppsPage.vue`)
+  linhas     tile 40 + nome + descrição (2 linhas) · rota em --mono --faint (/apps/<ws>/<slug>) + "Atualizado há X" (--muted) + selo "N erros · Pedir correção"
+             (pílula --danger-soft/--danger-ink com borda --danger-line; clicar abre o app com os erros no composer) · rodapé com projeto, Oculto/Fixado, "…", abrir fora, Abrir na Mesa
+  quebrado   cartão com borda --warn-line: tile de aviso --warn-soft, "apps/<slug>/", "Não foi possível ler: {motivo}", "Pedir correção" (small-button primary)
+```
+
+```
+Atalhos (Apps E, `ShortcutForm.vue` · `ShortcutView.vue` · seção "Atalhos" da página Apps · tiles no rail e no Início)
+  formulário cartão com Nome · Letra · Endereço (type=url; sem esquema ganha https://) · Cor (8 tiles) · Cancelar/Adicionar (ou Salvar); Esc cancela
+  cartão     tile + nome + host; "Abre num painel da Mesa" | "Abre numa aba nova: o site não deixa ser embutido" | "…até o site responder"; Editar · Remover
+  remover    o rodapé vira faixa --danger-soft "Remover {nome}?" com Cancelar / Remover; nunca window.confirm
+  painel     barra fina (tile 20, nome, host como link, recarregar, abrir fora) + iframe do site; "Este atalho não existe mais" com Remover aba quando some
+  rail       tile igual ao dos apps com marca de seta (12px, --elevated, borda --line) no canto superior direito; "+" tracejado (--line-input) depois dos tiles = Novo app
+  aba nova   toast informativo com o motivo (X-Frame-Options · frame-ancestors · sem resposta · conteúdo misto)
+```
+
+```
+Versões do app (Apps E, `AppVersionsPanel.vue`, faixa acima do app; botão "Versões" no cabeçalho, aria-expanded)
+  cabeçalho  ícone timer + "Versões" + "Cada rajada de mudanças em apps/<slug>/ é uma versão." + fechar; Esc fecha e devolve o foco ao botão
+  linha      autor em --text-xs 600 (Você · Agente · {conversa} em --accent-ink · Fora do Tendly) · título (o que o agente disse, ou os arquivos) · "há X · N arquivos" (tooltip com a lista)
+             "Atual" (pílula --fill) na primeira; nas outras "Voltar o app para esta versão" (small-button)
+  confirmar  a linha ganha fundo --accent-soft e a frase "Cada arquivo volta a como estava então; arquivos criados depois são removidos. O histórico guarda tudo…" com Cancelar / Restaurar (primary)
+  resultado  toast "App restaurado: 1 restaurado, 2 removidos." (info quando algo foi deixado como está); a lista recarrega; o app recarrega pelo live
+  toque      botões com 44px em pointer: coarse
+```
+
+```
+Kit dos apps (Apps E, `kit.css` + `kit.js`, dentro da moldura; demonstração em /design → "App kit", 360/640/cheia)
+  tokens     --t-* com os mesmos valores dos tokens do Tendly, claro e escuro (prefers-color-scheme e html[data-tendly-theme]); campos com --t-line-input; anel de foco --t-focus
+  peças      t-app (barra lateral 208px → barra inferior abaixo de 640px do próprio app) · t-nav · t-view · t-kanban (arrastar, ← →) · t-table (filtro, ordenação) · t-pills · t-modal (<dialog>;
+             no celular sobe de baixo) · t-state (vazio/carregando/erro) · t-chart (barras/linha em SVG) · t-calendar (chips → pontos em < 520px) · toasts · tkit.confirm
+  toque      44px em pointer: coarse; prefers-reduced-motion respeitado
+```
+
 Fora deste sistema: modais, menus de contexto, árvore de arquivos, terminal e chat são do upstream e seguem como estão.

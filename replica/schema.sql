@@ -221,6 +221,37 @@ CREATE INDEX app_records_by_created ON app_records(workspace_id, slug, collectio
 CREATE INDEX app_records_by_updated ON app_records(workspace_id, slug, collection, updated_at);
 
 ---------------------------------------------------------------- later (multi-user, after the VPS)
+-- Migration 12 (Apps E): shortcuts and the removals of app files.
+-- A shortcut is a site with a tile: no folder, no code. `embed` is whether the
+-- site lets Tendly frame it (1), refuses (0) or could not be told (NULL), as
+-- read from its X-Frame-Options / frame-ancestors headers on the server;
+-- `embed_reason` says why and `checked_at` when (checked again after a day).
+CREATE TABLE app_shortcuts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    letter TEXT NOT NULL,
+    color TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    embed INTEGER CHECK (embed IN (0, 1)),
+    embed_reason TEXT,
+    checked_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+-- The file history keeps versions, never removals. When the app reload
+-- watcher sees a file of apps/<slug>/ disappear, a row here says so, with the
+-- newest file_versions id at that moment (`after_version_id`) and the time:
+-- restoring the app to a version then knows which files were already gone.
+CREATE TABLE app_file_removals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    after_version_id INTEGER NOT NULL,
+    removed_at TEXT NOT NULL
+);
+CREATE INDEX app_file_removals_by_path ON app_file_removals(workspace_id, path, after_version_id);
+
 -- Not a migration yet. Sketch so today's tables don't paint us into a corner:
 --   people(id, name, email UNIQUE, role CHECK IN ('admin','member'), created_at)
 --   folder_grants(person_id -> people ON DELETE CASCADE, workspace_id, access CHECK IN ('read','write'))

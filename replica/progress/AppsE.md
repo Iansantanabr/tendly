@@ -61,7 +61,20 @@ Fatias, cada uma com testes, `build.sh`, conferência com `curl` e commit:
 - 79 traduções novas em `pt-BR.json`. Testes antigos ajustados (rail ganhou um item; cabeçalho ganhou "Versions"; o `<AppView>` do painel tem `v-else`). Armadilha do teste SSR: o `createServer` precisa de `configFile: false` (senão o `vite.config.ts` põe um segundo `vue()` e o SFC é "parseado" duas vezes, dando "Attribute name cannot contain…" no elemento raiz), e as stores (`apps`, `shortcuts`, `i18n`) têm de vir do próprio Vite (`ssrLoadModule`), não do `import` do arquivo de teste.
 - Web: 1.035 testes (14 novos em `appsE-builder.test.mjs`), typecheck limpo. `build.sh` ok, servidor reiniciado; o bundle servido tem os componentes novos.
 
-## Falta
+### Fatia 4 (documentos) — commit "Finish Apps E: skill v2, summary, notes, feature matrix, schema, component specs"
+- `skills/tendly-apps/SKILL.md` v2: seções novas "Starting an app: the templates", "The kit", "Checking the app without a browser" (diagnostics), "Versions of the app"; atalhos no "Delivering"; confirmações na página, nunca `window.confirm`. Copiar para `~/.claude/skills/tendly-apps/` é do Ian.
+- `replica/progress/apps-summary.md` (A–E para o Ian), `FORK.md` (ganchos, API, status), `replica/architecture.md` (tabela da Apps E e a migração 12), `replica/schema.sql` (migração 12), `replica/design/components.md` (specs da Apps E), `replica/features.csv` (6 linhas da Etapa E viram yes; 2 linhas novas).
 
-- Fatia 4: web (painel criar, catálogo, atalhos, versões, demo do kit no `/design`, "+" no rail).
+## Decisões tomadas no caminho (além das do plano)
+
+- O "Em branco" também usa o kit e uma coleção (`items`): o contador antigo saiu, para o agente ver o padrão certo desde o primeiro arquivo.
+- Modelos em inglês; a primeira mensagem pede ao agente para escrever o texto do app na língua em que o Ian escreve. O kit traduz as poucas palavras dele (Filtrar, Hoje, Fechar…) pelo `lang` da página ou do navegador.
+- O painel do atalho é um `iframe` sem sandbox (o site precisa da própria origem e cookies para funcionar); a página do Tendly é outra origem e não é alcançada. O veredito de embutir é lido no servidor e vale 24 h; conteúdo misto é decidido na página.
+- O `id` de uma versão do app é o id da versão de arquivo mais nova da rajada; `restore` aceita qualquer id de arquivo do app (estado logo depois daquela escrita).
+- O tile mostra uma letra só (`appLetter`), mesmo que o `app.json`/atalho tenham duas: já era assim.
+- Nada do upstream foi tocado no servidor; no web, só o `App.vue` (listado no FORK.md).
+
+## O que o Ian precisa olhar no navegador
+
+Está em `replica/progress/AppsE.done` e em `apps-summary.md` (lista numerada com tela, tamanho, tema e o que clicar).: web (painel criar, catálogo, atalhos, versões, demo do kit no `/design`, "+" no rail).
 - Fatia 4: skill v2, `apps-summary.md`, FORK.md, features.csv, schema.sql, components.md, `.done`.
