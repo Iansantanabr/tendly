@@ -208,7 +208,7 @@ async function changeRoots(change: () => Promise<HostRoots>, clear = false) {
       </article>
       <!-- What Tendly itself does on this host, beside the clients' defaults. -->
       <article class="preference-card">
-        <header><span class="preference-mark general"><Icon name="spark" :size="17"/></span><strong>Tendly</strong></header>
+        <header><span class="preference-mark general"><Icon name="spark" :size="17"/></span><strong>GCore</strong></header>
         <label class="preference-row">
           <span><strong>{{ t('Tendly tools for agents') }}</strong><small>{{ t('Claude Code and Codex sessions can look at Tendly and, once you confirm here, change it: endpoints, defaults, workspaces. Takes effect when a session next starts.') }}</small></span>
           <input type="checkbox" class="preference-switch" role="switch" :checked="preferences.agent_tools !== false" :disabled="saving" :aria-label="t('Tendly tools for agents')" @change="setSwitch('agent_tools', ($event.target as HTMLInputElement).checked)" />

@@ -12,4 +12,4 @@ export const addHostRoot = (path: string) => request<HostRoots>('/host/roots', j
 export const removeHostRoot = (path: string) => request<HostRoots>('/host/roots', json('DELETE', { path }));
 
 /** The server's refusal of a workspace outside every folder it may use. */
-export const isOutsideRoots = (message: string) => message.includes('outside the folders Tendly may use');
+export const isOutsideRoots = (message: string) => /outside the folders (Tendly|GCore) may use/.test(message);

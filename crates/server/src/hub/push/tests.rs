@@ -353,11 +353,11 @@ async fn hub_push_test_sends_an_encrypted_message_signed_with_vapid() {
 
     // RFC 8291: only the device can read it.
     let message = device.read(&request.body);
-    assert_eq!(message["title"], "Tendly");
+    assert_eq!(message["title"], "GCore");
     assert_eq!(message["kind"], "test");
     assert_eq!(message["url"], "/settings/notifications");
     assert!(message["body"].as_str().unwrap().contains("working"));
-    assert!(!String::from_utf8_lossy(&request.body).contains("Tendly"), "nothing readable on the wire");
+    assert!(!String::from_utf8_lossy(&request.body).contains("GCore"), "nothing readable on the wire");
     assert!(crypto::tests::decrypt(&Device::new().private, &device.auth, &request.body).is_none(), "nor by another key");
 
     let row = fixture.device(&id).await.unwrap();
@@ -575,7 +575,7 @@ fn hub_push_no_key_is_made_while_nobody_subscribed() {
 fn hub_push_messages_fit_a_record_whatever_the_text() {
     let session = uuid::Uuid::new_v4();
     let message = Message::for_notification("waiting", Some(session), "", "");
-    assert_eq!(message.title, "Tendly", "a conversation without a title still says who is calling");
+    assert_eq!(message.title, "GCore", "a conversation without a title still says who is calling");
     assert_eq!(message.body, "Is waiting for you");
     assert_eq!(message.url, format!("/session/{session}"));
 

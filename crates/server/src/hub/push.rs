@@ -186,7 +186,7 @@ impl Message {
         let detail = clean(detail, 300);
         let title = clean(title, 120);
         Self {
-            title: if title.is_empty() { "Tendly".into() } else { title.clone() },
+            title: if title.is_empty() { "GCore".into() } else { title.clone() },
             body: if detail.is_empty() { text.into() } else { format!("{text}: {detail}") },
             url: session.map_or_else(|| "/notificacoes".into(), |id| format!("/session/{id}")),
             kind: kind.into(),
@@ -200,7 +200,7 @@ impl Message {
 
     fn test() -> Self {
         Self {
-            title: "Tendly".into(),
+            title: "GCore".into(),
             body: kind_text("test").into(),
             url: "/settings/notifications".into(),
             kind: "test".into(),

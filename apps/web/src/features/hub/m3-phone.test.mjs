@@ -216,7 +216,7 @@ test('the worker shows what the server pushed, in the language of the app', asyn
 test('the worker always shows something and never opens an outside address', async () => {
   const sw = worker();
   await sw.pushed({});
-  assert.equal(sw.shown[0].title, 'Tendly');
+  assert.equal(sw.shown[0].title, 'GCore');
   assert.equal(sw.shown[0].options.data.url, '/notificacoes');
   assert.equal(sw.shown[0].options.tag, undefined);
   assert.equal(sw.shown[0].options.renotify, false);

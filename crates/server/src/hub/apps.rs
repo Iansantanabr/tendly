@@ -904,8 +904,8 @@ pub(crate) fn template_page(template: &str, manifest: &Manifest) -> Option<Strin
     let page = TEMPLATES.iter().find(|(name, _)| *name == template).map(|(_, page)| *page)?;
     let description = match (manifest.description.is_empty(), template) {
         (false, _) => manifest.description.as_str(),
-        (true, "issues") => "Problems and ideas noted while using Tendly.",
-        (true, "blank") => "A blank Tendly app. Ask your agent to turn it into what you need.",
+        (true, "issues") => "Problems and ideas noted while using GCore.",
+        (true, "blank") => "A blank GCore app. Ask your agent to turn it into what you need.",
         (true, _) => "Made from a template. Ask your agent to shape it.",
     };
     Some(

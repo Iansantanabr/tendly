@@ -28,12 +28,12 @@ const TEXTS = {
     app: "Aviso de um app",
     test: "As notificações estão funcionando neste aparelho.",
     offlineTitle: "Sem conexão",
-    offlineBody: "Não deu para falar com o Tendly. Confira a internet (ou o Tailscale) e se o servidor está ligado.",
+    offlineBody: "Não deu para falar com o GCore. Confira a internet (ou o Tailscale) e se o servidor está ligado.",
     retry: "Tentar de novo",
   },
   en: {
     offlineTitle: "No connection",
-    offlineBody: "Tendly could not be reached. Check your connection (or Tailscale) and that the server is running.",
+    offlineBody: "GCore could not be reached. Check your connection (or Tailscale) and that the server is running.",
     retry: "Try again",
   },
 };
@@ -115,7 +115,7 @@ async function offlinePage() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tendly · ${escapeHtml(text.offlineTitle)}</title>
+<title>GCore · ${escapeHtml(text.offlineTitle)}</title>
 <style>
 :root{color-scheme:light dark;--bg:#f1eee8;--ink:#221f1b;--muted:#6e6961;--accent:#0f7f70;--on-accent:#ffffff;--focus:#2fa08f}
 @media(prefers-color-scheme:dark){:root{--bg:#0f1113;--ink:#ecebe8;--muted:#8e8d89;--accent:#3fc4b0;--on-accent:#06211d;--focus:#3fc4b0}}
@@ -156,7 +156,7 @@ self.addEventListener("push", event => {
     const detail = typeof data.detail === "string" ? data.detail : "";
     const body = translated ? (detail ? `${translated}\n${detail}` : translated) : String(data.body || "");
     const tag = typeof data.tag === "string" && data.tag ? data.tag : undefined;
-    await self.registration.showNotification(String(data.title || "Tendly"), {
+    await self.registration.showNotification(String(data.title || "GCore"), {
       body,
       icon: ICON,
       badge: BADGE,

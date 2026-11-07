@@ -1,4 +1,4 @@
-import { useI18n } from "../i18n";
+import { brand, useI18n } from "../i18n";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -62,7 +62,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       try { const body = JSON.parse(raw); message = body.error ?? body.message ?? message; }
       catch { if (raw.length < 1000 && !raw.startsWith("<!")) message = raw || message; }
     } catch { /* Retain the HTTP error when a response body is unavailable. */ }
-    throw new ApiError(String(message), response.status);
+    throw new ApiError(brand(String(message)), response.status);
   }
   if (response.status === 204) return undefined as T;
   try { return await response.json() as T; }

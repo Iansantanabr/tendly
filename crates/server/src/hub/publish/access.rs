@@ -205,7 +205,7 @@ pub(super) fn not_found() -> String {
 pub(super) fn team_only() -> String {
     page(
         "Team only",
-        "<h1>This page is only for the team.</h1><p>Sign in to Tendly on this browser, then open the link again.</p>",
+        "<h1>This page is only for the team.</h1><p>Sign in to GCore on this browser, then open the link again.</p>",
         false,
     )
 }

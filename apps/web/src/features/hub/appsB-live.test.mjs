@@ -460,7 +460,7 @@ test('an app that is gone says so, with a way out that fits where it is shown', 
   assert.doesNotMatch(pane, /See all apps/);
   // A broken app.json is explained with the server's reason.
   stage([], 'en', { errors: [{ workspace_id: 'w1', slug: 'pipeline', message: 'app.json needs a "name"' }] });
-  assert.match(await render(View, PAGE), /Tendly could not read apps\/pipeline\/: app\.json needs a &quot;name&quot;/);
+  assert.match(await render(View, PAGE), /GCore could not read apps\/pipeline\/: app\.json needs a &quot;name&quot;/);
   // A list that could not be read is not "gone".
   stage([], 'en', { error: 'Offline' });
   const offline = await render(View, PAGE);

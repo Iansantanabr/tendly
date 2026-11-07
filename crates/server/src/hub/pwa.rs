@@ -34,8 +34,8 @@ fn manifest_json() -> Value {
         json!({ "src": format!("/icons/{file}"), "sizes": format!("{size}x{size}"), "type": "image/png", "purpose": purpose })
     };
     json!({
-        "name": "Tendly",
-        "short_name": "Tendly",
+        "name": "GCore",
+        "short_name": "GCore",
         "description": "Your space to build with Claude Code and Codex.",
         "id": "/",
         "start_url": "/",
@@ -102,8 +102,8 @@ mod tests {
     #[test]
     fn hub_pwa_manifest_is_installable() {
         let manifest = manifest_json();
-        assert_eq!(manifest["name"], "Tendly");
-        assert_eq!(manifest["short_name"], "Tendly");
+        assert_eq!(manifest["name"], "GCore");
+        assert_eq!(manifest["short_name"], "GCore");
         assert_eq!(manifest["start_url"], "/");
         assert_eq!(manifest["display"], "standalone");
         let icons = manifest["icons"].as_array().unwrap();

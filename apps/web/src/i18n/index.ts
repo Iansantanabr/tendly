@@ -2420,9 +2420,16 @@ export function normalizeLocale(value: unknown): Locale {
   return value === "en" || value === "zh-CN" || value === "pt-BR" ? value : DEFAULT_LOCALE;
 }
 
+/** Fork: the product is shown as GCore. Copy and its keys keep "Tendly" (so upstream
+ * strings still match); the visible name is swapped here, before values go in, so file
+ * names and titles are never touched. Lowercase identifiers (tendly_*, tendly.data,
+ * ~/.tendly) and TENDLY_* are real names and stay. See replica/rename-gcore.md. */
+export const PRODUCT_NAME = "GCore";
+export const brand = (text: string) => text.replace(/(?<![\w-])Tendly(?![\w-])/g, PRODUCT_NAME);
+
 export function translate(source: string, locale: Locale, values: Interpolation = {}): string {
   const dict = locale === "zh-CN" ? zhCN : locale === "pt-BR" ? ptBR : undefined;
-  const template = dict && Object.hasOwn(dict, source) ? dict[source] : source;
+  const template = brand(dict && Object.hasOwn(dict, source) ? dict[source] : source);
   return template.replace(/\{([\w]+)\}/g, (placeholder: string, key: string) => Object.hasOwn(values, key) ? String(values[key]) : placeholder);
 }
 

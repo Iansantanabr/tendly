@@ -403,7 +403,7 @@ fn own_name(state: &AppState) -> String {
                 .and_then(|name| name.split('.').next().map(str::to_owned))
         })
         .or_else(sysinfo::System::host_name)
-        .unwrap_or_else(|| "Tendly".into())
+        .unwrap_or_else(|| "GCore".into())
 }
 
 /// Whether an address could be reached from another machine at all.
@@ -657,7 +657,7 @@ async fn glance(state: &AppState, peer: Peer) -> Value {
                 out["name"] = json!(name);
             }
             if hello["peer_api"].as_u64() != Some(PEER_API) {
-                out["problem"] = json!("It runs a different version of Tendly. Update both.");
+                out["problem"] = json!("It runs a different version of GCore. Update both.");
             }
         }
         Err(error) => {

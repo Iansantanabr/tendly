@@ -140,7 +140,7 @@ function needs(host: BridgeHost, permission: string) {
   if (grants?.granted.includes(permission)) return;
   throw new BridgeError(grants?.requested.includes(permission)
     ? `The "${permission}" permission was not allowed for this app. The person can allow it under Permissions, in the app's header.`
-    : `This app has no "${permission}" permission. Add it to "permissions" in apps/${host.app.slug}/app.json; Tendly then asks the person to allow it.`, "permission", 403);
+    : `This app has no "${permission}" permission. Add it to "permissions" in apps/${host.app.slug}/app.json; GCore then asks the person to allow it.`, "permission", 403);
 }
 
 /** The largest file an app may hand over (`uploads.rs` checks again). */
@@ -280,7 +280,7 @@ export async function answerCall(call: { method: string; args: Record<string, un
       const path = workspacePath(args.path);
       if (!path) throw invalid("openFile() takes a path inside the app's workspace");
       limited(limiter, "open", 10);
-      if (!opener) throw new BridgeError("Tendly cannot open a file from here");
+      if (!opener) throw new BridgeError("GCore cannot open a file from here");
       opener({ kind: "file", workspaceId: host.app.workspace_id, path });
       return undefined;
     }
@@ -292,7 +292,7 @@ export async function answerCall(call: { method: string; args: Record<string, un
       const target = named.find(app => app.workspace_id === host.app.workspace_id) ?? (named.length === 1 ? named[0] : undefined);
       if (!target) throw new BridgeError(`There is no app "${slug}"`, "invalid", 404);
       limited(limiter, "open", 10);
-      if (!opener) throw new BridgeError("Tendly cannot open an app from here");
+      if (!opener) throw new BridgeError("GCore cannot open an app from here");
       opener({ kind: "app", app: target });
       return undefined;
     }
@@ -307,7 +307,7 @@ export async function answerCall(call: { method: string; args: Record<string, un
       host.draft(draft, attach);
       return undefined;
     }
-    default: throw new BridgeError(`Tendly does not know "${method}"`, "unknown", 400);
+    default: throw new BridgeError(`GCore does not know "${method}"`, "unknown", 400);
   }
 }
 

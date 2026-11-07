@@ -157,7 +157,7 @@ pub(super) async fn inspect(op: &Path, unlock: bool) -> Vault {
                     }
                 }
             }
-            None => vault.error = Some("1Password answered in a form Tendly does not understand."),
+            None => vault.error = Some("1Password answered in a form GCore does not understand."),
         },
         Some((false, _)) if vault.signed_in => vault.error = Some("1Password could not list the vaults."),
         Some((false, _)) => vault.error = Some("1Password did not sign in. Approve the request in the 1Password app, or sign in with a service account."),
@@ -301,7 +301,7 @@ mod tests {
             let (dir, op) = stand_in(r#"echo '{"url":"https://my.1password.com"}'"#, "echo 'Vaults: none'");
             let vault = inspect(&op, false).await;
             assert!(vault.signed_in);
-            assert_eq!(vault.error, Some("1Password answered in a form Tendly does not understand."));
+            assert_eq!(vault.error, Some("1Password answered in a form GCore does not understand."));
             std::fs::remove_dir_all(dir).ok();
         }
     }

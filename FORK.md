@@ -162,3 +162,7 @@ ssh root@VPS 'chown -R tendly:tendly /Users/iansantana && chmod 700 /Users/iansa
 - [x] M2: espaços da Mesa, link de conversa como contexto, ditado. Testado: salvar/abrir espaço (409 em nome repetido e em revisão antiga), chip de conversa no composer, transcrição truncada. Ditado não testado com microfone real. 848 testes web, 82 hub, 17 agent ok.
 - [x] M1: Continuar, composer completo no Início, Responder/Marcar todas/Rotinas recentes, Gerar senha, Pedir pro agente, Markdown publicado, Publicados nas Configurações, Ver/Usar no chat/filtro nas Habilidades, link da conversa no histórico, Autorizar no claude.ai. 829 testes web e 69 hub ok.
 - [x] Fase 4: apps personalizados. Testado: app em branco aparece em Apps e na barra lateral, abre como aba da Mesa, contador e nota sobrevivem ao recarregar (arquivos em `data/`), Chat abre conversa ao lado com o chip do app. 813 testes web e 61 hub ok.
+
+## Nome visível: GCore
+
+`brand()` em `apps/web/src/i18n/index.ts` troca "Tendly" por GCore em todo texto traduzido e nos erros do servidor (`api.ts`). As chaves de tradução continuam com "Tendly". Mudanças em arquivos do upstream e o que falta para a troca global: `replica/rename-gcore.md`.

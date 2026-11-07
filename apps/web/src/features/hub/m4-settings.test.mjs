@@ -147,7 +147,7 @@ test('the panel shows the saved zone, the public address and the dictation switc
   assert.equal((html.match(/<option/g) ?? []).length, ZONES.length);
   assert.match(html, /Chosen: America \/ Sao Paulo\./);
   assert.match(html, /It is [^<]+ there now \(UTC−03:00\)\./);
-  assert.match(html, /The clock of the machine running Tendly is in Etc \/ UTC; automations ignore it\./);
+  assert.match(html, /The clock of the machine running GCore is in Etc \/ UTC; automations ignore it\./);
   assert.match(tag(html, /<button[^>]*>Save time zone<\/button>/), /disabled/, 'nothing to save until the zone changes');
   assert.match(tag(html, /<input[^>]*type="url"[^>]*>/), /value="https:\/\/pub\.example\.com"/);
   assert.match(tag(html, /<input[^>]*type="url"[^>]*>/), /aria-invalid="false"/);

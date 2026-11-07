@@ -102,7 +102,7 @@ test('run information opens as a read-only modal for the bound session without f
       assert.match(dialog, /aria-label="Run information"/);
       assert.match(dialog, new RegExp(`data-session-id="run-info-${chosenView}"`));
       assert.match(dialog, new RegExp(`native-id-${chosenView}`));
-      assert.match(dialog, /Tendly session ID/);
+      assert.match(dialog, /GCore session ID/);
       assert.match(dialog, /(Claude Code|Codex|Pi) session ID/);
       assert.match(dialog, new RegExp(`tendly resume run-info-${chosenView}`));
       assert.match(dialog, /workspace-fixture/);

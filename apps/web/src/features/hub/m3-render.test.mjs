@@ -63,7 +63,7 @@ test('an iPhone in a Safari tab is told to add the app to the Home Screen first'
   i18n.useI18n().setLocale('en');
   browser({ secure: true, push: false, userAgent: IPHONE, coarse: true, touch: 5 });
   const html = await render(Panel);
-  assert.match(html, /Add Tendly to the Home Screen first/);
+  assert.match(html, /Add GCore to the Home Screen first/);
   assert.match(html, /“Add to Home Screen”/);
   assert.match(switchTag(html), /disabled/);
   // And the install hint sits above it with the same steps.
