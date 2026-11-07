@@ -249,14 +249,15 @@ test('every icon of the rail has a name, and the rail is one Tab stop', async ()
   stage(LIST);
   const html = await render(Rail, RAIL_PROPS);
   const items = tags(html, /<button[^>]*data-rail-id="[^"]*"[^>]*>/g);
-  assert.equal(items.length, 5 + 1 + LIST.length + 4, 'pages, the catalog, every app, and the foot');
+  // Stage E added "+" (new app) after the tiles; shortcuts would come between (none here).
+  assert.equal(items.length, 5 + 1 + LIST.length + 1 + 4, 'pages, the catalog, every app, "+", and the foot');
   for (const item of items) {
     assert.match(item, /aria-label="[^"]+"/, item);
     assert.match(item, /type="button"/, item);
     assert.match(item, /data-tip="[^"]+"/, `the name shows beside it: ${item}`);
   }
   const labels = items.map(item => /aria-label="([^"]*)"/.exec(item)[1]);
-  assert.deepEqual(labels, ['Home', 'Workspace canvas', 'Skills', 'Integrations', 'Automations', 'Apps', 'Reportes', 'Agenda', 'Vendas', 'Pipeline', 'Notifications', 'Report a problem', 'More', 'Settings']);
+  assert.deepEqual(labels, ['Home', 'Workspace canvas', 'Skills', 'Integrations', 'Automations', 'Apps', 'Reportes', 'Agenda', 'Vendas', 'Pipeline', 'New app', 'Notifications', 'Report a problem', 'More', 'Settings']);
   assert.equal(items.filter(item => /tabindex="0"/.test(item)).length, 1, 'one Tab stop');
   assert.equal(items.filter(item => /tabindex="-1"/.test(item)).length, items.length - 1);
   assert.match(items[1], /aria-current="page"/, 'the Mesa is where the rail is');

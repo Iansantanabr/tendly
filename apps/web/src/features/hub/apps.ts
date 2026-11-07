@@ -18,7 +18,11 @@ export interface HubApp {
   url: string;
   /** The app's folder in its workspace, `apps/<slug>/`. */
   code_path: string;
+  /** When a file of the app last changed (not `data/` or `files/`). */
   updated_at: string;
+  /** How many errors the last Tendly window showing the app reported (`diagnostics`), and when; 0 and null when none did. */
+  errors?: number;
+  errors_at?: string | null;
 }
 /** An app folder the host could not read (a broken app.json, say). */
 export interface HubAppError { workspace_id: string; slug: string; message: string }
@@ -77,8 +81,10 @@ export function colorFor(name: string): AppColor {
   return APP_COLORS[hash % APP_COLORS.length];
 }
 
-/** A new app (app.json + index.html) made by the host: blank, or the list of problems (`issues`). */
-export async function scaffoldApp(workspaceId: string, body: { slug: string; name: string; description?: string; color?: AppColor; template?: "blank" | "issues" }): Promise<HubApp> {
+/** The pages a new app can start from (`builder.ts` describes them); `issues` is the list "Report a problem" makes. */
+export type ScaffoldTemplate = "blank" | "kanban" | "table" | "calendar" | "dashboard" | "form" | "document" | "issues";
+/** A new app (app.json + index.html) made by the host from a template. */
+export async function scaffoldApp(workspaceId: string, body: { slug: string; name: string; description?: string; color?: AppColor; letter?: string; template?: ScaffoldTemplate }): Promise<HubApp> {
   const app = await request<HubApp>(`/hub/apps/${encodeURIComponent(workspaceId)}/scaffold`, json("POST", body));
   apps.list = [...apps.list.filter(item => !(item.workspace_id === app.workspace_id && item.slug === app.slug)), app];
   return app;

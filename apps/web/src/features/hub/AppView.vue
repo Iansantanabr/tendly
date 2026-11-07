@@ -30,9 +30,10 @@ import { showToast } from "../toasts";
 import { useI18n } from "../../i18n";
 import AppDataPanel from "./AppDataPanel.vue";
 import AppPermissions from "./AppPermissions.vue";
+import AppVersionsPanel from "./AppVersionsPanel.vue";
 import AppTile from "./AppTile.vue";
 import { appPagePath, apps, findApp, refreshApps } from "./apps";
-import { answerCall, bridgeFailure, createLimiter, decideGrants, hostMessage, loadFrame, loadGrants, renewFrame, type AppFrame, type AppGrants } from "./app-bridge";
+import { answerCall, bridgeFailure, createLimiter, decideGrants, hostMessage, loadFrame, loadGrants, renewFrame, reportDiagnostics, type AppFrame, type AppGrants } from "./app-bridge";
 import { clearAppContext, contextOwner, readContext, setAppContext } from "./app-context";
 import { appScreen, errorPlace, fixRequest, insideApp, kindLabel, readAppMessage, withError, type AppError } from "./app-errors";
 import { NOTICE_MS, changeNotice, changedFiles, latestChange, onChange, onLiveReconnect, undoChange, watchApp, watchRecords, type AppChange, type RecordEvent } from "./app-live";
@@ -186,6 +187,14 @@ const errorsButton = ref<HTMLButtonElement>();
 /** The app asked not to be reloaded while it has unsaved input. */
 const held = ref(false);
 watch(() => errors.value.length, count => { if (!count) errorsOpen.value = false; });
+// What this window saw goes to the server a moment later (the catalog's badge, `GET .../diagnostics` for an agent).
+let reportTimer: ReturnType<typeof setTimeout> | undefined;
+watch(errors, list => {
+  const current = app.value;
+  if (!current) return;
+  clearTimeout(reportTimer);
+  reportTimer = setTimeout(() => { void reportDiagnostics(current, place.value, list); }, 800);
+});
 /** This view of the app, for the context it sets (two tabs of one app do not clear each other's). */
 const owner = contextOwner();
 const limiter = createLimiter();
@@ -289,8 +298,14 @@ function moreKey(event: KeyboardEvent) {
   event.preventDefault();
   list[next]?.focus();
 }
-function openData(mode: "export" | "import") { closeMore(); grantsOpen.value = false; dataMode.value = mode; }
+function openData(mode: "export" | "import") { closeMore(); grantsOpen.value = false; dataMode.value = mode; versionsOpen.value = false; }
 function closeData() { dataMode.value = undefined; moreButton.value?.focus(); }
+
+// ---------------------------------------------------------------- versions of the whole app
+
+const versionsOpen = ref(false), versionsButton = ref<HTMLButtonElement>();
+function toggleVersions() { versionsOpen.value = !versionsOpen.value; if (versionsOpen.value) { dataMode.value = undefined; grantsOpen.value = false; } }
+function closeVersions() { versionsOpen.value = false; versionsButton.value?.focus(); }
 /** Records were imported. An app that listens was told to read again; one that does not is loaded again, unless it holds unsaved input. */
 function imported() {
   if (subscriptions.size || !frameSrc.value) return;
@@ -355,7 +370,7 @@ function reset() {
   frameSrc.value = undefined; address.value = undefined; frameProblem.value = ""; framing.value = true;
   place.value = ""; errors.value = []; held.value = false; subscriptions.clear();
   grants.value = undefined; grantsOpen.value = false; grantsProblem.value = "";
-  closeMore(); dataMode.value = undefined;
+  closeMore(); dataMode.value = undefined; versionsOpen.value = false;
 }
 function follow() {
   stopWatching?.(); stopWatching = undefined;
@@ -391,7 +406,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", outsideMore, true);
   stopWatching?.(); stopRecords?.(); stopReconnect?.();
   loads++; clearAppContext(liveKey.value, owner);
-  clearTimeout(noticeTimer); clearTimeout(echoTimer); clearTimeout(copiedTimer); clearTimeout(renewTimer);
+  clearTimeout(noticeTimer); clearTimeout(echoTimer); clearTimeout(copiedTimer); clearTimeout(renewTimer); clearTimeout(reportTimer);
 });
 </script>
 
@@ -407,6 +422,7 @@ onBeforeUnmount(() => {
       <div class="app-view-actions">
         <button v-if="errors.length" ref="errorsButton" type="button" class="small-button danger app-view-errors-button" :aria-expanded="errorsOpen" :title="t('Errors this app reported since it loaded')" @click="errorsOpen = !errorsOpen"><Icon name="info" :size="13" /><span>{{ t(errors.length === 1 ? '{count} error' : '{count} errors', { count: errors.length }) }}</span></button>
         <button v-if="asksAnything && !waitingForAnswer" ref="permissionsButton" type="button" class="small-button app-view-permissions" :aria-expanded="grantsOpen || grants?.status === 'ask'" :aria-label="t('Permissions')" :title="t('What this app is allowed to do')" @click="grantsOpen = !grantsOpen"><Icon name="shield" :size="13" /><span class="app-view-label">{{ t('Permissions') }}</span></button>
+        <button ref="versionsButton" type="button" class="small-button app-view-versions" :aria-expanded="versionsOpen" :aria-label="t('Versions')" :title="t('Every burst of changes to this app, and a way back to any of them')" :disabled="!app" @click="toggleVersions"><Icon name="timer" :size="13" /><span class="app-view-label">{{ t('Versions') }}</span></button>
         <button type="button" :class="['small-button', 'app-view-chat', { primary: mode === 'page' && chatOpen }]" :aria-pressed="mode === 'page' ? !!chatOpen : undefined" :aria-label="t('Chat')" :title="t('Talk to an agent about this app')" @click="emit('chat')"><Icon name="chat" :size="13" /><span class="app-view-label">{{ t('Chat') }}</span></button>
         <button v-if="mode === 'page'" type="button" class="small-button app-view-mesa" :disabled="!app" :aria-label="t('Open on the Mesa')" :title="t('Open this app in a tab on the Mesa')" @click="emit('mesa')"><Icon name="grid" :size="13" /><span class="app-view-label">{{ t('Open on the Mesa') }}</span></button>
         <button type="button" class="icon-button" :aria-label="t('Reload')" :title="t('Reload')" :disabled="!app" @click="reload"><Icon name="refresh" :size="14" /></button>
@@ -441,6 +457,7 @@ onBeforeUnmount(() => {
     </div>
     <AppPermissions v-if="grants && frameSrc && (grantsOpen || grants.status === 'ask')" layout="strip" :name="name" :grants="grants" :busy="deciding" :problem="grantsProblem" @decide="decide" @close="closeGrants" @keydown.esc="grants?.status !== 'ask' && closeGrants()" />
     <AppDataPanel v-if="app && dataMode" :app="app" :mode="dataMode" @close="closeData" @imported="imported" @keydown.esc.stop="closeData" />
+    <AppVersionsPanel v-if="app && versionsOpen" :app="app" @close="closeVersions" @keydown.esc.stop="closeVersions" />
     <div class="app-view-body">
       <!-- No allow-same-origin: the app is a page of its own, not a part of Tendly (see hub/apps/frame.rs). -->
       <iframe v-if="frameSrc" ref="frame" :key="`${frameSrc}#${reloads}`" class="app-view-frame" :src="frameSrc" :title="name" sandbox="allow-scripts allow-forms allow-modals allow-downloads allow-popups" allow="clipboard-write" referrerpolicy="no-referrer" @load="framing = false" />
@@ -500,7 +517,8 @@ onBeforeUnmount(() => {
 .app-view-code > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-view-code:hover { background: var(--fill); color: var(--ink); }
 .app-view-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex: none; max-width: 100%; margin-left: auto; }
-.app-view-chat, .app-view-mesa, .app-view-errors-button, .app-view-permissions { display: inline-flex; align-items: center; gap: 5px; }
+.app-view-chat, .app-view-mesa, .app-view-errors-button, .app-view-permissions, .app-view-versions { display: inline-flex; align-items: center; gap: 5px; }
+.app-view-versions[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .app-view-more-anchor { position: relative; display: inline-flex; }
 .app-view-more { position: absolute; top: calc(100% + 4px); right: 0; z-index: 6; display: grid; gap: 1px; width: max-content; min-width: 180px; max-width: min(260px, 80vw); padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--elevated); box-shadow: var(--shadow-md); }
 .app-view-more > button { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 30px; padding: 5px 8px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--ink-soft); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; }

@@ -21,6 +21,7 @@ import { appKey, arrangedApps } from "./app-order";
 import { inbox } from "./inbox";
 import { openReportApp } from "./report";
 import { RAIL_MORE, RAIL_NAV, badgeText, flyoutPlace, opensOptions, rovingIndex, setMesaSidebar, type RailTarget } from "./rail";
+import { refreshShortcuts, shortcutKey, shortcuts, type Shortcut } from "./shortcuts";
 
 const props = withDefaults(defineProps<{
   /** The page on screen ("canvas" on the Mesa), for the current item. */
@@ -42,6 +43,10 @@ const emit = defineEmits<{
   openApp: [app: HubApp];
   /** "Report a problem": its app in a tab of the Mesa, beside what you were doing. */
   openOnMesa: [app: HubApp];
+  /** A shortcut's tile: the site, in a pane or a tab (App.vue decides). */
+  openShortcut: [shortcut: Shortcut];
+  /** "+": the Apps page with the cursor in "Create with the agent". */
+  newApp: [];
   togglePanel: [];
 }>();
 const { t } = useI18n();
@@ -51,11 +56,11 @@ const tiles = computed(() => arrangedApps.value);
 const openSet = computed(() => new Set(props.openApps));
 const badge = computed(() => badgeText(props.inboxUnread));
 const bellLabel = computed(() => badge.value ? t('Notifications, {count} unread', { count: props.inboxUnread }) : t('Notifications'));
-onMounted(() => { if (!apps.loaded) void refreshApps(); });
+onMounted(() => { if (!apps.loaded) void refreshApps(); if (!shortcuts.loaded) void refreshShortcuts(); });
 
 // ---------------------------------------------------------------- one Tab stop, arrows inside
 
-const ids = computed(() => [...RAIL_NAV.map(item => `nav:${item.id}`), "nav:apps", ...tiles.value.map(app => `app:${appKey(app)}`), "foot:inbox", "foot:report", "foot:more", "foot:settings"]);
+const ids = computed(() => [...RAIL_NAV.map(item => `nav:${item.id}`), "nav:apps", ...tiles.value.map(app => `app:${appKey(app)}`), ...shortcuts.list.map(item => `link:${shortcutKey(item)}`), "nav:new", "foot:inbox", "foot:report", "foot:more", "foot:settings"]);
 const active = ref("nav:canvas");
 watch(ids, list => { if (!list.includes(active.value)) active.value = "nav:canvas"; });
 const tab = (id: string) => active.value === id ? 0 : -1;
@@ -173,6 +178,8 @@ function closeAll() { hideTip(); closeMenu(); }
 
 function go(target: RailTarget) { closeAll(); emit("go", target); }
 function open(app: HubApp) { closeAll(); emit("openApp", app); }
+function openShortcut(shortcut: Shortcut) { closeAll(); emit("openShortcut", shortcut); }
+function newApp() { closeAll(); emit("newApp"); }
 /** Onto the Mesa as a pane, the way a conversation is dragged from the list. */
 function drag(event: DragEvent, app: HubApp) {
   closeAll();
@@ -211,6 +218,8 @@ async function expand() {
       <button type="button" :class="['rail-item', { current: currentPage === 'apps' }]" data-rail-id="nav:apps" :data-tip="t('Apps')" :tabindex="tab('nav:apps')" :aria-label="t('Apps')" :aria-current="currentPage === 'apps' ? 'page' : undefined" @click="go('apps')"><Icon name="apps" :size="19" /></button>
       <div class="rail-apps" role="group" :aria-label="t('Your apps')" @scroll.passive="onAppsScroll">
         <button v-for="app in tiles" :key="appKey(app)" type="button" :class="['rail-item', 'rail-app', { current: currentApp === appKey(app), open: openSet.has(appKey(app)) }]" :data-rail-id="`app:${appKey(app)}`" :data-rail-app="appKey(app)" :data-tip="app.name" :tabindex="tab(`app:${appKey(app)}`)" :aria-label="app.name" :aria-current="currentApp === appKey(app) ? 'true' : undefined" aria-describedby="rail-app-hint" draggable="true" @dragstart="drag($event, app)" @click="open(app)" @contextmenu.prevent="appMenu($event, app)"><AppTile :name="app.name" :letter="app.letter" :color="app.color" :size="28" /><i v-if="openSet.has(appKey(app))" class="rail-open-dot" aria-hidden="true" /></button>
+        <button v-for="item in shortcuts.list" :key="shortcutKey(item)" type="button" :class="['rail-item', 'rail-app', 'rail-link', { current: currentApp === shortcutKey(item), open: openSet.has(shortcutKey(item)) }]" :data-rail-id="`link:${shortcutKey(item)}`" :data-tip="item.name" :tabindex="tab(`link:${shortcutKey(item)}`)" :aria-label="t('{name} (shortcut)', { name: item.name })" :aria-current="currentApp === shortcutKey(item) ? 'true' : undefined" @click="openShortcut(item)"><AppTile :name="item.name" :letter="item.letter" :color="item.color" :size="28" /><i class="rail-link-mark" aria-hidden="true"><Icon name="arrow" :size="8" /></i><i v-if="openSet.has(shortcutKey(item))" class="rail-open-dot" aria-hidden="true" /></button>
+        <button type="button" class="rail-item rail-new" data-rail-id="nav:new" :data-tip="t('New app')" :tabindex="tab('nav:new')" :aria-label="t('New app')" @click="newApp"><Icon name="plus" :size="17" /></button>
       </div>
       <div class="rail-group rail-foot" role="group" :aria-label="t('Notifications and settings')">
         <button type="button" :class="['rail-item', { current: currentPage === 'inbox' }]" data-rail-id="foot:inbox" :data-tip="bellLabel" :tabindex="tab('foot:inbox')" :aria-label="bellLabel" :aria-current="currentPage === 'inbox' ? 'page' : undefined" @click="go('inbox')"><Icon name="bell" :size="19" /><small v-if="badge" class="rail-badge" aria-hidden="true">{{ badge }}</small></button>
@@ -262,6 +271,10 @@ async function expand() {
 .rail-app.current { background: var(--elevated); box-shadow: 0 0 0 1px var(--line-strong), var(--shadow-sm); }
 .rail-app.current::before { content: ""; position: absolute; left: -7px; top: 10px; bottom: 10px; width: 3px; border-radius: var(--radius-full); background: var(--accent); }
 .rail-open-dot { position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg-accent); }
+.rail-link { cursor: pointer; }
+.rail-link-mark { position: absolute; right: 2px; top: 2px; display: grid; place-items: center; width: 12px; height: 12px; border-radius: 50%; background: var(--elevated); color: var(--muted); box-shadow: 0 0 0 1px var(--line); }
+.rail-new { width: 32px; height: 32px; margin-top: 2px; border: 1px dashed var(--line-input); color: var(--muted); }
+.rail-new:hover { border-style: solid; }
 .rail-badge { position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--radius-full); background: var(--accent); color: var(--on-accent); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-align: center; }
 .rail-panel-toggle { position: absolute; top: 50%; left: calc(100% + var(--rail-left, 0px) - 11px); display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--elevated); color: var(--muted); box-shadow: var(--shadow-sm); cursor: pointer; transform: translateY(-50%); }
 .rail-panel-toggle:hover { color: var(--ink); border-color: var(--line-strong); }
@@ -279,7 +292,7 @@ async function expand() {
 .rail-notice { display: grid; gap: var(--space-2); justify-items: start; padding: 6px 8px; }
 .rail-notice > p { margin: 0; font-size: var(--text-sm); line-height: 1.45; color: var(--danger-ink); overflow-wrap: anywhere; }
 @media (pointer: coarse) {
-  .rail-item { width: 44px; height: 44px; }
+  .rail-item, .rail-new { width: 44px; height: 44px; }
   .rail-menu > button { min-height: 44px; }
   /* The handle stays small to look at; its target reaches 44px around it. */
   .rail-panel-toggle::after { content: ""; position: absolute; inset: -11px; }

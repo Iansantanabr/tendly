@@ -60,6 +60,9 @@ export function opensOptions(event: { key: string; shiftKey?: boolean }): boolea
 /** The app an app pane shows, as `<workspace id>/<slug>`; undefined for any other pane. */
 export function appPaneKey(pane: Pick<PaneNode, "kind" | "metadata"> | undefined): string | undefined {
   if (pane?.kind !== "app") return undefined;
+  // A shortcut rides on the app pane kind (`shortcuts.ts`): its key is its own.
+  const shortcut = pane.metadata?.shortcut;
+  if (typeof shortcut === "string" && shortcut) return `shortcut/${shortcut}`;
   const workspace = pane.metadata?.workspace_id, slug = pane.metadata?.slug;
   return typeof workspace === "string" && typeof slug === "string" && workspace && slug ? `${workspace}/${slug}` : undefined;
 }

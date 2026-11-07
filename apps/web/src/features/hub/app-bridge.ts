@@ -320,3 +320,19 @@ export function bridgeFailure(cause: unknown): { message: string; status?: numbe
 
 /** What the page tells the frame, in the envelope the SDK listens for. */
 export function hostMessage(body: Record<string, unknown>): Record<string, unknown> { return { ...body, source: "tendly-host", v: 2 }; }
+
+/**
+ * Tells the server what this window saw of the app since it loaded, so
+ * `GET .../diagnostics` (an agent with curl, the catalog's error badge) can
+ * say it without a browser. The whole list each time; an empty one says the
+ * page loaded clean. Failures are ignored: this is a report, not a need.
+ */
+/** What the server knows of an app's health: its static problems and the errors the last window reported. */
+export function fetchDiagnostics(app: AppId): Promise<{ ok: boolean; problems: { kind: string; message: string; file: string }[]; runtime: { page: string; reported_at: string; count: number; errors: { kind: string; message: string; file: string; line: number; column: number; count: number }[] } | null }> {
+  return request(`${appPath(app)}/diagnostics`);
+}
+
+export async function reportDiagnostics(app: AppId, page: string, errors: readonly { kind: string; message: string; file?: string; line?: number; column?: number; count: number }[]): Promise<void> {
+  const body = { page, errors: errors.slice(-50).map(error => ({ kind: error.kind, message: error.message, file: error.file ?? "", line: error.line ?? 0, column: error.column ?? 0, count: error.count })) };
+  try { await request(`${appPath(app)}/diagnostics`, json("PUT", body)); } catch { /* Said nowhere: the header already shows the errors. */ }
+}

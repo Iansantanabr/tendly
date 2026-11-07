@@ -3,6 +3,7 @@ import { computed } from "vue";
 import type { PaneNode, Workspace } from "@tendly/protocol";
 import { paneString } from "../pane-context";
 import AppView from "./AppView.vue";
+import ShortcutView from "./ShortcutView.vue";
 import { requestAppChat } from "./app-chat";
 
 /**
@@ -14,7 +15,9 @@ const props = defineProps<{ pane: PaneNode; workspace: Workspace }>();
 const emit = defineEmits<{ chat: []; remove: [] }>();
 
 const slug = computed(() => paneString(props.pane, "slug"));
-const fallback = computed(() => ({ name: paneString(props.pane, "name") ?? props.pane.title ?? undefined, letter: paneString(props.pane, "letter"), color: paneString(props.pane, "color") }));
+/** A shortcut (a site with a tile) rides on the same pane kind, with its id in `shortcut`. */
+const shortcut = computed(() => paneString(props.pane, "shortcut"));
+const fallback = computed(() => ({ name: paneString(props.pane, "name") ?? props.pane.title ?? undefined, letter: paneString(props.pane, "letter"), color: paneString(props.pane, "color"), url: paneString(props.pane, "url") }));
 /**
  * "Ask for a fix", and a draft the app wrote (`tendly.host.draftChat`): the
  * conversation open beside the app, or a new one there, with the text written
@@ -27,5 +30,6 @@ function fix(text: string, files?: { path: string; name: string }[]) {
 </script>
 
 <template>
-  <AppView mode="pane" :workspace-id="workspace.id" :workspace-name="workspace.name" :slug="slug" :fallback="fallback" @chat="emit('chat')" @fix="fix" @draft="fix" @remove="emit('remove')" />
+  <ShortcutView v-if="shortcut" :id="shortcut" :fallback="fallback" @remove="emit('remove')" />
+  <AppView v-else mode="pane" :workspace-id="workspace.id" :workspace-name="workspace.name" :slug="slug" :fallback="fallback" @chat="emit('chat')" @fix="fix" @draft="fix" @remove="emit('remove')" />
 </template>

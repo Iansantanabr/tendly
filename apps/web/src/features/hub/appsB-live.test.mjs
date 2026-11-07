@@ -413,7 +413,7 @@ test('the full-screen header names every action, in the order of the plan', asyn
   assert.match(html, /<section class="app-view is-page" aria-label="Pipeline"/);
   const bar = /<header class="app-view-bar"[\s\S]*?<\/header>/.exec(html)[0];
   const buttons = tags(bar, /<button[^>]*>/g);
-  assert.deepEqual(buttons.map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Show apps/pipeline/ in the file panel', 'Chat', 'Open on the Mesa', 'Reload', 'Copy link', 'Open in new tab', 'More']);
+  assert.deepEqual(buttons.map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Show apps/pipeline/ in the file panel', 'Versions', 'Chat', 'Open on the Mesa', 'Reload', 'Copy link', 'Open in new tab', 'More']);
   for (const button of buttons) { assert.match(button, /type="button"/); assert.match(button, /title="[^"]+"/); }
   // The last one is a menu (export and import, stage D), closed until it is asked for.
   assert.match(buttons.at(-1), /aria-haspopup="menu" aria-expanded="false"/);
@@ -422,7 +422,7 @@ test('the full-screen header names every action, in the order of the plan', asyn
   assert.match(bar, /code in apps\/pipeline\//);
   assert.match(bar, /<span class="app-tile"[^>]*>P<\/span>/);
   // Chat says whether its column is open.
-  assert.match(buttons[1], /aria-pressed="false"/);
+  assert.match(buttons[2], /aria-pressed="false"/);
   const pressed = /<button[^>]*aria-label="Chat"[^>]*>/.exec(await render(View, { ...PAGE, chatOpen: true }))[0];
   assert.match(pressed, /aria-pressed="true"/);
   assert.match(pressed, /class="[^"]*\bprimary\b/);
@@ -436,7 +436,7 @@ test('a pane keeps its slim bar: Chat, reload, copy link and open outside', asyn
   stage([APP]);
   const html = await render(View, { ...PAGE, mode: 'pane' });
   const bar = /<header class="app-view-bar"[\s\S]*?<\/header>/.exec(html)[0];
-  assert.deepEqual(tags(bar, /<button[^>]*>/g).map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Chat', 'Reload', 'Copy link', 'Open in new tab', 'More']);
+  assert.deepEqual(tags(bar, /<button[^>]*>/g).map(button => /aria-label="([^"]*)"/.exec(button)?.[1]), ['Versions', 'Chat', 'Reload', 'Copy link', 'Open in new tab', 'More']);
   assert.match(bar, /<code class="app-view-path"[^>]*>apps\/pipeline\/<\/code>/);
   assert.doesNotMatch(bar, /aria-pressed/);
   assert.doesNotMatch(bar, /Open on the Mesa/);
@@ -574,7 +574,7 @@ test('the socket hands every message to the apps, and the frame follows them', (
   assert.doesNotMatch(view, /allow-same-origin"|allow-same-origin /);
   // A pane is the same view, and its "Ask for a fix" goes through the Mesa.
   const pane = read('AppPane.vue');
-  assert.match(pane, /<AppView mode="pane"[^>]*@chat="emit\('chat'\)" @fix="fix" @draft="fix" @remove="emit\('remove'\)" \/>/);
+  assert.match(pane, /<AppView v-else mode="pane"[^>]*@chat="emit\('chat'\)" @fix="fix" @draft="fix" @remove="emit\('remove'\)" \/>/);
   assert.match(pane, /requestAppChat\(\{ workspaceId: props\.workspace\.id, slug: slug\.value,/);
 });
 

@@ -4,14 +4,18 @@
  * system holds (replica/design/components.md). Not in any menu; developer page,
  * so its labels are not translated.
  */
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import PageShell from "../PageShell.vue";
 import Icon from "../Icon.vue";
 import AppTile from "./AppTile.vue";
+import { darkScheme } from "../theme";
 
 const emit = defineEmits<{ back: [] }>();
 const on = ref(true);
 const colours = ["amber", "green", "blue", "violet", "rose", "slate", "teal", "orange"];
+/** The app kit's demo page, framed like an app (sandboxed, its own origin), at the width chosen. */
+const kitWidth = ref<"360" | "640" | "full">("full");
+const kitSrc = computed(() => `/api/hub/apps/kit-demo.html?theme=${darkScheme.value ? "dark" : "light"}`);
 const inks = [["--ink", "Text"], ["--ink-soft", "Text soft"], ["--muted", "Muted, 4.5:1"], ["--faint", "Faint, icons and placeholders only"]];
 </script>
 
@@ -65,6 +69,16 @@ const inks = [["--ink", "Text"], ["--ink-soft", "Text soft"], ["--muted", "Muted
           <span v-for="c in colours" :key="c" class="tile-sample"><AppTile :name="c" :color="c" :size="40" /><small>{{ c }}</small></span>
         </div>
       </section>
+      <section class="kit">
+        <h2>App kit (kit.css + kit.js, as an app sees it)</h2>
+        <div class="row">
+          <button v-for="w in ['360', '640', 'full'] as const" :key="w" type="button" :class="['small-button', { primary: kitWidth === w }]" @click="kitWidth = w">{{ w === 'full' ? 'Full width' : `${w}px` }}</button>
+          <a class="link-button" href="/api/hub/apps/kit-demo.html" target="_blank" rel="noopener">Open in a tab</a>
+        </div>
+        <div class="kit-frame-box" :style="{ width: kitWidth === 'full' ? '100%' : `${kitWidth}px` }">
+          <iframe :key="kitSrc" class="kit-frame" :src="kitSrc" title="App kit demo" sandbox="allow-scripts allow-forms allow-modals" />
+        </div>
+      </section>
       <section>
         <h2>Notices</h2>
         <p class="inline-notice">An inline notice for information.</p>
@@ -98,4 +112,8 @@ const inks = [["--ink", "Text"], ["--ink-soft", "Text soft"], ["--muted", "Muted
 .chip.suggested { background: none; border: 1px dashed var(--line-input); }
 .chip.added { background: var(--fill); border: 1px solid transparent; color: var(--ink); }
 .tile-sample { display: grid; justify-items: center; gap: 4px; font-size: var(--text-xs); color: var(--muted); }
+.kit { max-width: none; }
+.kit-frame-box { max-width: 100%; height: 640px; border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); }
+.kit-frame { width: 100%; height: 100%; border: 0; }
+.link-button { border: 0; background: none; color: var(--muted); font: inherit; font-size: var(--text-sm); text-decoration: underline; }
 </style>

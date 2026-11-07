@@ -17,6 +17,7 @@ import { continueTarget, effortOptions, keepOffered, modelOptions, permissionOpt
 import AppTile from "./AppTile.vue";
 import { apps, refreshApps, type HubApp } from "./apps";
 import { arrangedApps } from "./app-order";
+import { refreshShortcuts, shortcuts, type Shortcut } from "./shortcuts";
 import { conversationChips, insertAt, parseConversationLink, pastedConversation, removeConversationChip, restoreConversationChips, takeConversationChips, withConversations } from "./conversation-link";
 import { speechLang, useDictation } from "./dictation";
 import DictationButton from "./DictationButton.vue";
@@ -29,7 +30,7 @@ import InstallHint from "./InstallHint.vue";
  * what changed lately and the latest conversations, each one click from the Mesa.
  */
 const props = defineProps<{ workspaces: Workspace[]; sessions: Session[]; profiles: EndpointProfile[]; selectedWorkspaceId?: string }>();
-const emit = defineEmits<{ openSession: [session: Session]; started: [id: string]; openFile: [workspaceId: string, path: string]; openCanvas: []; openApp: [app: HubApp]; apps: [] }>();
+const emit = defineEmits<{ openSession: [session: Session]; started: [id: string]; openFile: [workspaceId: string, path: string]; openCanvas: []; openApp: [app: HubApp]; openShortcut: [shortcut: Shortcut]; apps: [] }>();
 const { t, locale } = useI18n();
 
 const STORAGE = "tendly.hub.home";
@@ -99,6 +100,7 @@ async function loadRecent() {
   catch { recent.value = []; }
 }
 onMounted(async () => {
+  void refreshShortcuts();
   void loadRecent(); void loadConversationsWorkspace(); void refreshApps(); void loadAccountQuotas();
   try { await loadPreferences(); } catch { /* The defaults then come from the accounts alone. */ }
   restoreChoices();
@@ -106,6 +108,7 @@ onMounted(async () => {
 });
 /** The first eight, in the order of the rail and the sidebar; hidden apps stay out. */
 const homeApps = computed(() => arrangedApps.value.slice(0, 8));
+const homeShortcuts = computed(() => shortcuts.list.slice(0, Math.max(0, 8 - homeApps.value.length)));
 
 /** The composer's key for conversation chips. */
 const CHIPS = "home";
@@ -257,11 +260,14 @@ const suggestions = computed(() => [
 
         <article class="home-card">
           <header><h2>{{ t('Apps') }}</h2><button type="button" class="link-button" @click="emit('apps')">+ {{ t('New') }}</button></header>
-          <p v-if="!apps.list.length" class="home-empty">{{ t('No apps yet. Ask an agent to build one for you.') }}</p>
-          <p v-else-if="!homeApps.length" class="home-empty">{{ t('Every app is hidden.') }} <button type="button" class="link-button" @click="emit('apps')">{{ t('See all apps') }}</button></p>
+          <p v-if="!apps.list.length && !shortcuts.list.length" class="home-empty">{{ t('No apps yet. Ask an agent to build one for you.') }}</p>
+          <p v-else-if="!homeApps.length && !homeShortcuts.length" class="home-empty">{{ t('Every app is hidden.') }} <button type="button" class="link-button" @click="emit('apps')">{{ t('See all apps') }}</button></p>
           <div v-else class="home-apps">
             <button v-for="app in homeApps" :key="app.workspace_id + app.slug" type="button" class="home-app" :title="app.description || app.name" @click="emit('openApp', app)">
               <AppTile :name="app.name" :letter="app.letter" :color="app.color" :size="36" /><span>{{ app.name }}</span>
+            </button>
+            <button v-for="shortcut in homeShortcuts" :key="shortcut.id" type="button" class="home-app" :title="shortcut.url" @click="emit('openShortcut', shortcut)">
+              <AppTile :name="shortcut.name" :letter="shortcut.letter" :color="shortcut.color" :size="36" /><span>{{ shortcut.name }}</span>
             </button>
           </div>
         </article>

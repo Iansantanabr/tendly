@@ -25,7 +25,12 @@ import AppsPage from "./features/hub/AppsPage.vue";
 import AppFullPage from "./features/hub/AppFullPage.vue";
 import { appAttachment, chatPaneFor, fillComposer, onAppChatRequest, sideChatSession } from "./features/hub/app-chat";
 import { onAppOpen } from "./features/hub/app-bridge";
-import { refreshApps, type HubApp } from "./features/hub/apps";
+import { refreshApps, apps as hubApps, type HubApp, type HubAppError } from "./features/hub/apps";
+import { fetchDiagnostics } from "./features/hub/app-bridge";
+import { showToast } from "./features/toasts";
+import { fixRequest, type AppError } from "./features/hub/app-errors";
+import { brokenAppPrompt } from "./features/hub/builder";
+import { checkShortcut, shortcutOpening, shortcutPane, verdictFresh, shortcuts as hubShortcuts, type Shortcut } from "./features/hub/shortcuts";
 import IconRail from "./features/hub/IconRail.vue";
 import { appPaneKey, mesaSidebar, openAppKeys, sidebarLayout, type RailTarget } from "./features/hub/rail";
 import { loadHubSettings } from "./features/hub/settings";
@@ -174,6 +179,59 @@ function openApp(app: HubApp) {
   if (route.name !== "canvas") void router.push({ name: "canvas" });
   void nextTick(() => canvas.value?.openPane(appPane(app)));
 }
+/**
+ * A new app from "Create with the agent", and "Ask for a fix" from the
+ * catalog: the app in a tab of the Mesa, a conversation of its project beside
+ * it, and `text` written in that composer with the app as a chip. Never sent
+ * from here.
+ */
+async function openAppWithChat(app: HubApp, text: string) {
+  openApp(app);
+  await nextTick(); await nextTick();
+  const provider = lastQuickProvider();
+  const session = await quickSession(app.workspace_id, provider === "terminal" ? DEFAULT_CLIENT : provider, false, appPane(app).id, true);
+  if (session) fillComposer(session.id, { attach: appAttachment(app), text });
+}
+/** "Ask for a fix" on a catalog card: the errors the server kept for the app, written for the agent beside the app. */
+async function fixApp(app: HubApp) {
+  let text = "";
+  try {
+    const health = await fetchDiagnostics(app);
+    const errors = (health.runtime?.errors ?? []).map(error => ({ kind: error.kind as AppError["kind"], message: error.message, file: error.file, line: error.line, column: error.column, stack: "", page: health.runtime?.page ?? "", at: Date.parse(health.runtime?.reported_at ?? "") || Date.now(), count: error.count }));
+    text = errors.length ? fixRequest(app, errors, health.runtime?.page ?? "", t) : t('The app "{app}" (in apps/{slug}/) is showing errors. Find the cause and fix it, please.', { app: app.name, slug: app.slug });
+    if (health.problems.length) text += ["", "", ...health.problems.map(problem => `- ${problem.file}: ${problem.message}`)].join("\n");
+  } catch (cause) { report(cause); return; }
+  await openAppWithChat(app, text);
+}
+/** "Ask for a fix" on an app Tendly cannot read: a conversation of that project on the Mesa, the reason in its composer. */
+async function fixBroken(problem: HubAppError) {
+  sidebarOpen.value = false;
+  if (route.name !== "canvas") void router.push({ name: "canvas" });
+  await nextTick();
+  const provider = lastQuickProvider();
+  const session = await quickSession(problem.workspace_id, provider === "terminal" ? DEFAULT_CLIENT : provider, false, undefined, false);
+  if (session) fillComposer(session.id, { attach: { path: `apps/${problem.slug}/`, name: problem.slug }, text: brokenAppPrompt(problem.slug, problem.message) });
+}
+/** A shortcut's tile: the site in a pane of the Mesa when it lets itself be framed, else in a new tab, saying why. */
+async function openShortcut(shortcut: Shortcut) {
+  let current = shortcut;
+  if (!verdictFresh(current.embed, hubShortcuts.checkFreshSeconds)) {
+    try { current = await checkShortcut(current.id); } catch { /* The verdict kept, or none: a tab, then. */ }
+  }
+  const opening = shortcutOpening(current, window.location.protocol, t);
+  if (opening.where === "tab") {
+    window.open(current.url, "_blank", "noopener,noreferrer");
+    showToast(opening.reason, { tone: "info", duration: 8000 });
+    return;
+  }
+  const workspaceId = selectedWorkspaceId.value || workspaces.value[0]?.id;
+  if (!workspaceId) { window.open(current.url, "_blank", "noopener,noreferrer"); return; }
+  sidebarOpen.value = false;
+  if (route.name !== "canvas") void router.push({ name: "canvas" });
+  void nextTick(() => canvas.value?.openPane(shortcutPane(current, workspaceId)));
+}
+/** "+" on the rail: the Apps page, with the cursor in "Create with the agent". */
+function newAppFromRail() { hubApps.wantCreate = true; openPage("apps"); }
 /** A custom app on the whole page (`/apps/<workspace>/<slug>`), with the rail beside it. */
 function openAppPage(app: HubApp) {
   sidebarOpen.value = false;
@@ -959,7 +1017,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
     </header>
     <div class="app-body" :style="bodyStyle">
       <button v-if="sidebarOpen" class="drawer-overlay sidebar-overlay" :aria-label="t('Close workspace navigation')" @click="sidebarOpen = false"/>
-      <IconRail v-if="railMode" :current-page="page ?? 'canvas'" :inbox-unread="inbox.unread" :current-app="appFocus ? routeApp : appPaneKey(focusedPane)" :open-apps="openAppKeys(openPanes)" :panel-open="!sidebarCollapsed" :panel="!appFocus" :workspaces="workspaces" @go="railGo" @open-app="openAppPage" @open-on-mesa="openApp" @toggle-panel="toggleSidebar"/>
+      <IconRail v-if="railMode" :current-page="page ?? 'canvas'" :inbox-unread="inbox.unread" :current-app="appFocus ? routeApp : appPaneKey(focusedPane)" :open-apps="openAppKeys(openPanes)" :panel-open="!sidebarCollapsed" :panel="!appFocus" :workspaces="workspaces" @go="railGo" @open-app="openAppPage" @open-on-mesa="openApp" @open-shortcut="openShortcut" @new-app="newAppFromRail" @toggle-panel="toggleSidebar"/>
       <aside :class="['sidebar',{'drawer-open':sidebarOpen}]">
         <div v-if="sidebarRail&&!sidebarCollapsed" class="sidebar-resizer" role="separator" aria-orientation="vertical" :aria-label="t('Resize workspace panel')" :title="t('Drag to resize · double-click to reset')" @pointerdown.prevent="resizeSidebar" @dblclick="resetSidebarWidth"/>
         <WorkspaceSidebar ref="workspaceSidebar" :compact="railMode" @reveal-session="revealSession" :workspace-branches="workspaceBranches" @branch-switched="branchSwitched" :workspaces="workspaces" :sessions="sessions" :selected-workspace-id="selectedWorkspaceId" :selected-session-id="selectedSessionId" :history-supported="backendCapabilities.nativeHistory" :storage-key="storageKey" :archive-supported="backendCapabilities.sessionArchive" :ephemeral-supported="backendCapabilities.ephemeralSessions" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" @select-workspace="selectWorkspace" @open-session="openSession" @open-remote-session="openRemoteSession" @rename-session="renameSession" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions" @session-environment="environmentSessionId=$event;sidebarOpen=false" @open-files="openFiles" @open-changes="openChanges" @new-session="newSession" @quick-session="quickSession" @load-history="loadHistory" @add-workspace="showWorkspace=true" @canvas="sidebarOpen=false;router.push({ name: 'canvas' })" @all-sessions="openPage('sessions')" @system="openPage('system')" @usage="openPage('usage')" @home="openPage('home')" @inbox="openPage('inbox')" @automations="openPage('automations')" @integrations="openPage('integrations')" @skills="openPage('skills')" @apps="openPage('apps')" @open-app="openApp" @open-app-page="openAppPage" :inbox-unread="inbox.unread" @machines="openSettings('machines')" @show-in-sessions="(id, archived) => openPage('sessions', { highlight: id, archive: archived ? 'archived' : 'current' })" :current-page="page ?? 'canvas'"/>
@@ -985,11 +1043,11 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
         <section v-else class="welcome-screen"><div class="welcome-composition" aria-hidden="true"><span class="welcome-tile"><Icon name="spark" :size="35"/></span><span class="welcome-tile"><Icon name="git" :size="26"/><Icon name="file" :size="26"/></span></div><div class="eyebrow">{{ t('A LITTLE SPACE. ENDLESS POSSIBILITIES.') }}</div><h1>{{ t('Your agents.') }}<br/>{{ t('Your workspace.') }}</h1><p>{{ t('Claude Code, Codex, files and Git — together on your own machine. Arrange everything the way you think.') }}</p><button class="primary-button" :disabled="loading" @click="showWorkspace=true"><Icon name="plus" :size="17"/>{{ t(loading?'Connecting to host…':'Add a workspace') }}</button><small>{{ t('Rust + Vue · host native · browser first') }}</small></section>
         <SettingsPage v-if="page==='settings'" :profiles="profiles" :section="settingsRouteSection" @back="leavePage" @navigate="section => router.replace({ name: 'settings', params: { section } })" @changed="refreshProfiles"/>
         <SessionsPage v-else-if="page==='sessions'" :workspaces="workspaces" :sessions="sessions" :selected-session-id="selectedSessionId" :archive-supported="backendCapabilities.sessionArchive" :archive-busy-ids="archiveBusyIds" :keep-busy-ids="keepBusyIds" :delete-busy-ids="deleteBusyIds" :sessions-loading="sessionsLoading" :initial-archive="route.query.archive === 'archived' ? 'archived' : 'current'" :highlight-id="typeof route.query.highlight === 'string' ? route.query.highlight : undefined" @back="leavePage" @open-session="openSession" @rename-request="requestRenameSession" @session-environment="environmentSessionId=$event" @archive-session="archiveSession" @archive-sessions="archiveSessions" @delete-sessions="deleteSessions" @keep-session="keepSession" @refresh-sessions="refreshSessions"/>
-        <HomePage v-else-if="page==='home'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @open-session="openSession" @started="homeStarted" @open-file="openFileFromHome" @open-canvas="router.push({ name: 'canvas' })" @open-app="openAppPage" @apps="openPage('apps')"/>
+        <HomePage v-else-if="page==='home'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @open-session="openSession" @started="homeStarted" @open-file="openFileFromHome" @open-canvas="router.push({ name: 'canvas' })" @open-app="openAppPage" @open-shortcut="openShortcut" @apps="openPage('apps')"/>
         <InboxPage v-else-if="page==='inbox'" :sessions="sessions" @back="leavePage" @open-session="openSession"/>
         <AutomationsPage v-else-if="page==='automations'" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" @back="leavePage" @open-session="openSession" @started="homeStarted"/>
         <IntegrationsPage v-else-if="page==='integrations'" :workspaces="workspaces" @back="leavePage"/>
-        <AppsPage v-else-if="page==='apps'" :workspaces="workspaces" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @back="leavePage" @started="homeStarted" @open-app="openAppPage" @open-on-mesa="openApp"/>
+        <AppsPage v-else-if="page==='apps'" :workspaces="workspaces" :profiles="profiles" :selected-workspace-id="selectedWorkspaceId" @back="leavePage" @created="openAppWithChat" @fix-app="fixApp" @fix-broken="fixBroken" @open-shortcut="openShortcut" @open-app="openAppPage" @open-on-mesa="openApp"/>
         <AppFullPage v-else-if="page==='app'" :key="routeApp" :workspace-id="String(route.params.workspace)" :slug="String(route.params.slug)" :workspaces="workspaces" :sessions="sessions" :profiles="profiles" :start-chat="appSideChat" @open-on-mesa="openApp" @reveal-code="revealAppCode" @catalog="openPage('apps')" @session-changed="refreshSessions" @open-session="openSession" @rename-request="requestRenameSession" @session-environment="environmentSessionId=$event" @profiles="openSettings('endpoints')" @reveal-session="revealSession" @keep-session="keepSessionById" @open-reference="openReferenceOnMesa"/>
         <DesignPage v-else-if="page==='design'" @back="leavePage"/>
         <SkillsPage v-else-if="page==='skills'" :workspaces="workspaces" @back="leavePage" @open-file="openFileFromHome"/>
