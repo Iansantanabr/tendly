@@ -17,7 +17,7 @@ import { TEMPLATES, builderPrompt, suggest, type TemplateId } from "./builder";
 
 const props = defineProps<{ projects: Workspace[]; selectedWorkspaceId?: string; /** Where the cursor goes when "+" was pressed somewhere. */ focusKey?: number }>();
 const emit = defineEmits<{ /** The app exists: open it on the Mesa with this text in a composer beside it. */ created: [app: HubApp, prompt: string] }>();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const STORAGE = "tendly.hub.apps";
 const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE) ?? "{}"); } catch { return {}; } })();
@@ -35,7 +35,7 @@ watch(() => props.focusKey, async () => { await nextTick(); sentenceField.value?
 
 /** The sentence fills in whatever the person has not set by hand. */
 watch(() => form.sentence, sentence => {
-  const guess = suggest(sentence, own.template ? form.template : undefined);
+  const guess = suggest(sentence, own.template ? form.template : undefined, t);
   if (!own.template) form.template = guess.template;
   if (!own.name) form.name = guess.name;
   if (!own.letter) form.letter = guess.letter;
@@ -44,7 +44,7 @@ watch(() => form.sentence, sentence => {
 function pickTemplate(id: TemplateId) {
   own.template = true;
   form.template = id;
-  const guess = suggest(form.sentence, id);
+  const guess = suggest(form.sentence, id, t);
   if (!own.name) form.name = guess.name;
   if (!own.letter) form.letter = guess.letter;
   if (!own.color) form.color = guess.color;
@@ -58,7 +58,7 @@ async function create() {
   busy.value = true; problem.value = "";
   try {
     await refreshApps();
-    const app = await scaffoldApp(workspaceId, { slug: freeSlug(name, workspaceId), name, description: form.sentence.trim().slice(0, 500) || undefined, color: form.color, letter: form.letter.trim() || undefined, template: form.template });
+    const app = await scaffoldApp(workspaceId, { slug: freeSlug(name, workspaceId), name, description: form.sentence.trim().slice(0, 500) || undefined, color: form.color, letter: form.letter.trim() || undefined, template: form.template, locale: locale.value });
     const prompt = builderPrompt({ app, sentence: form.sentence, template: form.template });
     form.sentence = ""; own.template = own.name = own.letter = own.color = false;
     emit("created", app, prompt);

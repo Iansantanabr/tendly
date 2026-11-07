@@ -348,10 +348,16 @@ mod tests {
     fn hub_apps_diagnostics_every_template_passes_the_static_check() {
         let manifest = super::super::parse_manifest("demo", r#"{"name":"Demo","color":"blue"}"#).unwrap();
         for (name, _) in super::super::TEMPLATES {
-            let page = super::super::template_page(name, &manifest).unwrap();
-            let dir = app(&[("index.html", &page)]);
-            assert_eq!(check(dir.path(), "index.html"), Vec::new(), "template {name}");
-            assert!(!page.contains("{{"), "template {name} has a placeholder left");
+            for locale in [None, Some("pt-BR")] {
+                let page = super::super::template_page_in(name, &manifest, locale).unwrap();
+                let dir = app(&[("index.html", &page)]);
+                assert_eq!(check(dir.path(), "index.html"), Vec::new(), "template {name} {locale:?}");
+                assert!(!page.contains("{{"), "template {name} {locale:?} has a placeholder left");
+            }
+        }
+        for (name, _) in super::super::TEMPLATES_PT_BR {
+            let page = super::super::template_page_in(name, &manifest, Some("pt-BR")).unwrap();
+            assert!(page.contains(r#"<html lang="pt-BR""#), "template {name} in Portuguese says so");
         }
     }
 

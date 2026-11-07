@@ -813,14 +813,18 @@
       svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
       svg.setAttribute('role', 'img');
       svg.setAttribute('aria-label', (self.getAttribute('label') || '') + (data.length ? ': ' + data.map(function (d) { return text(d.label) + ' ' + number(d.value); }).join(', ') : ''));
-      var max = data.reduce(function (m, d) { return Math.max(m, Number(d.value) || 0); }, 0) || 1;
+      // A round top for the axis (2, 5, 10, 20…), so the middle line is a number worth reading:
+      // with nothing yet, 0 · 1 · 2 rather than 0 · 1 · 1.
+      var top0 = data.reduce(function (m, d) { return Math.max(m, Number(d.value) || 0); }, 0);
+      var mag = Math.pow(10, Math.floor(Math.log10(Math.max(top0, 1))));
+      var max = [1, 2, 5, 10].map(function (k) { return k * mag; }).filter(function (v) { return v >= top0 && v >= 2; })[0] || 2 * mag;
       var plotW = W - left - right, plotH = H - top - bottom;
       function el(name, attrs) { var node = document.createElementNS(SVG, name); Object.keys(attrs).forEach(function (k) { node.setAttribute(k, String(attrs[k])); }); return node; }
       [0, 0.5, 1].forEach(function (f) {
         var y = top + plotH - plotH * f;
         svg.appendChild(el('line', { class: 't-chart-axis', x1: left, x2: W - right, y1: y, y2: y }));
         var label = el('text', { class: 't-chart-label', x: left - 6, y: y + 4, 'text-anchor': 'end' });
-        label.textContent = number(max * f, 0);
+        label.textContent = number(max * f, Number.isInteger(max * f) ? 0 : 1);
         svg.appendChild(label);
       });
       var n = data.length, step = n ? plotW / n : plotW;
@@ -894,6 +898,8 @@
       clear(self);
       var title;
       try { title = new Intl.DateTimeFormat(locale(), { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1)); } catch (_) { title = m; }
+      // Only the first letter: "Novembro de 2026", not "Novembro De 2026" (CSS capitalize does every word).
+      title = String(title).charAt(0).toUpperCase() + String(title).slice(1);
       self.appendChild(h('div', { class: 't-cal-head' },
         h('strong', { text: title, 'aria-live': 'polite' }),
         h('button', { type: 'button', class: 't-button small', dataset: { nav: 'today' }, text: t('today') }),

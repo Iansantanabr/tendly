@@ -165,7 +165,7 @@ test('the create panel offers the seven templates and never a model call; creati
   assert.match(html, /Nothing is sent until you press send\./);
   const source = read('CreateAppPanel.vue');
   assert.doesNotMatch(source, /hub\/start/, 'no conversation is started from here');
-  assert.match(source, /scaffoldApp\(workspaceId, \{ slug: freeSlug\(name, workspaceId\), name, description: [^}]*template: form\.template \}\)/);
+  assert.match(source, /scaffoldApp\(workspaceId, \{ slug: freeSlug\(name, workspaceId\), name, description: [^}]*template: form\.template, locale: locale\.value \}\)/, 'the template comes in the person\'s language');
   assert.match(source, /emit\("created", app, prompt\)/);
   assert.match(source, /border: 1px solid var\(--line-input\)/, 'field borders');
   assert.match(source, /@media \(pointer: coarse\)/);
@@ -265,4 +265,15 @@ test('design rules: tokens only, no native confirm, touch targets', () => {
     assert.doesNotMatch(style, /font-size:\s*\d+px/, `${file}: no px font sizes`);
     assert.doesNotMatch(read(file), /window\.confirm|confirm\(/, `${file}: confirmations in place`);
   }
+});
+
+test('with nothing telling in the sentence, the name is the template\'s own, in the person\'s language', async () => {
+  const { guessName } = await import('./builder.ts');
+  const pt = { Blank: 'Em branco', 'Dashboard with charts': 'Painel com gráficos', 'Form + list': 'Formulário + lista', 'Kanban / CRM': 'Kanban / CRM' };
+  const label = text => pt[text] ?? text;
+  assert.equal(guessName('', 'blank', label), 'Em branco');
+  assert.equal(guessName('', 'dashboard', label), 'Painel');
+  assert.equal(guessName('', 'form', label), 'Formulário');
+  assert.equal(guessName('', 'kanban', label), 'Kanban');
+  assert.equal(guessName('', 'dashboard'), 'Dashboard', 'English without a translator');
 });

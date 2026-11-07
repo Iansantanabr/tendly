@@ -76,6 +76,18 @@ pub(crate) const TEMPLATES: &[(&str, &str)] = &[
     ("issues", include_str!("apps/templates/issues.html")),
 ];
 
+/// Fork: the same templates in Brazilian Portuguese, picked when the person's
+/// GCore is in Portuguese (`locale` on the scaffold). `issues` stays as it is.
+pub(crate) const TEMPLATES_PT_BR: &[(&str, &str)] = &[
+    ("blank", include_str!("apps/templates/pt-BR/blank.html")),
+    ("kanban", include_str!("apps/templates/pt-BR/kanban.html")),
+    ("table", include_str!("apps/templates/pt-BR/table.html")),
+    ("calendar", include_str!("apps/templates/pt-BR/calendar.html")),
+    ("dashboard", include_str!("apps/templates/pt-BR/dashboard.html")),
+    ("form", include_str!("apps/templates/pt-BR/form.html")),
+    ("document", include_str!("apps/templates/pt-BR/document.html")),
+];
+
 /// The colors an app may ask for, with the accent the blank app uses for each.
 pub(crate) const COLORS: &[(&str, &str)] = &[
     ("amber", "#d97706"),
@@ -889,6 +901,9 @@ struct ScaffoldBody {
     /// Which page the new app starts with: one of `TEMPLATES`, `blank` by default.
     #[serde(default)]
     template: Option<String>,
+    /// The person's language (`pt-BR`, `en`…), for the template's own words.
+    #[serde(default)]
+    locale: Option<String>,
 }
 
 fn escape_html(text: &str) -> String {
@@ -901,12 +916,21 @@ fn escape_html(text: &str) -> String {
 
 /// The page of a template, with the app's name, letter, colour and description in it.
 pub(crate) fn template_page(template: &str, manifest: &Manifest) -> Option<String> {
-    let page = TEMPLATES.iter().find(|(name, _)| *name == template).map(|(_, page)| *page)?;
-    let description = match (manifest.description.is_empty(), template) {
-        (false, _) => manifest.description.as_str(),
-        (true, "issues") => "Problems and ideas noted while using GCore.",
-        (true, "blank") => "A blank GCore app. Ask your agent to turn it into what you need.",
-        (true, _) => "Made from a template. Ask your agent to shape it.",
+    template_page_in(template, manifest, None)
+}
+
+/// `template_page` in the person's language: Portuguese for a `pt…` locale, English otherwise.
+pub(crate) fn template_page_in(template: &str, manifest: &Manifest, locale: Option<&str>) -> Option<String> {
+    let portuguese = locale.is_some_and(|l| l.to_ascii_lowercase().starts_with("pt"));
+    let localized = if portuguese { TEMPLATES_PT_BR.iter().find(|(name, _)| *name == template) } else { None };
+    let page = localized.or_else(|| TEMPLATES.iter().find(|(name, _)| *name == template)).map(|(_, page)| *page)?;
+    let description = match (manifest.description.is_empty(), template, portuguese) {
+        (false, _, _) => manifest.description.as_str(),
+        (true, "issues", _) => "Problems and ideas noted while using GCore.",
+        (true, "blank", false) => "A blank GCore app. Ask your agent to turn it into what you need.",
+        (true, "blank", true) => "Um app do GCore em branco. Peça ao seu agente para transformá-lo no que você precisa.",
+        (true, _, false) => "Made from a template. Ask your agent to shape it.",
+        (true, _, true) => "Feito a partir de um modelo. Peça ao seu agente para ajustá-lo.",
     };
     Some(
         page.replace("{{NAME}}", &escape_html(&manifest.name))
@@ -952,7 +976,7 @@ async fn scaffold_route(
     let workspace = crate::app::workspace(&state, id).await?;
     let root = crate::app::root(&state, id).await?;
     let template = body.template.as_deref().map(str::trim).filter(|t| !t.is_empty()).unwrap_or("blank");
-    let page = template_page(template, &parsed).ok_or_else(|| {
+    let page = template_page_in(template, &parsed, body.locale.as_deref()).ok_or_else(|| {
         let names: Vec<&str> = TEMPLATES.iter().map(|(name, _)| *name).collect();
         ApiError::bad(format!("Unknown template: use one of {}", names.join(", ")))
     })?;

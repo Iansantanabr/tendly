@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    /* The app's own styles go here. Colours, type and spacing: the --t-* variables of kit.css. */
+    .intro { max-width: 640px; }
+  </style>
+</head>
+<body>
+  <main class="t-page">
+    <header class="t-page-head">
+      <div class="t-toolbar">
+        <span class="t-tile" aria-hidden="true">{{LETTER}}</span>
+        <div>
+          <h1 class="t-title">{{NAME}}</h1>
+          <p class="t-muted">{{DESCRIPTION}}</p>
+        </div>
+      </div>
+    </header>
+
+    <section class="t-card intro">
+      <h2>Uma lista guardada pelo GCore</h2>
+      <p class="t-muted">Cada item abaixo é um registro da coleção "items": ele continua lá depois de recarregar, e dois painéis abertos deste app veem a mesma lista. Peça ao seu agente para transformar esta página no que você precisa.</p>
+      <form id="add" class="t-toolbar">
+        <input id="text" class="t-input" type="text" placeholder="Algo para guardar" aria-label="Algo para guardar" maxlength="200" required style="flex: 1 1 200px">
+        <button type="submit" class="t-button primary">Adicionar</button>
+      </form>
+    </section>
+
+    <div id="items"></div>
+  </main>
+
+  <script>
+    const items = tendly.db.collection('items');
+    const list = document.getElementById('items');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+
+    function render(records) {
+      tkit.clear(list);
+      if (!records.length) {
+        list.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Nada guardado ainda', text: 'Adicione o primeiro item acima.' }));
+        return;
+      }
+      const ul = tkit.h('ul', { class: 't-list' });
+      records.forEach(record => {
+        const remove = tkit.h('button', { type: 'button', class: 't-icon-button', 'aria-label': 'Remover ' + record.data.text, onClick: async () => {
+          if (!await tkit.confirm('Remover "' + record.data.text + '"?', { confirm: 'Remover', tone: 'danger' })) return;
+          try { await items.remove(record.id); } catch (error) { fail(error); }
+        } }, tkit.icon('trash', 15));
+        ul.appendChild(tkit.h('li', { class: 't-row' },
+          tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: record.data.text }), tkit.h('small', { text: tkit.ago(record.created_at) })),
+          remove));
+      });
+      list.appendChild(ul);
+    }
+
+    document.getElementById('add').addEventListener('submit', async event => {
+      event.preventDefault();
+      const field = document.getElementById('text');
+      const text = field.value.trim();
+      if (!text) return;
+      try { await items.insert({ text }); field.value = ''; field.focus(); tendly.host.holdReload(false); } catch (error) { fail(error); }
+    });
+    // While something is typed and not yet added, Tendly waits before reloading the app after a change.
+    document.getElementById('text').addEventListener('input', event => {
+      if (event.target.value.trim()) tendly.host.holdReload(true); else tendly.host.holdReload(false);
+    });
+
+    list.appendChild(tkit.h('t-state', { kind: 'loading' }));
+    tkit.live(items, render, { order: '-created_at', onError: error => {
+      tkit.clear(list);
+      list.appendChild(tkit.h('t-state', { kind: 'error', title: 'Não deu para carregar a lista', text: error.message }));
+    } });
+  </script>
+</body>
+</html>

@@ -109,7 +109,7 @@ h1, h2, h3, p { margin: 0; }
 .t-icon { flex: none; display: inline-block; vertical-align: middle; }
 
 /* ---- Page ----------------------------------------------------------------- */
-.t-page { display: grid; gap: var(--t-space-4); align-content: start; width: 100%; max-width: 1080px; margin: 0 auto; padding: var(--t-space-5) var(--t-space-4) var(--t-space-8); }
+.t-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--t-space-4); align-content: start; width: 100%; max-width: 1080px; margin: 0 auto; padding: var(--t-space-5) var(--t-space-4) var(--t-space-8); }
 .t-page.wide { max-width: none; }
 .t-page-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--t-space-2) var(--t-space-3); min-width: 0; }
 .t-page-head > :first-child { flex: 1 1 160px; min-width: 0; }
@@ -160,7 +160,7 @@ button.t-row:focus-visible { outline-offset: -2px; }
 .t-row > .t-row-text > small { color: var(--t-muted); font-size: var(--t-text-sm); }
 
 /* ---- t-app: a sidebar that becomes a bottom bar in a narrow pane ------------ */
-t-app { container: t-app / inline-size; display: grid; grid-template-columns: var(--t-nav-width) minmax(0, 1fr); height: 100vh; height: 100dvh; min-height: 0; background: var(--t-bg); }
+t-app { container: t-app / inline-size; display: grid; grid-template-columns: var(--t-nav-width) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; height: 100dvh; min-height: 0; background: var(--t-bg); }
 t-app:not(:has(> t-nav)) { grid-template-columns: minmax(0, 1fr); }
 t-nav { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; padding: var(--t-space-3) var(--t-space-2); border-right: 1px solid var(--t-line); background: var(--t-surface); overflow-y: auto; }
 t-nav > .t-nav-title { display: flex; align-items: center; gap: var(--t-space-2); min-width: 0; padding: 4px 8px 10px; font-weight: 600; }
@@ -174,12 +174,13 @@ t-app > .t-app-main { min-width: 0; min-height: 0; overflow: auto; }
 t-view { display: block; min-height: 100%; }
 t-view:not([active]) { display: none; }
 @container t-app (max-width: 640px) {
-  t-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-  t-nav { grid-row: 2; flex-direction: row; justify-content: space-around; gap: 0; padding: 2px 4px; padding-bottom: max(2px, env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--t-line); overflow: visible; }
+  /* A container query reaches only what is inside t-app, never t-app itself: the
+     children take the whole width, and the bar's row (implicit, auto) its own height. */
+  t-nav { grid-column: 1 / -1; grid-row: 2; flex-direction: row; justify-content: space-around; gap: 0; padding: 2px 4px; padding-bottom: max(2px, env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--t-line); overflow: visible; }
   t-nav > .t-nav-title { display: none; }
   t-nav > button { flex: 1 1 0; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; min-height: 48px; padding: 4px 2px; font-size: var(--t-text-xs); text-align: center; }
   t-nav > button > span { max-width: 100%; }
-  t-app > .t-app-main { grid-row: 1; }
+  t-app > .t-app-main { grid-column: 1 / -1; grid-row: 1; }
   .t-page { padding: var(--t-space-4) var(--t-space-3) var(--t-space-6); }
 }
 
@@ -267,7 +268,7 @@ t-chart .t-chart-dot { fill: var(--t-elevated); stroke: currentColor; stroke-wid
 /* ---- t-calendar ---------------------------------------------------------------- */
 t-calendar { container: t-calendar / inline-size; display: grid; gap: var(--t-space-2); min-width: 0; }
 .t-cal-head { display: flex; align-items: center; gap: var(--t-space-2); }
-.t-cal-head > strong { flex: 1; min-width: 0; font-size: var(--t-text-lg); font-weight: 600; text-transform: capitalize; }
+.t-cal-head > strong { flex: 1; min-width: 0; font-size: var(--t-text-lg); font-weight: 600; }
 .t-cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--t-line); border-radius: var(--t-radius-lg); background: var(--t-line); gap: 1px; overflow: hidden; }
 .t-cal-weekday { padding: 6px 4px; background: var(--t-surface); color: var(--t-muted); font-size: var(--t-text-xs); font-weight: 600; text-align: center; text-transform: capitalize; }
 .t-cal-day { display: grid; align-content: start; gap: 2px; min-width: 0; min-height: 84px; padding: 4px; border: 0; background: var(--t-elevated); color: var(--t-ink); font: inherit; text-align: left; cursor: pointer; }

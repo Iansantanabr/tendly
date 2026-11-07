@@ -82,7 +82,7 @@ const STOP = new Set(["o", "a", "os", "as", "um", "uma", "uns", "umas", "de", "d
 const SHAPE = new Set(["app", "aplicativo", "application", "ferramenta", "tool", "sistema", "system", "pagina", "page", "site", "simples", "simple", "pequeno", "pequena", "small", "little", "basico", "basic", "novo", "nova", "new"]);
 
 /** A name of two or three telling words from the sentence, title-cased, at most 30 characters. */
-export function guessName(sentence: string, template: TemplateId): string {
+export function guessName(sentence: string, template: TemplateId, label: (text: string) => string = text => text): string {
   const trimmed = sentence.trim().replace(LEAD, "");
   const raw = trimmed.replace(/[^\p{L}\p{N}\s-]/gu, " ").split(/\s+/).filter(Boolean);
   const telling = raw.filter(word => { const w = fold(word); return w.length > 1 && !STOP.has(w) && !SHAPE.has(w); });
@@ -91,16 +91,17 @@ export function guessName(sentence: string, template: TemplateId): string {
     if (chosen.join(" ").length + word.length + (chosen.length ? 1 : 0) > 30 || chosen.length >= 3) break;
     chosen.push(word);
   }
-  if (!chosen.length) return templateById(template).label.split(" / ")[0].split(" with")[0];
+  // Nothing telling in the sentence: the template's own name, in the person's language, short.
+  if (!chosen.length) return label(templateById(template).label).split(/ \/ | with | com | \+ /)[0];
   return chosen.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
 export interface Suggestion { template: TemplateId; name: string; letter: string; color: AppColor }
 
 /** Everything the panel fills in from the sentence; `template` can be the person's own choice. */
-export function suggest(sentence: string, template?: TemplateId): Suggestion {
+export function suggest(sentence: string, template?: TemplateId, label?: (text: string) => string): Suggestion {
   const chosen = template ?? guessTemplate(sentence);
-  const name = guessName(sentence, chosen);
+  const name = guessName(sentence, chosen, label);
   return { template: chosen, name, letter: [...name][0]?.toUpperCase() ?? "A", color: chosen === "blank" ? colorOfName(name) : templateById(chosen).color };
 }
 

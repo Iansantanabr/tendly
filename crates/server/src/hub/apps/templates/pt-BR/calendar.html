@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .agenda-head { display: flex; align-items: center; gap: var(--t-space-2); }
+    .agenda-head > h2 { flex: 1; }
+  </style>
+</head>
+<body>
+  <main class="t-page wide">
+    <header class="t-page-head">
+      <div class="t-toolbar">
+        <span class="t-tile" aria-hidden="true">{{LETTER}}</span>
+        <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+      </div>
+      <button type="button" class="t-button primary" id="new-event">Novo evento</button>
+    </header>
+    <t-calendar id="calendar"></t-calendar>
+    <section class="t-card">
+      <div class="agenda-head"><h2 id="agenda-title">Hoje</h2><button type="button" class="t-button small" id="add-here">Adicionar aqui</button></div>
+      <div id="agenda"></div>
+    </section>
+  </main>
+
+  <t-modal id="editor" title="Evento">
+    <form id="event-form" class="t-form">
+      <label class="t-field"><span>Título</span><input name="title" type="text" required maxlength="120"></label>
+      <div class="t-form-row">
+        <label class="t-field"><span>Data</span><input name="date" type="date" required></label>
+        <label class="t-field"><span>Hora</span><input name="time" type="time"></label>
+        <label class="t-field"><span>Tipo</span>
+          <select name="tone"><option value="">Normal</option><option value="ok">Feito</option><option value="warn">Atenção</option><option value="danger">Urgente</option></select>
+        </label>
+      </div>
+      <label class="t-field"><span>Notas</span><textarea name="notes" maxlength="2000"></textarea></label>
+      <div class="t-actions">
+        <button type="button" class="t-button danger" id="delete" hidden>Apagar</button>
+        <span class="t-spacer"></span>
+        <button type="button" class="t-button" id="cancel">Cancelar</button>
+        <button type="submit" class="t-button primary">Salvar</button>
+      </div>
+    </form>
+  </t-modal>
+
+  <script>
+    const events = tendly.db.collection('events');
+    const calendar = document.getElementById('calendar');
+    const agenda = document.getElementById('agenda');
+    const agendaTitle = document.getElementById('agenda-title');
+    const editor = document.getElementById('editor');
+    const form = document.getElementById('event-form');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let editing = null, store, selected = tkit.today();
+
+    function render(records) {
+      calendar.events = records.map(r => ({ id: r.id, date: r.data.date, title: (r.data.time ? r.data.time + ' ' : '') + r.data.title, tone: r.data.tone }));
+      drawAgenda();
+    }
+    function drawAgenda() {
+      agendaTitle.textContent = tkit.date(selected, 'long');
+      tkit.clear(agenda);
+      const mine = (store ? store.records : []).filter(r => r.data.date === selected).sort((a, b) => (a.data.time || '').localeCompare(b.data.time || ''));
+      if (!mine.length) { agenda.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Nada neste dia', text: 'Adicione um evento com o botão acima.' })); return; }
+      const list = tkit.h('ul', { class: 't-list' });
+      mine.forEach(record => {
+        const d = record.data;
+        list.appendChild(tkit.h('li', {}, tkit.h('button', { type: 'button', class: 't-row', onClick: () => openEditor(record) },
+          tkit.h('span', { class: 't-badge ' + (d.tone || ''), text: d.time || '—' }),
+          tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: d.title }), d.notes ? tkit.h('small', { text: d.notes }) : null))));
+      });
+      agenda.appendChild(list);
+    }
+    calendar.addEventListener('t-day', event => { selected = event.detail.date; drawAgenda(); });
+    calendar.addEventListener('t-open', event => openEditor(store.records.find(r => r.id === event.detail.id)));
+
+    function openEditor(record, date) {
+      editing = record || null;
+      tkit.fill(form, record ? record.data : { date: date || selected, title: '', time: '', tone: '', notes: '' });
+      document.getElementById('delete').hidden = !record;
+      editor.title = record ? 'Editar evento' : 'Novo evento';
+      editor.open();
+    }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const values = tkit.form(form);
+      try {
+        if (editing) await events.update(editing.id, values, { rev: editing.rev });
+        else await events.insert(values);
+        selected = values.date;
+        editor.close();
+      } catch (error) {
+        if (error.code === 'conflict') { tkit.toast('Alguém mudou este evento enquanto isso; ele foi recarregado.', { tone: 'error' }); editing = error.current; tkit.fill(form, editing.data); }
+        else fail(error);
+      }
+    });
+    document.getElementById('cancel').addEventListener('click', () => editor.close());
+    document.getElementById('delete').addEventListener('click', async () => {
+      if (!editing || !await tkit.confirm('Apagar "' + editing.data.title + '"?', { confirm: 'Apagar', tone: 'danger' })) return;
+      try { await events.remove(editing.id); editor.close(); } catch (error) { fail(error); }
+    });
+    document.getElementById('new-event').addEventListener('click', () => openEditor(null));
+    document.getElementById('add-here').addEventListener('click', () => openEditor(null, selected));
+    editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
+    form.addEventListener('input', () => { tendly.host.holdReload(true); });
+
+    calendar.selected = selected;
+    store = tkit.live(events, render, { onError: error => {
+      tkit.clear(agenda);
+      agenda.appendChild(tkit.h('t-state', { kind: 'error', title: 'Não deu para carregar os eventos', text: error.message }));
+    } });
+  </script>
+</body>
+</html>

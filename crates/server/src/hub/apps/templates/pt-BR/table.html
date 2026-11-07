@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+</head>
+<body>
+  <main class="t-page wide">
+    <header class="t-page-head">
+      <div class="t-toolbar">
+        <span class="t-tile" aria-hidden="true">{{LETTER}}</span>
+        <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+      </div>
+      <button type="button" class="t-button primary" id="new-row">Novo registro</button>
+    </header>
+    <div class="t-grid" id="stats"></div>
+    <t-pills id="category-filter"></t-pills>
+    <t-table id="table" searchable empty-text="Nenhum registro ainda. Adicione o primeiro."></t-table>
+  </main>
+
+  <t-modal id="editor" title="Registro">
+    <form id="row-form" class="t-form">
+      <label class="t-field"><span>Nome</span><input name="name" type="text" required maxlength="120"></label>
+      <div class="t-form-row">
+        <label class="t-field"><span>Categoria</span><input name="category" type="text" list="categories" maxlength="60"></label>
+        <label class="t-field"><span>Valor</span><input name="amount" type="number" step="0.01"></label>
+        <label class="t-field"><span>Data</span><input name="date" type="date"></label>
+      </div>
+      <datalist id="categories"></datalist>
+      <label class="t-field"><span>Notas</span><textarea name="notes" maxlength="2000"></textarea></label>
+      <div class="t-actions">
+        <button type="button" class="t-button danger" id="delete" hidden>Apagar</button>
+        <span class="t-spacer"></span>
+        <button type="button" class="t-button" id="cancel">Cancelar</button>
+        <button type="submit" class="t-button primary">Salvar</button>
+      </div>
+    </form>
+  </t-modal>
+
+  <script>
+    const entries = tendly.db.collection('entries');
+    const table = document.getElementById('table');
+    const pills = document.getElementById('category-filter');
+    const stats = document.getElementById('stats');
+    const editor = document.getElementById('editor');
+    const form = document.getElementById('row-form');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let editing = null, store;
+
+    table.columns = [
+      { key: 'name', label: 'Nome' },
+      { key: 'category', label: 'Categoria', type: 'badge' },
+      { key: 'amount', label: 'Valor', type: 'number' },
+      { key: 'date', label: 'Data', type: 'date' },
+      { key: 'notes', label: 'Notas' }
+    ];
+
+    function render(records) {
+      const rows = records.map(r => Object.assign({ id: r.id }, r.data));
+      table.rows = rows;
+      const categories = Object.keys(tkit.groupBy(rows, 'category')).filter(Boolean).sort();
+      pills.options = [{ value: '', label: 'Todos', count: rows.length }].concat(categories.map(c => ({ value: c, label: c, count: rows.filter(r => r.category === c).length })));
+      const list = document.getElementById('categories');
+      tkit.clear(list);
+      categories.forEach(c => list.appendChild(tkit.h('option', { value: c })));
+      const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      tkit.clear(stats);
+      [['Registros', tkit.number(rows.length, 0)], ['Total', tkit.number(total)], ['Categorias', tkit.number(categories.length, 0)]].forEach(([label, value]) => {
+        stats.appendChild(tkit.h('div', { class: 't-card t-stat' }, tkit.h('strong', { text: value }), tkit.h('span', { text: label })));
+      });
+    }
+
+    function openEditor(record) {
+      editing = record || null;
+      tkit.fill(form, record ? record.data : { date: tkit.today() });
+      document.getElementById('delete').hidden = !record;
+      editor.title = record ? 'Editar registro' : 'Novo registro';
+      editor.open();
+    }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const values = tkit.form(form);
+      try {
+        if (editing) await entries.update(editing.id, values, { rev: editing.rev });
+        else await entries.insert(values);
+        editor.close();
+      } catch (error) {
+        if (error.code === 'conflict') { tkit.toast('Alguém mudou este registro enquanto isso; ele foi recarregado.', { tone: 'error' }); editing = error.current; tkit.fill(form, editing.data); }
+        else fail(error);
+      }
+    });
+    document.getElementById('cancel').addEventListener('click', () => editor.close());
+    document.getElementById('delete').addEventListener('click', async () => {
+      if (!editing || !await tkit.confirm('Apagar "' + editing.data.name + '"?', { confirm: 'Apagar', tone: 'danger' })) return;
+      try { await entries.remove(editing.id); editor.close(); } catch (error) { fail(error); }
+    });
+    document.getElementById('new-row').addEventListener('click', () => openEditor(null));
+    editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
+    form.addEventListener('input', () => { tendly.host.holdReload(true); });
+    table.addEventListener('t-open', event => openEditor(store.records.find(r => r.id === event.detail.id)));
+    pills.value = '';
+    pills.addEventListener('t-change', event => { const category = event.detail.value; table.filter = category ? row => row.category === category : null; });
+
+    store = tkit.live(entries, render, { order: '-created_at', onError: error => {
+      tkit.clear(stats);
+      stats.appendChild(tkit.h('t-state', { kind: 'error', title: 'Não deu para carregar os registros', text: error.message }));
+    } });
+  </script>
+</body>
+</html>

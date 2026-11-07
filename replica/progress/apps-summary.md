@@ -43,3 +43,11 @@ Recarregue as abas do Tendly antes. Janela larga, tema claro, depois escuro; e u
 - Etapa F (apps com servidor): não começou; é para fazer com você acompanhando.
 - Publicar app para o time e papéis por pessoa: depois da VPS.
 - Nenhuma conversa de agente foi aberta nas rodadas: o loop "pedir mudança → ver mudado" com o agente de verdade é o seu primeiro teste.
+
+## Conferido no navegador (2026-11-07)
+
+Chrome de verdade (o navegador embutido do app Claude bloqueia molduras isoladas sem `allow-same-origin`, que é como os apps rodam desde a Etapa C; lá o app aparece em branco). Apps de teste na pasta oculta, apagados no fim.
+
+- **Funcionou:** os sete modelos sem erro; kanban (novo cartão no modal, arrastar entre colunas, continua depois de recarregar); "1 erro" no cabeçalho com a lista e "Pedir correção"; cartão de permissão Permitir/Recusar; app.json quebrado vira card laranja no catálogo; selo de erros no card; atalho que embute abre em painel, o que recusa abre em aba nova com o aviso; tiles dos atalhos no rail; Versões; tema escuro; o Gestor de Conteúdo.
+- **Corrigido:** no celular/painel estreito o app ocupava 208px e a barra inferior metade da altura (container query tentando mudar o próprio `t-app`); botão "Novo cartão" fora da tela no kanban estreito (`.t-page` sem coluna `minmax(0,1fr)`); modelos só em inglês (agora `templates/pt-BR/`, escolhidos pelo idioma do GCore); nome sugerido "Blank"; eixo do gráfico vazio "1 · 1 · 0"; "Novembro De 2026".
+- **Ficou para depois:** ícone do logo ainda é um "T"; abrir um atalho muda o workspace do topo para "Conversations"; motivo do app quebrado em inglês ("app.json is not valid JSON…"); rota do card mostra o id do workspace. Não testado: arrastar com o dedo num celular real, Safari, o ciclo com o agente.
