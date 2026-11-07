@@ -330,7 +330,16 @@ fn hold(store: &crate::hub::HubStore, blobs: &Path, root: &Path, workspace: Work
     if history::text_of(&bytes).is_none() {
         return Held::Other;
     }
-    match history::keep(store, blobs, workspace, path, &bytes) {
+    let kept = history::keep(store, blobs, workspace, path, &bytes).and_then(|()| {
+        // A file that was removed and is back with the same content as before: the
+        // history would keep no new version, and the removal would look as if it held.
+        match store.with(|c| super::versions::removal_open(c, &workspace.to_string(), path)) {
+            Ok(true) => history::keep_again(store, blobs, workspace, path, &bytes),
+            Ok(false) => Ok(()),
+            Err(error) => Err(error.to_string()),
+        }
+    });
+    match kept {
         Ok(()) => Held::Text(history::hash(&bytes)),
         Err(error) => {
             tracing::warn!(%error, %path, "app reload: could not keep a version");
@@ -504,7 +513,18 @@ async fn finish(state: &AppState, app: &AppId, burst: Burst) -> Option<Value> {
     })
     .await;
     match read {
-        Ok((files, fresh)) => live.close(app, files, overflow, fresh),
+        Ok((files, fresh)) => {
+            // Files that disappeared: the history keeps no trace of a removal, so one is noted here (`versions.rs`).
+            let gone: Vec<String> = files.iter().filter(|f| f.after == Held::Absent && f.before != Held::Absent).map(|f| f.path.clone()).collect();
+            if !gone.is_empty() {
+                let (store, ws) = (state.hub.clone(), workspace.to_string());
+                let noted = tokio::task::spawn_blocking(move || store.with(|c| super::versions::record_removals(c, &ws, &gone))).await;
+                if let Ok(Err(error)) | Err(error) = noted.map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string())) {
+                    tracing::warn!(%error, "app versions: could not note a removal");
+                }
+            }
+            live.close(app, files, overflow, fresh)
+        }
         Err(error) => {
             tracing::warn!(%error, "app reload: reading a burst failed");
             None

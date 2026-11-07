@@ -360,6 +360,31 @@ pub(super) fn keep(
     record_blocking(store, blobs, workspace, path, bytes, &Author::UNKNOWN, None).map(|_| ())
 }
 
+/// A version even when the latest already holds this content: a file that
+/// came back after being removed (`apps/versions.rs` notes the removal with
+/// the history's id, so the return needs an id of its own to close it).
+pub(super) fn keep_again(
+    store: &super::HubStore,
+    blobs: &FsPath,
+    workspace: WorkspaceId,
+    path: &str,
+    bytes: &[u8],
+) -> std::result::Result<(), String> {
+    let blob = hash(bytes);
+    write_blob(blobs, &blob, bytes).map_err(|e| e.to_string())?;
+    store
+        .with(|c| {
+            c.execute(
+                "INSERT INTO file_versions(workspace_id, path, blob, size, author_kind, session_id, created_at, message)
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, NULL)",
+                params![workspace.to_string(), path, blob, bytes.len() as i64, Author::UNKNOWN.kind, now()],
+            )?;
+            prune(c, &workspace.to_string(), path, &cutoff())
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// The content hash of a file's latest version, if it has one.
 pub(super) fn latest_blob(store: &super::HubStore, workspace: WorkspaceId, path: &str) -> Option<String> {
     store.with(|c| latest(c, &workspace.to_string(), path)).ok().flatten().map(|version| version.blob)

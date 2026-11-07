@@ -1593,3 +1593,223 @@ async fn hub_apps_notify_reaches_the_bell_with_a_link_to_the_app_and_is_limited(
     crate::hub::home::notify(&f.state, "automation_done", None, "Backup".into(), String::new()).await;
     assert_eq!(f.get("/api/hub/inbox").await.json()["items"][0]["link"], Value::Null);
 }
+
+// ---------------------------------------------------------------------------
+// Versions of the whole app (`versions.rs`)
+
+impl Fixture {
+    /// Moves the newest `count` file versions back in time (`hours_ago`, within what the history keeps), so the next burst is another version.
+    fn age(&self, count: i64, hours_ago: i64) {
+        let to = (chrono::Utc::now() - chrono::Duration::hours(hours_ago)).to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        self.state
+            .hub
+            .with(|c| {
+                c.execute(
+                    "UPDATE app_file_removals SET removed_at = ?1 WHERE after_version_id IN (SELECT id FROM file_versions ORDER BY id DESC LIMIT ?2)",
+                    rusqlite::params![to, count],
+                )?;
+                c.execute(
+                    "UPDATE file_versions SET created_at = ?1 WHERE id IN (SELECT id FROM file_versions ORDER BY id DESC LIMIT ?2)",
+                    rusqlite::params![to, count],
+                )
+            })
+            .unwrap();
+    }
+    async fn versions(&self, slug: &str) -> Value {
+        let reply = self.get(&format!("{}/versions", self.base(slug))).await;
+        assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
+        reply.json()
+    }
+    async fn restore(&self, slug: &str, id: i64) -> Reply {
+        self.send("POST", &format!("{}/versions/{id}/restore", self.base(slug)), axum::body::Body::empty(), true).await
+    }
+}
+
+#[tokio::test]
+async fn hub_apps_versions_group_the_history_and_restore_the_whole_app() {
+    let f = fixture();
+    f.scaffold("demo").await;
+    let original = f.read("apps/demo/index.html");
+    // Indexed at birth: the two files are the first version.
+    f.age(2, 3);
+
+    f.write("apps/demo/index.html", "<h1>v2</h1>");
+    f.write("apps/demo/style.css", "body { color: red; }");
+    f.touch(&["apps/demo/index.html", "apps/demo/style.css"]);
+    f.settle("demo").await.expect("second burst");
+    f.age(2, 2);
+
+    f.write("apps/demo/extra.js", "console.log(1);");
+    fs::remove_file(f.repo.join("apps/demo/style.css")).unwrap();
+    f.touch(&["apps/demo/extra.js", "apps/demo/style.css"]);
+    f.settle("demo").await.expect("third burst");
+    f.age(1, 1);
+
+    let listed = f.versions("demo").await;
+    assert_eq!(listed["truncated"], false);
+    let versions = listed["versions"].as_array().unwrap();
+    assert_eq!(versions.len(), 3, "{listed}");
+    assert_eq!(versions[0]["files"], json!(["extra.js"]));
+    assert_eq!(versions[0]["current"], true);
+    assert_eq!(versions[1]["files"], json!(["index.html", "style.css"]));
+    assert_eq!(versions[1]["current"], false);
+    let mut born: Vec<&str> = versions[2]["files"].as_array().unwrap().iter().map(|f| f.as_str().unwrap()).collect();
+    born.sort_unstable();
+    assert_eq!(born, ["app.json", "index.html"], "indexed at birth, in folder order: {listed}");
+    assert_eq!(versions[2]["author_kind"], "unknown");
+    assert!(versions[2]["at"].as_str().unwrap() < versions[1]["started_at"].as_str().unwrap());
+    let (v1, v2, v3) = (versions[2]["id"].as_i64().unwrap(), versions[1]["id"].as_i64().unwrap(), versions[0]["id"].as_i64().unwrap());
+
+    // Back to the second version: the stylesheet returns, the extra script goes, the page is already there.
+    let back = f.restore("demo", v2).await;
+    assert_eq!(back.status, StatusCode::OK, "{}", back.text());
+    let body = back.json();
+    assert_eq!(body["restored"], json!(["style.css"]));
+    assert_eq!(body["removed"], json!(["extra.js"]));
+    assert_eq!(body["unchanged"], json!(["app.json", "index.html"]));
+    assert_eq!(body["skipped"], json!([]));
+    assert_eq!(f.read("apps/demo/style.css"), "body { color: red; }");
+    assert!(!f.repo.join("apps/demo/extra.js").exists());
+    assert_eq!(f.read("apps/demo/index.html"), "<h1>v2</h1>");
+
+    // Back to the first: the page as scaffolded, no stylesheet, app.json kept.
+    let first = f.restore("demo", v1).await.json();
+    assert_eq!(first["restored"], json!(["index.html"]));
+    assert_eq!(first["removed"], json!(["style.css"]));
+    assert_eq!(f.read("apps/demo/index.html"), original);
+    assert!(f.repo.join("apps/demo/app.json").is_file());
+
+    // Forward to the third: the stylesheet had already been removed then, so it stays away.
+    f.touch(&["apps/demo/index.html", "apps/demo/style.css", "apps/demo/extra.js"]);
+    f.settle("demo").await;
+    let third = f.restore("demo", v3).await.json();
+    assert_eq!(third["restored"], json!(["extra.js", "index.html"]));
+    assert_eq!(third["removed"], json!([]));
+    assert!(!f.repo.join("apps/demo/style.css").exists(), "removed before that version");
+    assert_eq!(f.read("apps/demo/extra.js"), "console.log(1);");
+
+    // Every restore is new file versions, yours; nothing was deleted from the history.
+    let page = f.get(&format!("/api/hub/history?workspace_id={}&path=apps/demo/index.html", f.workspace)).await.json();
+    let authors: Vec<&str> = page["versions"].as_array().unwrap().iter().map(|v| v["author_kind"].as_str().unwrap()).collect();
+    assert_eq!(authors, ["you", "you", "unknown", "unknown"]);
+    let style = f.get(&format!("/api/hub/history?workspace_id={}&path=apps/demo/style.css", f.workspace)).await.json();
+    assert!(!style["versions"].as_array().unwrap().is_empty(), "the stylesheet's version is still there (the same content again is one version)");
+    let newest = f.versions("demo").await;
+    assert_eq!(newest["versions"][0]["author_kind"], "you", "the restore is the newest version");
+
+    // A file removed and put back with the same content: the removal no longer holds.
+    f.touch(&["apps/demo/index.html", "apps/demo/extra.js"]);
+    f.settle("demo").await.expect("the restore's writes");
+    fs::remove_file(f.repo.join("apps/demo/extra.js")).unwrap();
+    f.touch(&["apps/demo/extra.js"]);
+    f.settle("demo").await.expect("the removal");
+    f.write("apps/demo/extra.js", "console.log(1);");
+    f.touch(&["apps/demo/extra.js"]);
+    f.settle("demo").await.expect("the return");
+    let latest = f.versions("demo").await;
+    let returned = latest["versions"][0]["id"].as_i64().unwrap();
+    assert_eq!(latest["versions"][0]["files"], json!(["extra.js"]), "{latest}");
+    f.write("apps/demo/extra.js", "console.log(2);");
+    f.touch(&["apps/demo/extra.js"]);
+    f.settle("demo").await.expect("another change");
+    let again = f.restore("demo", returned).await.json();
+    assert_eq!(again["restored"], json!(["extra.js"]), "{again}");
+    assert_eq!(again["removed"], json!([]));
+    assert_eq!(f.read("apps/demo/extra.js"), "console.log(1);");
+
+    // Unknown version, another app's version, and the web header.
+    assert_eq!(f.restore("demo", 999_999).await.status, StatusCode::NOT_FOUND);
+    assert_eq!(f.restore("ghost", v1).await.status, StatusCode::NOT_FOUND);
+    let plain = f.send("POST", &format!("{}/versions/{v1}/restore", f.base("demo")), axum::body::Body::empty(), false).await;
+    assert_eq!(plain.status, StatusCode::FORBIDDEN);
+}
+
+// ---------------------------------------------------------------------------
+// Shortcuts (`hub/shortcuts.rs`)
+
+/// A site answering one request with these headers, for the framing check.
+async fn site(headers: &'static str) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = format!("http://{}/", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else { break };
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut buffer = [0u8; 2048];
+                let _ = socket.read(&mut buffer).await;
+                let body = "<html></html>";
+                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n{headers}Connection: close\r\n\r\n{body}", body.len());
+                let _ = socket.write_all(response.as_bytes()).await;
+            });
+        }
+    });
+    address
+}
+
+#[tokio::test]
+async fn hub_shortcuts_are_kept_checked_and_removed() {
+    let f = fixture();
+    let open = site("").await;
+    let closed = site("X-Frame-Options: DENY\r\n").await;
+    let strict = site("Content-Security-Policy: default-src 'self'; frame-ancestors 'self'\r\n").await;
+
+    let created = f.send("POST", "/api/hub/shortcuts", json!({ "name": " Notion ", "url": open.clone(), "color": "Teal" }).to_string(), true).await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.text());
+    let first = created.json();
+    assert_eq!(first["name"], "Notion");
+    assert_eq!(first["letter"], "N");
+    assert_eq!(first["color"], "teal");
+    assert_eq!(first["embed"]["allowed"], true, "{first}");
+    assert_eq!(first["embed"]["reason"], Value::Null);
+    assert!(first["embed"]["checked_at"].as_str().is_some());
+
+    let denied = f.send("POST", "/api/hub/shortcuts", json!({ "name": "Bank", "url": closed, "letter": "Bk" }).to_string(), true).await.json();
+    assert_eq!(denied["embed"]["allowed"], false);
+    assert_eq!(denied["embed"]["reason"], "x-frame-options-deny");
+    assert_eq!(denied["letter"], "Bk");
+    let csp = f.send("POST", "/api/hub/shortcuts", json!({ "name": "Docs", "url": strict }).to_string(), true).await.json();
+    assert_eq!(csp["embed"]["allowed"], false);
+    assert_eq!(csp["embed"]["reason"], "frame-ancestors");
+    let dead = f.send("POST", "/api/hub/shortcuts", json!({ "name": "Gone", "url": "http://127.0.0.1:1/" }).to_string(), true).await.json();
+    assert_eq!(dead["embed"]["allowed"], Value::Null, "unreachable: not known");
+    assert!(dead["embed"]["reason"].as_str().unwrap().starts_with("unreachable"));
+
+    let listed = f.get("/api/hub/shortcuts").await.json();
+    let names: Vec<&str> = listed["shortcuts"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Notion", "Bank", "Docs", "Gone"], "in the order they were made");
+    assert_eq!(listed["check_fresh_seconds"], 86400);
+
+    // Bad input makes nothing.
+    for bad in [
+        json!({ "name": "", "url": "https://x.y" }),
+        json!({ "name": "X", "url": "x.y" }),
+        json!({ "name": "X", "url": "javascript:alert(1)" }),
+        json!({ "name": "X", "url": "https://u:p@x.y" }),
+        json!({ "name": "X", "url": "https://x.y", "color": "pink" }),
+        json!({ "name": "X", "url": "https://x.y", "letter": "abc" }),
+    ] {
+        assert_eq!(f.send("POST", "/api/hub/shortcuts", bad.to_string(), true).await.status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    assert_eq!(f.get("/api/hub/shortcuts").await.json()["shortcuts"].as_array().unwrap().len(), 4);
+
+    // Renaming keeps the verdict; a new address drops it until checked again.
+    let id = first["id"].as_str().unwrap();
+    let renamed = f.send("PATCH", &format!("/api/hub/shortcuts/{id}"), json!({ "name": "Notes", "letter": "No" }).to_string(), true).await.json();
+    assert_eq!((renamed["name"].as_str(), renamed["letter"].as_str(), renamed["embed"]["allowed"].as_bool()), (Some("Notes"), Some("No"), Some(true)));
+    let moved = f.send("PATCH", &format!("/api/hub/shortcuts/{id}"), json!({ "url": denied["url"] }).to_string(), true).await.json();
+    assert_eq!(moved["embed"]["allowed"], Value::Null);
+    assert_eq!(moved["embed"]["checked_at"], Value::Null);
+    let checked = f.send("POST", &format!("/api/hub/shortcuts/{id}/check"), axum::body::Body::empty(), true).await;
+    assert_eq!(checked.status, StatusCode::OK, "{}", checked.text());
+    let verdict = checked.json();
+    assert_eq!(verdict["embed"]["allowed"], false);
+    assert!(verdict["embed"]["reason_text"].as_str().unwrap().contains("X-Frame-Options"));
+
+    // Writes need the web header; removal is final.
+    assert_eq!(f.send("DELETE", &format!("/api/hub/shortcuts/{id}"), axum::body::Body::empty(), false).await.status, StatusCode::FORBIDDEN);
+    assert_eq!(f.send("DELETE", &format!("/api/hub/shortcuts/{id}"), axum::body::Body::empty(), true).await.status, StatusCode::NO_CONTENT);
+    assert_eq!(f.send("DELETE", &format!("/api/hub/shortcuts/{id}"), axum::body::Body::empty(), true).await.status, StatusCode::NOT_FOUND);
+    assert_eq!(f.send("PATCH", &format!("/api/hub/shortcuts/{id}"), json!({ "name": "X" }).to_string(), true).await.status, StatusCode::NOT_FOUND);
+    assert_eq!(f.get("/api/hub/shortcuts").await.json()["shortcuts"].as_array().unwrap().len(), 3);
+}

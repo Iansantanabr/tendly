@@ -152,6 +152,30 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX app_records_by_created ON app_records(workspace_id, slug, collection, created_at);
     CREATE INDEX app_records_by_updated ON app_records(workspace_id, slug, collection, updated_at);",
+    // 12: shortcuts (a site with a tile, `hub/shortcuts.rs`) and the removals
+    // of app files the reload watcher saw, which the file history does not
+    // record (`apps/versions.rs`)
+    "CREATE TABLE app_shortcuts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        letter TEXT NOT NULL,
+        color TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        embed INTEGER CHECK (embed IN (0, 1)),
+        embed_reason TEXT,
+        checked_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    CREATE TABLE app_file_removals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id TEXT NOT NULL,
+        path TEXT NOT NULL,
+        after_version_id INTEGER NOT NULL,
+        removed_at TEXT NOT NULL
+    );
+    CREATE INDEX app_file_removals_by_path ON app_file_removals(workspace_id, path, after_version_id);",
 ];
 
 pub struct HubStore {
@@ -607,6 +631,46 @@ mod tests {
                 let name: String =
                     c.query_row("SELECT json_extract(data, '$.\"name\"') FROM app_records WHERE id = 'a' AND collection = 'leads'", [], |r| r.get(0))?;
                 assert_eq!(name, "Ana");
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn version_eleven_database_upgrades_to_shortcuts_and_removals() {
+        let connection = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..11] {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 11i64).unwrap();
+        connection
+            .execute(
+                "INSERT INTO app_records(workspace_id, slug, collection, id, data, created_at, updated_at) VALUES ('w', 'crm', 'leads', 'a', '{}', 'now', 'now')",
+                [],
+            )
+            .unwrap();
+        let store = HubStore::migrated(connection).unwrap();
+        store
+            .with(|c| {
+                let version: i64 = c.pragma_query_value(None, "user_version", |r| r.get(0))?;
+                assert_eq!(version as usize, MIGRATIONS.len());
+                let kept: i64 = c.query_row("SELECT COUNT(*) FROM app_records", [], |r| r.get(0))?;
+                assert_eq!(kept, 1);
+                c.execute(
+                    "INSERT INTO app_shortcuts(id, name, url, letter, color, position, created_at, updated_at) VALUES ('s1', 'Notion', 'https://notion.so', 'N', 'slate', 1, 'now', 'now')",
+                    [],
+                )?;
+                assert!(c.execute("INSERT INTO app_shortcuts(id, name, url, letter, color, position, created_at, updated_at) VALUES ('s1', 'x', 'https://x', 'X', 'slate', 2, 'now', 'now')", []).is_err(), "one row per id");
+                c.execute("UPDATE app_shortcuts SET embed = 0, embed_reason = 'x-frame-options-deny', checked_at = 'now' WHERE id = 's1'", [])?;
+                assert!(c.execute("UPDATE app_shortcuts SET embed = 2 WHERE id = 's1'", []).is_err(), "embed is yes, no or unknown");
+                let embed: Option<i64> = c.query_row("SELECT embed FROM app_shortcuts WHERE id = 's1'", [], |r| r.get(0))?;
+                assert_eq!(embed, Some(0));
+                c.execute(
+                    "INSERT INTO app_file_removals(workspace_id, path, after_version_id, removed_at) VALUES ('w', 'apps/crm/old.js', 7, 'now')",
+                    [],
+                )?;
+                let after: i64 = c.query_row("SELECT after_version_id FROM app_file_removals WHERE path = 'apps/crm/old.js'", [], |r| r.get(0))?;
+                assert_eq!(after, 7);
                 Ok(())
             })
             .unwrap();

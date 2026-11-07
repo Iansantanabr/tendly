@@ -52,6 +52,7 @@ pub(crate) mod live;
 pub(crate) mod records;
 pub(crate) mod diagnostics;
 mod tendly;
+pub(crate) mod versions;
 pub(crate) mod uploads;
 #[cfg(test)]
 mod tests;
@@ -117,6 +118,7 @@ pub fn routes() -> Router<AppState> {
         .merge(records::routes())
         .merge(uploads::routes())
         .merge(diagnostics::routes())
+        .merge(versions::routes())
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +200,7 @@ pub(crate) struct Manifest {
 }
 
 /// The color an app without one gets, stable for its slug.
-fn default_color(slug: &str) -> &'static str {
+pub(crate) fn default_color(slug: &str) -> &'static str {
     let sum: usize = slug.bytes().map(usize::from).sum();
     COLORS[sum % COLORS.len()].0
 }

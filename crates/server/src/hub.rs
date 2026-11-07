@@ -25,6 +25,7 @@ mod push;
 mod pwa;
 mod server_jobs;
 pub(crate) mod settings;
+mod shortcuts;
 mod spaces;
 pub(crate) mod transcript;
 mod store;
@@ -72,6 +73,7 @@ pub fn routes() -> Router<AppState> {
         .merge(pwa::routes())
         .merge(server_jobs::routes())
         .merge(settings::routes())
+        .merge(shortcuts::routes())
         .merge(spaces::routes())
         .merge(transcript::routes())
         .merge(apps::routes())
