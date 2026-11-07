@@ -1,6 +1,6 @@
 ---
 name: tendly-apps
-description: Build, change or fix a custom app inside Tendly (a mini-app, dashboard, CRM, tracker, calculator or any small tool that opens on the Mesa). Use when the person asks to create, edit, improve or debug an app, mini-app, dashboard, CRM or tool "in Tendly", "na Mesa", "no Tendly", or mentions the Apps page or an app in its sidebar.
+description: Build, change or fix a custom app inside GCore (also called Tendly; a mini-app, dashboard, CRM, tracker, calculator or any small tool that opens on the Mesa). Use when the person asks to create, edit, improve or debug an app, mini-app, dashboard, CRM or tool "in GCore", "no GCore", "in Tendly", "na Mesa", "no Tendly", or mentions the Apps page or an app in its sidebar.
 ---
 
 # Tendly apps
