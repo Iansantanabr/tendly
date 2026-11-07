@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .board-page { max-width: none; height: 100%; grid-template-rows: auto minmax(0, 1fr); }
+    t-kanban { min-height: 0; height: 100%; }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Sections">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="board" data-icon="board">Board</button>
+      <button data-view="list" data-icon="table">List</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="board">
+        <div class="t-page board-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+            <button type="button" class="t-button primary" id="new-card">New card</button>
+          </header>
+          <div id="board"></div>
+        </div>
+      </t-view>
+      <t-view name="list">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">All cards</h1></header>
+          <t-pills id="stage-filter"></t-pills>
+          <t-table id="table" searchable empty-text="No cards yet"></t-table>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-modal id="editor" title="Card">
+    <form id="card-form" class="t-form">
+      <label class="t-field"><span>Title</span><input name="title" type="text" required maxlength="120"></label>
+      <label class="t-field"><span>Column</span><select name="column" id="column-select"></select></label>
+      <label class="t-field"><span>Notes</span><textarea name="text" maxlength="2000"></textarea></label>
+      <div class="t-actions">
+        <button type="button" class="t-button danger" id="delete" hidden>Delete</button>
+        <span class="t-spacer"></span>
+        <button type="button" class="t-button" id="cancel">Cancel</button>
+        <button type="submit" class="t-button primary">Save</button>
+      </div>
+    </form>
+  </t-modal>
+
+  <script>
+    // The columns are a small setting (tendly.data); the cards are records (a collection), so two
+    // panes, or you and an agent, can move cards at the same time without losing one.
+    const DEFAULT_COLUMNS = [{ id: 'todo', title: 'To do' }, { id: 'doing', title: 'Doing' }, { id: 'done', title: 'Done' }];
+    const cards = tendly.db.collection('cards');
+    const board = document.getElementById('board');
+    const table = document.getElementById('table');
+    const pills = document.getElementById('stage-filter');
+    const editor = document.getElementById('editor');
+    const form = document.getElementById('card-form');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let columns = DEFAULT_COLUMNS, kanban, editing = null, store;
+
+    function columnTitle(id) { const found = columns.find(c => c.id === id); return found ? found.title : id; }
+    function rows(records) {
+      return records.map(r => ({ id: r.id, title: r.data.title, column: columnTitle(r.data.column), columnId: r.data.column, text: r.data.text || '', updated_at: r.updated_at }));
+    }
+    function render(records) {
+      const sorted = records.slice().sort((a, b) => (a.data.order || 0) - (b.data.order || 0) || a.created_at.localeCompare(b.created_at));
+      tkit.clear(board);
+      if (!kanban) {
+        kanban = tkit.h('t-kanban', { addable: true, 'empty-text': 'Drop a card here' });
+        kanban.addEventListener('t-move', async event => {
+          const { id, to, index } = event.detail;
+          const others = store.records.filter(r => r.data.column === to && r.id !== id).sort((a, b) => (a.data.order || 0) - (b.data.order || 0));
+          const before = others[index - 1], after = others[index];
+          const order = before && after ? ((before.data.order || 0) + (after.data.order || 0)) / 2 : after ? (after.data.order || 0) - 1 : before ? (before.data.order || 0) + 1 : 1;
+          try { await cards.update(id, { column: to, order }); } catch (error) { fail(error); store.reload(); }
+        });
+        kanban.addEventListener('t-open', event => openEditor(store.records.find(r => r.id === event.detail.id)));
+        kanban.addEventListener('t-add', event => openEditor(null, event.detail.column));
+      }
+      kanban.columns = columns;
+      kanban.cards = sorted.map(r => ({ id: r.id, column: r.data.column, title: r.data.title, text: r.data.text, meta: tkit.ago(r.updated_at) }));
+      board.appendChild(kanban);
+      table.rows = rows(sorted);
+      pills.options = [{ value: '', label: 'All', count: records.length }].concat(columns.map(c => ({ value: c.id, label: c.title, count: records.filter(r => r.data.column === c.id).length })));
+    }
+
+    function openEditor(record, column) {
+      editing = record || null;
+      const select = document.getElementById('column-select');
+      tkit.clear(select);
+      columns.forEach(c => select.appendChild(tkit.h('option', { value: c.id, text: c.title })));
+      tkit.fill(form, record ? record.data : { column: column || columns[0].id, title: '', text: '' });
+      document.getElementById('delete').hidden = !record;
+      editor.title = record ? 'Edit card' : 'New card';
+      editor.open();
+    }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const values = tkit.form(form);
+      try {
+        if (editing) await cards.update(editing.id, values, { rev: editing.rev });
+        else await cards.insert(Object.assign(values, { order: Date.now() }));
+        editor.close();
+      } catch (error) {
+        if (error.code === 'conflict') { tkit.toast('Someone changed this card meanwhile; it was reloaded.', { tone: 'error' }); editing = error.current; tkit.fill(form, editing.data); }
+        else fail(error);
+      }
+    });
+    document.getElementById('cancel').addEventListener('click', () => editor.close());
+    document.getElementById('delete').addEventListener('click', async () => {
+      if (!editing || !await tkit.confirm('Delete "' + editing.data.title + '"?', { confirm: 'Delete', tone: 'danger' })) return;
+      try { await cards.remove(editing.id); editor.close(); } catch (error) { fail(error); }
+    });
+    document.getElementById('new-card').addEventListener('click', () => openEditor(null));
+    editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
+    form.addEventListener('input', () => { tendly.host.holdReload(true); });
+
+    table.columns = [{ key: 'title', label: 'Title' }, { key: 'column', label: 'Column', type: 'badge' }, { key: 'text', label: 'Notes' }, { key: 'updated_at', label: 'Updated', type: 'date' }];
+    table.addEventListener('t-open', event => openEditor(store.records.find(r => r.id === event.detail.id)));
+    pills.value = '';
+    pills.addEventListener('t-change', event => { const stage = event.detail.value; table.filter = stage ? row => row.columnId === stage : null; });
+
+    (async () => {
+      board.appendChild(tkit.h('t-state', { kind: 'loading' }));
+      try { columns = await tendly.data.get('columns', DEFAULT_COLUMNS); } catch (error) { /* the defaults, then */ }
+      store = tkit.live(cards, render, { onError: error => {
+        tkit.clear(board);
+        board.appendChild(tkit.h('t-state', { kind: 'error', title: 'Could not load the board', text: error.message }));
+      } });
+    })();
+  </script>
+</body>
+</html>

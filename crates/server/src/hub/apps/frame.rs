@@ -48,17 +48,18 @@ pub(crate) const TTL_SECONDS: i64 = 8 * 60 * 60;
 /// The page that frames an app renews its token this often.
 const RENEW_SECONDS: i64 = 30 * 60;
 pub(crate) const PREFIX: &str = "/apps-run/";
-const SDK_PATH: &str = "/api/hub/apps/sdk.js";
+/// The static files every app page may load without a token: the SDK and the kit.
+const SHARED_PATHS: &[&str] = &["/api/hub/apps/sdk.js", "/api/hub/apps/kit.js", "/api/hub/apps/kit.css", "/api/hub/apps/kit-demo.html"];
 /// No `allow-same-origin`: the document has an origin of its own, shared with nothing.
 pub(crate) const POLICY: &str =
     "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-popups; frame-ancestors 'self'";
 
 /// Asked by the guard (`security.rs`): a request an app frame makes for its own
 /// files or for the SDK. Such a frame has no origin and no session, so these
-/// reads are let in on the token in their path (the SDK is the same static
-/// script for everyone). Only reads, and only these two places.
+/// reads are let in on the token in their path (the SDK and the kit are the
+/// same static files for everyone). Only reads, and only these places.
 pub(crate) fn is_frame_request(method: &Method, path: &str) -> bool {
-    matches!(*method, Method::GET | Method::HEAD) && (path == SDK_PATH || path.starts_with(PREFIX))
+    matches!(*method, Method::GET | Method::HEAD) && (SHARED_PATHS.contains(&path) || path.starts_with(PREFIX))
 }
 
 pub(super) fn routes() -> Router<AppState> {

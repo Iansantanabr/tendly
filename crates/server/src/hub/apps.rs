@@ -50,15 +50,30 @@ pub(crate) mod frame;
 pub(crate) mod grants;
 pub(crate) mod live;
 pub(crate) mod records;
+pub(crate) mod diagnostics;
 mod tendly;
 pub(crate) mod uploads;
 #[cfg(test)]
 mod tests;
 
 const SDK: &str = include_str!("apps/sdk.js");
-const TEMPLATE: &str = include_str!("apps/template.html");
-/// The page of the "issues" template: a short list of reported problems kept with `tendly.data`.
-const ISSUES_TEMPLATE: &str = include_str!("apps/issues.html");
+/// The kit apps are built with: a stylesheet and web components (`kit.css`, `kit.js`), and a page showing them.
+const KIT_CSS: &str = include_str!("apps/kit.css");
+const KIT_JS: &str = include_str!("apps/kit.js");
+const KIT_DEMO: &str = include_str!("apps/kit-demo.html");
+/// The pages a new app starts with, by template name (`scaffold_route`). Each
+/// works on its own: it uses the kit and keeps what it holds in collections.
+/// `issues` is the list "Report a problem" makes (`report.ts`).
+pub(crate) const TEMPLATES: &[(&str, &str)] = &[
+    ("blank", include_str!("apps/templates/blank.html")),
+    ("kanban", include_str!("apps/templates/kanban.html")),
+    ("table", include_str!("apps/templates/table.html")),
+    ("calendar", include_str!("apps/templates/calendar.html")),
+    ("dashboard", include_str!("apps/templates/dashboard.html")),
+    ("form", include_str!("apps/templates/form.html")),
+    ("document", include_str!("apps/templates/document.html")),
+    ("issues", include_str!("apps/templates/issues.html")),
+];
 
 /// The colors an app may ask for, with the accent the blank app uses for each.
 pub(crate) const COLORS: &[(&str, &str)] = &[
@@ -82,6 +97,9 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/hub/apps", get(list_route))
         .route("/api/hub/apps/sdk.js", get(sdk_route))
+        .route("/api/hub/apps/kit.css", get(kit_css_route))
+        .route("/api/hub/apps/kit.js", get(kit_js_route))
+        .route("/api/hub/apps/kit-demo.html", get(kit_demo_route))
         .route("/api/hub/apps/{workspace_id}/scaffold", post(scaffold_route))
         .route("/api/hub/apps/{workspace_id}/{slug}/files", get(entry_route))
         .route("/api/hub/apps/{workspace_id}/{slug}/files/", get(entry_route))
@@ -98,6 +116,7 @@ pub fn routes() -> Router<AppState> {
         .merge(tendly::routes())
         .merge(records::routes())
         .merge(uploads::routes())
+        .merge(diagnostics::routes())
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +310,11 @@ pub(crate) struct AppEntry {
     /// `GET .../frame` for that address instead.
     pub url: String,
     pub code_path: String,
+    /// When a file of the app (outside `data/` and `files/`) last changed.
     pub updated_at: String,
+    /// How many errors the Tendly window showing the app reported last (`diagnostics.rs`), and when; 0 and null when none did.
+    pub errors: usize,
+    pub errors_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -304,15 +327,10 @@ pub(crate) struct AppProblem {
 /// The list entry for a located app; `Err` when its entry file is missing.
 fn entry_for(workspace: &Workspace, slug: &str, app: &Located) -> std::result::Result<AppEntry, String> {
     let m = &app.manifest;
-    let entry = clean_path(&m.entry)
+    clean_path(&m.entry)
         .and_then(|relative| checked_file(&app.dir, &relative))
         .ok_or_else(|| format!("the entry file {} is missing", m.entry))?;
-    let modified = |path: &Path| fs::metadata(path).and_then(|m| m.modified()).ok();
-    let updated = [modified(&app.dir.join("app.json")), modified(&entry)]
-        .into_iter()
-        .flatten()
-        .max()
-        .unwrap_or_else(SystemTime::now);
+    let updated = latest_change(&app.dir).unwrap_or_else(SystemTime::now);
     let encoded_entry: Vec<String> = m.entry.split('/').map(encode_segment).collect();
     Ok(AppEntry {
         workspace_id: workspace.id.to_string(),
@@ -327,7 +345,46 @@ fn entry_for(workspace: &Workspace, slug: &str, app: &Located) -> std::result::R
         url: format!("/api/hub/apps/{}/{slug}/files/{}", workspace.id, encoded_entry.join("/")),
         code_path: format!("apps/{slug}/"),
         updated_at: rfc3339(updated),
+        errors: 0,
+        errors_at: None,
     })
+}
+
+/// How deep and how far `latest_change` looks.
+const SCAN_DEPTH: usize = 3;
+const SCAN_FILES: usize = 400;
+
+/// When the app's files last changed: the newest modification time of its
+/// files, apart from what it keeps (`data/`, `files/`) and dot-files.
+fn latest_change(dir: &Path) -> Option<SystemTime> {
+    fn walk(dir: &Path, depth: usize, seen: &mut usize, newest: &mut Option<SystemTime>) {
+        let Ok(entries) = fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            if *seen >= SCAN_FILES {
+                return;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') || (depth == 0 && live::KEPT.contains(&name.as_str())) {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                if depth + 1 < SCAN_DEPTH {
+                    walk(&entry.path(), depth + 1, seen, newest);
+                }
+                continue;
+            }
+            *seen += 1;
+            if let Ok(modified) = meta.modified()
+                && newest.is_none_or(|known| modified > known)
+            {
+                *newest = Some(modified);
+            }
+        }
+    }
+    let mut newest = None;
+    walk(dir, 0, &mut 0, &mut newest);
+    newest
 }
 
 fn scan(workspaces: &[Workspace]) -> (Vec<AppEntry>, Vec<AppProblem>) {
@@ -371,9 +428,16 @@ fn scan(workspaces: &[Workspace]) -> (Vec<AppEntry>, Vec<AppProblem>) {
 
 async fn list_route(State(state): State<AppState>) -> Result<Json<Value>> {
     let workspaces = db(&state, |s| s.list_workspaces()).await?;
-    let (apps, errors) = tokio::task::spawn_blocking(move || scan(&workspaces))
+    let (mut apps, errors) = tokio::task::spawn_blocking(move || scan(&workspaces))
         .await
         .map_err(ApiError::internal)?;
+    let counts = state.hub.app_health.counts();
+    for app in &mut apps {
+        if let Some((count, at)) = app.workspace_id.parse().ok().and_then(|id: WorkspaceId| counts.get(&(id, app.slug.clone())).cloned()) {
+            app.errors = count;
+            app.errors_at = Some(at);
+        }
+    }
     Ok(Json(json!({ "apps": apps, "errors": errors })))
 }
 
@@ -410,18 +474,40 @@ fn not_found() -> Response {
     (StatusCode::NOT_FOUND, [(header::CACHE_CONTROL, "no-cache")], "Not found").into_response()
 }
 
-async fn sdk_route() -> Response {
+/// A static file every app may load (the SDK, the kit): an app page has an
+/// opaque origin and asks for its scripts with CORS (`with_cors_scripts`).
+fn shared_file(kind: &'static str, body: &'static str) -> Response {
     (
         [
-            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CONTENT_TYPE, kind),
             (header::CACHE_CONTROL, "no-cache"),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-            // An app page has an opaque origin and asks for its scripts with CORS (`with_cors_scripts`).
             (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"),
         ],
-        SDK,
+        body,
     )
         .into_response()
+}
+
+async fn sdk_route() -> Response {
+    shared_file("text/javascript; charset=utf-8", SDK)
+}
+
+async fn kit_js_route() -> Response {
+    shared_file("text/javascript; charset=utf-8", KIT_JS)
+}
+
+async fn kit_css_route() -> Response {
+    shared_file("text/css; charset=utf-8", KIT_CSS)
+}
+
+/// The kit on one page, with sample data and no app behind it: the Design page
+/// frames it, sandboxed like an app (`frame::POLICY`), so it runs as a page of
+/// its own and never as Tendly.
+async fn kit_demo_route() -> Response {
+    let mut response = shared_file("text/html; charset=utf-8", KIT_DEMO);
+    response.headers_mut().insert(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static(frame::POLICY));
+    response
 }
 
 /// Sends the browser on to where the app is served for now: a fresh address
@@ -796,7 +882,9 @@ struct ScaffoldBody {
     description: Option<String>,
     #[serde(default)]
     color: Option<String>,
-    /// Which page the new app starts with: `blank` (the default) or `issues`.
+    #[serde(default)]
+    letter: Option<String>,
+    /// Which page the new app starts with: one of `TEMPLATES`, `blank` by default.
     #[serde(default)]
     template: Option<String>,
 }
@@ -809,33 +897,24 @@ fn escape_html(text: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-/// The blank app's page.
-pub(crate) fn blank_page(manifest: &Manifest) -> String {
-    let description = if manifest.description.is_empty() {
-        "A blank Tendly app. Ask your agent to turn it into what you need."
-    } else {
-        &manifest.description
+/// The page of a template, with the app's name, letter, colour and description in it.
+pub(crate) fn template_page(template: &str, manifest: &Manifest) -> Option<String> {
+    let page = TEMPLATES.iter().find(|(name, _)| *name == template).map(|(_, page)| *page)?;
+    let description = match (manifest.description.is_empty(), template) {
+        (false, _) => manifest.description.as_str(),
+        (true, "issues") => "Problems and ideas noted while using Tendly.",
+        (true, "blank") => "A blank Tendly app. Ask your agent to turn it into what you need.",
+        (true, _) => "Made from a template. Ask your agent to shape it.",
     };
-    filled(TEMPLATE, manifest, description)
+    Some(
+        page.replace("{{NAME}}", &escape_html(&manifest.name))
+            .replace("{{LETTER}}", &escape_html(&manifest.letter))
+            .replace("{{DESCRIPTION}}", &escape_html(description))
+            .replace("{{COLOR}}", &manifest.color)
+            .replace("{{ACCENT}}", accent(&manifest.color)),
+    )
 }
 
-/// The page of an app that keeps a list of reported problems.
-pub(crate) fn issues_page(manifest: &Manifest) -> String {
-    let description = if manifest.description.is_empty() {
-        "Problems and ideas noted while using Tendly."
-    } else {
-        &manifest.description
-    };
-    filled(ISSUES_TEMPLATE, manifest, description)
-}
-
-fn filled(template: &str, manifest: &Manifest, description: &str) -> String {
-    template
-        .replace("{{NAME}}", &escape_html(&manifest.name))
-        .replace("{{LETTER}}", &escape_html(&manifest.letter))
-        .replace("{{DESCRIPTION}}", &escape_html(description))
-        .replace("{{ACCENT}}", accent(&manifest.color))
-}
 
 async fn scaffold_route(
     State(state): State<AppState>,
@@ -854,6 +933,9 @@ async fn scaffold_route(
     if let Some(color) = body.color.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
         manifest["color"] = json!(color);
     }
+    if let Some(letter) = body.letter.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+        manifest["letter"] = json!(letter);
+    }
     let parsed = parse_manifest(&slug, &manifest.to_string()).map_err(ApiError::bad)?;
     // Written out in full so the agent sees every field it may change.
     let manifest = serde_json::to_string_pretty(&json!({
@@ -867,11 +949,11 @@ async fn scaffold_route(
     .map_err(ApiError::internal)?;
     let workspace = crate::app::workspace(&state, id).await?;
     let root = crate::app::root(&state, id).await?;
-    let page = match body.template.as_deref().map(str::trim) {
-        None | Some("" | "blank") => blank_page(&parsed),
-        Some("issues") => issues_page(&parsed),
-        Some(_) => return Err(ApiError::bad("Unknown template: use blank or issues")),
-    };
+    let template = body.template.as_deref().map(str::trim).filter(|t| !t.is_empty()).unwrap_or("blank");
+    let page = template_page(template, &parsed).ok_or_else(|| {
+        let names: Vec<&str> = TEMPLATES.iter().map(|(name, _)| *name).collect();
+        ApiError::bad(format!("Unknown template: use one of {}", names.join(", ")))
+    })?;
     let name = slug.clone();
     let app = tokio::task::spawn_blocking(move || -> Result<Located> {
         let apps = root.join("apps");

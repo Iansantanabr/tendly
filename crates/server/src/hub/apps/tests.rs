@@ -131,7 +131,7 @@ fn hub_apps_sdk_reports_errors_to_the_tendly_page_only() {
 #[test]
 fn hub_apps_blank_page_escapes_the_name() {
     let m = parse_manifest("x", r#"{"name":"<b>Tom & Jerry</b>"}"#).unwrap();
-    let page = blank_page(&m);
+    let page = template_page("blank", &m).unwrap();
     assert!(page.contains("&lt;b&gt;Tom &amp; Jerry&lt;/b&gt;"));
     assert!(!page.contains("<b>Tom"));
     assert!(page.contains("/api/hub/apps/sdk.js"));
@@ -499,10 +499,15 @@ async fn hub_apps_scaffold_creates_a_blank_app_once() {
     assert_eq!(entry["permissions"], json!([]));
     let page = f.open(entry["url"].as_str().unwrap()).await;
     assert_eq!(page.status, StatusCode::OK);
-    assert!(page.text().contains("<h1>Pipeline</h1>"));
-    assert!(page.text().contains("prefers-color-scheme"));
+    assert!(page.text().contains("<h1 class=\"t-title\">Pipeline</h1>"), "{}", page.text());
+    // The blank page is built with the kit, on the app's own colour, and keeps a collection.
+    assert!(page.text().contains("/api/hub/apps/kit.css") && page.text().contains("/api/hub/apps/kit.js"));
+    assert!(page.text().contains("data-app-color=\"amber\""));
+    assert!(page.text().contains("tendly.db.collection('items')"));
     let list = f.get("/api/hub/apps").await.json();
     assert_eq!(list["apps"][0]["url"], entry["url"]);
+    assert_eq!(list["apps"][0]["errors"], 0);
+    assert_eq!(list["apps"][0]["errors_at"], Value::Null);
 
     let again = f.send("POST", &url, body.to_string(), true).await;
     assert_eq!(again.status, StatusCode::CONFLICT);
@@ -543,7 +548,7 @@ async fn hub_apps_scaffold_issues_template_is_a_list_kept_with_the_data_api() {
     assert!(!html.contains("innerHTML") && !html.contains("confirm("));
     assert!(html.contains("prefers-color-scheme") && html.contains("pointer: coarse"));
     // It is not the blank app.
-    assert!(!html.contains("id=\"plus\""));
+    assert!(!html.contains("collection('items')"));
     assert!(f.repo.join("apps/reportes/app.json").is_file());
 
     // The list the page writes is an ordinary value of the app.
@@ -560,10 +565,109 @@ async fn hub_apps_scaffold_issues_template_is_a_list_kept_with_the_data_api() {
     // The default is still the blank app, and an unknown template creates nothing.
     let blank = f.send("POST", &url, json!({ "slug": "plain", "name": "Plain", "template": "blank" }).to_string(), true).await;
     assert_eq!(blank.status, StatusCode::CREATED);
-    assert!(f.open(blank.json()["url"].as_str().unwrap()).await.text().contains("id=\"plus\""));
+    assert!(f.open(blank.json()["url"].as_str().unwrap()).await.text().contains("collection('items')"));
     let unknown = f.send("POST", &url, json!({ "slug": "odd", "name": "Odd", "template": "crm" }).to_string(), true).await;
     assert_eq!(unknown.status, StatusCode::BAD_REQUEST);
+    assert!(unknown.text().contains("kanban"), "the refusal lists the templates: {}", unknown.text());
     assert!(!f.repo.join("apps/odd").exists());
+}
+
+#[tokio::test]
+async fn hub_apps_scaffold_every_template_is_a_working_kit_page() {
+    let f = fixture();
+    let url = format!("/api/hub/apps/{}/scaffold", f.workspace);
+    for (template, collection) in [
+        ("kanban", "cards"), ("table", "entries"), ("calendar", "events"), ("dashboard", "entries"), ("form", "submissions"), ("document", "docs"),
+    ] {
+        let body = json!({ "slug": template, "name": format!("My {template}"), "letter": "Z", "color": "violet", "template": template, "description": "What it <does>" });
+        let created = f.send("POST", &url, body.to_string(), true).await;
+        assert_eq!(created.status, StatusCode::CREATED, "{template}: {}", created.text());
+        let entry = created.json();
+        assert_eq!(entry["letter"], "Z", "the letter asked for is kept");
+        let html = f.open(entry["url"].as_str().unwrap()).await.text();
+        assert!(html.contains("data-app-color=\"violet\""), "{template}");
+        assert!(html.contains("What it &lt;does&gt;") && !html.contains("{{"), "{template}");
+        assert!(html.contains("/api/hub/apps/kit.css") && html.contains("/api/hub/apps/kit.js") && html.contains("/api/hub/apps/sdk.js"), "{template}");
+        assert!(html.contains(&format!("tendly.db.collection('{collection}')")), "{template} keeps its records in a collection");
+        assert!(html.contains("tkit.live("), "{template} stays live");
+        assert!(!html.contains("innerHTML") && !html.contains("window.confirm") && !html.contains("localStorage"), "{template}");
+        // The SDK and the kit are asked for with CORS, like the app's own scripts.
+        assert!(html.contains("<script crossorigin src=\"/api/hub/apps/kit.js\">"), "{template}: {html}");
+        // Without a browser: the static check finds nothing wrong.
+        let diagnostics = f.get(&format!("/api/hub/apps/{}/{template}/diagnostics", f.workspace)).await.json();
+        assert_eq!(diagnostics["ok"], true, "{template}: {diagnostics}");
+        assert_eq!(diagnostics["problems"], json!([]));
+        assert_eq!(diagnostics["runtime"], Value::Null);
+    }
+}
+
+#[tokio::test]
+async fn hub_apps_kit_is_served_to_app_frames_and_the_demo_is_sandboxed() {
+    let f = fixture();
+    for (path, kind, needle) in [
+        ("/api/hub/apps/kit.js", "text/javascript", "window.tkit"),
+        ("/api/hub/apps/kit.css", "text/css", "--t-accent"),
+        ("/api/hub/apps/kit-demo.html", "text/html", "<t-kanban"),
+    ] {
+        let reply = f.get(path).await;
+        assert_eq!(reply.status, StatusCode::OK, "{path}");
+        assert!(reply.header("content-type").starts_with(kind), "{path}: {}", reply.header("content-type"));
+        assert!(reply.text().contains(needle), "{path}");
+        assert_eq!(reply.header("access-control-allow-origin"), "*");
+        // An app frame (no origin, no session) may read them.
+        let framed = f.from_frame("GET", path).await;
+        assert_eq!(framed.status, StatusCode::OK, "{path}");
+    }
+    let demo = f.get("/api/hub/apps/kit-demo.html").await;
+    assert!(demo.header("content-security-policy").contains("sandbox"), "the demo runs as a page of its own");
+    assert!(demo.text().contains("/api/hub/apps/kit.css"));
+    // The kit's colours are the fork's tokens, light and dark.
+    let css = f.get("/api/hub/apps/kit.css").await.text();
+    for (name, light, dark) in [("accent", "#0f7f70", "#3fc4b0"), ("bg", "#f1eee8", "#0f1113"), ("line-input", "#92846b", "#67717e")] {
+        assert!(css.contains(&format!("--t-{name}: {light};")), "{name} light");
+        assert!(css.contains(&format!("--t-{name}: {dark};")), "{name} dark");
+    }
+    assert!(css.contains("[data-tendly-theme=\"dark\"]") && css.contains("prefers-color-scheme: dark"));
+    assert!(css.contains("pointer: coarse") && css.contains("focus-visible"));
+}
+
+#[tokio::test]
+async fn hub_apps_diagnostics_keep_what_the_page_reported() {
+    let f = fixture();
+    f.scaffold("demo").await;
+    let url = format!("/api/hub/apps/{}/demo/diagnostics", f.workspace);
+    let clean = f.get(&url).await.json();
+    assert_eq!(clean["ok"], true);
+    let report = json!({ "page": "/index.html", "errors": [
+        { "kind": "error", "message": "boom", "file": "app.js", "line": 3, "column": 7, "count": 2 },
+        { "kind": "console", "message": "x" }
+    ] });
+    let put = f.send("PUT", &url, report.to_string(), true).await;
+    assert_eq!(put.status, StatusCode::OK, "{}", put.text());
+    assert_eq!(put.json()["count"], 3);
+    let seen = f.get(&url).await.json();
+    assert_eq!(seen["ok"], false);
+    assert_eq!(seen["runtime"]["count"], 3);
+    assert_eq!(seen["runtime"]["errors"][0]["file"], "app.js");
+    assert_eq!(seen["runtime"]["errors"][1]["count"], 1, "a missing count is one");
+    assert!(seen["runtime"]["reported_at"].as_str().is_some_and(|at| at.contains('T')));
+    // The list of apps carries the count.
+    let list = f.get("/api/hub/apps").await.json();
+    assert_eq!(list["apps"][0]["errors"], 3);
+    assert_eq!(list["apps"][0]["errors_at"], seen["runtime"]["reported_at"]);
+    // A clean load replaces it.
+    f.send("PUT", &url, json!({ "page": "/", "errors": [] }).to_string(), true).await;
+    assert_eq!(f.get(&url).await.json()["ok"], true);
+    assert_eq!(f.get("/api/hub/apps").await.json()["apps"][0]["errors"], 0);
+    // A broken page shows up without any browser.
+    fs::write(f.repo.join("apps/demo/index.html"), "<script src=\"gone.js\"></script><script src=\"/api/hub/apps/sdk.js\"></script>").unwrap();
+    let broken = f.get(&url).await.json();
+    assert_eq!(broken["ok"], false);
+    let kinds: Vec<&str> = broken["problems"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, vec!["missing-file", "sdk-order"]);
+    // Unknown app: 404.
+    let missing = f.get(&format!("/api/hub/apps/{}/nope/diagnostics", f.workspace)).await;
+    assert_eq!(missing.status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

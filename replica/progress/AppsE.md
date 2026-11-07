@@ -32,8 +32,17 @@ Fatias, cada uma com testes, `build.sh`, conferência com `curl` e commit:
 
 ## Feito
 
-(nada ainda)
+### Fatia 1 (servidor): kit, modelos, scaffold, diagnóstico — commit "Apps E: kit, templates, diagnostics"
+- `crates/server/src/hub/apps/kit.css` (304 linhas) e `kit.js` (~700 linhas): variáveis `--t-*` com os valores dos tokens claro/escuro, classes `t-page`, `t-button`, `t-field`, `t-card`, `t-grid`, `t-stat`, `t-badge`, `t-list`/`t-row`, e os elementos `t-app`, `t-nav`, `t-view`, `t-kanban` (arrastar com pointer events: mouse na hora, toque segurando 350 ms; ← → com o cartão em foco), `t-table` (filtro, ordenação, Enter abre), `t-pills`, `t-modal` (`<dialog>`), `t-state`, `t-chart` (SVG, barras e linha), `t-calendar`. Helpers `tkit.h/icon/toast/confirm/live/form/fill/date/ago/money/number/filterRows/sortRows/groupBy/monthGrid`. Textos do kit em inglês e pt (pelo `lang` da página ou do navegador).
+- Servidos em `GET /api/hub/apps/kit.css|kit.js|kit-demo.html` (sem token, como o `sdk.js`; `frame::is_frame_request` ganhou `SHARED_PATHS`). O demo sai com o CSP sandbox dos apps.
+- Modelos em `hub/apps/templates/*.html`: `blank` (lista "items"), `kanban` (colunas em `tendly.data`, cartões na coleção `cards`, lista + pílulas), `table` (`entries`, pílulas por categoria, totais), `calendar` (`events`, agenda do dia), `dashboard` (`entries`, 3 totais, 2 gráficos), `form` (`submissions`, formulário + lista + detalhe), `document` (`docs`, lista + editor com salvar automático e `holdReload`), e o `issues` de sempre (movido para a pasta). Placeholders `{{NAME}} {{LETTER}} {{DESCRIPTION}} {{COLOR}} {{ACCENT}}`. O `template.html` antigo (contador) saiu: o app em branco agora usa o kit.
+- `POST apps/{ws}/scaffold` aceita `template` (qualquer um dos oito) e `letter`.
+- `GET apps/{ws}/{slug}/diagnostics` → `{ok, problems:[{kind, message, file}], runtime}`: checagem estática (arquivo local citado que não existe, SDK depois do script do app, `tendly.` sem SDK, kit.js sem kit.css, kit.js depois do script do app) + o que a última janela do Tendly mostrando o app relatou (`PUT` com `{page, errors:[…]}`; memória, `HubStore.app_health`). `GET apps` traz `errors` (quantidade) e `errors_at` por app.
+- `updated_at` do app agora é o arquivo mais novo da pasta (até 3 níveis, 400 arquivos; fora `data/`, `files/` e arquivos com ponto).
+- Testes: 202 hub (7 novos, entre eles "todo modelo passa na checagem estática" e "nenhum placeholder sobra"); web `appsE-kit.test.mjs` (18): helpers do kit em Node, cores do kit = tokens (claro e os dois blocos escuros), cada modelo só usa tags/classes/helpers que o kit tem e os scripts compilam. Servidor rodando: 24 conferências (`live1.py`): sete modelos criados no workspace oculto com diagnóstico limpo e apagados; relatório de erros entra e aparece na lista.
 
 ## Falta
 
-Tudo do plano acima.
+- Fatia 2: atalhos (migração 12) e versões do app.
+- Fatia 3: web (painel criar, catálogo, atalhos, versões, demo do kit no `/design`, "+" no rail).
+- Fatia 4: skill v2, `apps-summary.md`, FORK.md, features.csv, schema.sql, components.md, `.done`.

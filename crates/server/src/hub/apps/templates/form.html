@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .form-card { max-width: 560px; }
+    .detail dt { color: var(--t-muted); font-size: var(--t-text-sm); margin-top: var(--t-space-2); }
+    .detail dd { margin: 0; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Sections">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="form" data-icon="form">Form</button>
+      <button data-view="list" data-icon="inbox">Submissions</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="form">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div></header>
+          <form id="entry-form" class="t-card t-form form-card">
+            <div class="t-form-row">
+              <label class="t-field"><span>Name</span><input name="name" type="text" required maxlength="120" autocomplete="name"></label>
+              <label class="t-field"><span>Email</span><input name="email" type="email" maxlength="120" autocomplete="email"></label>
+            </div>
+            <div class="t-form-row">
+              <label class="t-field"><span>Phone</span><input name="phone" type="tel" maxlength="40" autocomplete="tel"></label>
+              <label class="t-field"><span>Subject</span>
+                <select name="subject"><option>Question</option><option>Request</option><option>Feedback</option><option>Other</option></select>
+              </label>
+            </div>
+            <label class="t-field"><span>Message</span><textarea name="message" required maxlength="4000"></textarea></label>
+            <div class="t-actions"><button type="reset" class="t-button">Clear</button><button type="submit" class="t-button primary">Send</button></div>
+          </form>
+        </div>
+      </t-view>
+      <t-view name="list">
+        <div class="t-page wide">
+          <header class="t-page-head"><h1 class="t-title">Submissions</h1><span class="t-badge" id="count"></span></header>
+          <t-pills id="subject-filter"></t-pills>
+          <t-table id="table" searchable empty-text="Nothing sent yet."></t-table>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-modal id="viewer" title="Submission">
+    <dl class="detail" id="detail"></dl>
+    <div class="t-actions">
+      <button type="button" class="t-button danger" id="delete">Delete</button>
+      <span class="t-spacer"></span>
+      <button type="button" class="t-button" id="close">Close</button>
+    </div>
+  </t-modal>
+
+  <script>
+    const submissions = tendly.db.collection('submissions');
+    const form = document.getElementById('entry-form');
+    const table = document.getElementById('table');
+    const pills = document.getElementById('subject-filter');
+    const viewer = document.getElementById('viewer');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let viewing = null, store;
+
+    table.columns = [
+      { key: 'created_at', label: 'When', type: 'date' },
+      { key: 'name', label: 'Name' },
+      { key: 'subject', label: 'Subject', type: 'badge' },
+      { key: 'message', label: 'Message', format: value => String(value || '').slice(0, 80) }
+    ];
+
+    function render(records) {
+      const rows = records.map(r => Object.assign({ id: r.id, created_at: r.created_at }, r.data));
+      table.rows = rows;
+      document.getElementById('count').textContent = rows.length + (rows.length === 1 ? ' submission' : ' submissions');
+      const subjects = Object.keys(tkit.groupBy(rows, 'subject')).filter(Boolean).sort();
+      pills.options = [{ value: '', label: 'All', count: rows.length }].concat(subjects.map(s => ({ value: s, label: s, count: rows.filter(r => r.subject === s).length })));
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const values = tkit.form(form);
+      try {
+        await submissions.insert(values);
+        form.reset();
+        tendly.host.holdReload(false);
+        tkit.toast('Sent. Thank you!', { tone: 'success' });
+      } catch (error) { fail(error); }
+    });
+    form.addEventListener('input', () => { tendly.host.holdReload(true); });
+    form.addEventListener('reset', () => { tendly.host.holdReload(false); });
+
+    function show(record) {
+      viewing = record;
+      const detail = document.getElementById('detail');
+      tkit.clear(detail);
+      [['When', tkit.date(record.created_at, 'time')], ['Name', record.data.name], ['Email', record.data.email], ['Phone', record.data.phone], ['Subject', record.data.subject], ['Message', record.data.message]].forEach(([label, value]) => {
+        if (!value) return;
+        detail.appendChild(tkit.h('dt', { text: label }));
+        detail.appendChild(tkit.h('dd', { text: value }));
+      });
+      viewer.open();
+    }
+    table.addEventListener('t-open', event => show(store.records.find(r => r.id === event.detail.id)));
+    document.getElementById('close').addEventListener('click', () => viewer.close());
+    document.getElementById('delete').addEventListener('click', async () => {
+      if (!viewing || !await tkit.confirm('Delete this submission?', { confirm: 'Delete', tone: 'danger' })) return;
+      try { await submissions.remove(viewing.id); viewer.close(); } catch (error) { fail(error); }
+    });
+    pills.value = '';
+    pills.addEventListener('t-change', event => { const subject = event.detail.value; table.filter = subject ? row => row.subject === subject : null; });
+
+    store = tkit.live(submissions, render, { order: '-created_at', onError: error => {
+      tkit.toast('Could not load the submissions: ' + error.message, { tone: 'error', ms: 6000 });
+    } });
+  </script>
+</body>
+</html>

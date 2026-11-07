@@ -161,6 +161,8 @@ pub struct HubStore {
     pub(crate) app_live: super::apps::live::Live,
     /// App frame addresses kept alive past their signed expiry (`apps/frame.rs`). In memory only.
     pub(crate) app_frames: super::apps::frame::Frames,
+    /// The errors each open app reported last (`apps/diagnostics.rs`). In memory only.
+    pub(crate) app_health: super::apps::diagnostics::Health,
 }
 
 impl HubStore {
@@ -192,6 +194,7 @@ impl HubStore {
             connection: SharedConnection::new(connection),
             app_live: Default::default(),
             app_frames: Default::default(),
+            app_health: Default::default(),
         })
     }
 

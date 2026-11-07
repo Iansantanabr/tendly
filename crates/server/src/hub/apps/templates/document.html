@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .editor-page { height: 100%; grid-template-rows: auto auto minmax(0, 1fr); max-width: 860px; }
+    .editor-title { font-size: var(--t-text-2xl); font-weight: 650; border-color: transparent; background: none; padding-left: 0; }
+    .editor-title:focus { border-color: var(--t-line-input); padding-left: 10px; }
+    .editor-body { min-height: 0; height: 100%; resize: none; line-height: 1.6; font-size: var(--t-text-base); }
+    .editor-status { display: flex; align-items: center; gap: var(--t-space-2); color: var(--t-muted); font-size: var(--t-text-sm); }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Sections">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="docs" data-icon="list">Documents</button>
+      <button data-view="editor" data-icon="doc">Editor</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="docs">
+        <div class="t-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+            <button type="button" class="t-button primary" id="new-doc">New document</button>
+          </header>
+          <input id="search" class="t-input" type="search" placeholder="Filter documents" aria-label="Filter documents">
+          <div id="docs"></div>
+        </div>
+      </t-view>
+      <t-view name="editor">
+        <div class="t-page editor-page">
+          <div class="t-toolbar">
+            <input id="title" class="t-input editor-title" type="text" placeholder="Untitled" aria-label="Title" maxlength="200">
+            <span class="t-spacer"></span>
+            <button type="button" class="t-button danger small" id="delete">Delete</button>
+          </div>
+          <div class="editor-status"><span id="status">Pick a document, or create one.</span></div>
+          <textarea id="body" class="t-input editor-body" placeholder="Write here. It is saved as you type." aria-label="Text"></textarea>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <script>
+    const docs = tendly.db.collection('docs');
+    const app = document.querySelector('t-app');
+    const list = document.getElementById('docs');
+    const titleField = document.getElementById('title');
+    const bodyField = document.getElementById('body');
+    const status = document.getElementById('status');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let current = null, store, timer, dirty = false, query = '';
+
+    function render(records) {
+      tkit.clear(list);
+      const shown = tkit.filterRows(records.map(r => ({ id: r.id, title: r.data.title || '', body: r.data.body || '', updated_at: r.updated_at })), query, ['title', 'body']);
+      if (!records.length) { list.appendChild(tkit.h('t-state', { kind: 'empty', title: 'No documents yet', text: 'Create the first one with the button above.' })); return; }
+      if (!shown.length) { list.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Nothing matches' })); return; }
+      const ul = tkit.h('ul', { class: 't-list' });
+      shown.forEach(doc => {
+        ul.appendChild(tkit.h('li', {}, tkit.h('button', { type: 'button', class: 't-row', 'aria-current': current && current.id === doc.id ? 'true' : null, onClick: () => open(doc.id) },
+          tkit.icon('doc', 16),
+          tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: doc.title || 'Untitled' }), tkit.h('small', { text: tkit.ago(doc.updated_at) + ' · ' + doc.body.replace(/\s+/g, ' ').slice(0, 80) })))));
+      });
+      list.appendChild(ul);
+      // The open document changed elsewhere (another pane, an agent): shown unless there is unsaved typing.
+      if (current && !dirty) {
+        const fresh = records.find(r => r.id === current.id);
+        if (!fresh) { current = null; titleField.value = ''; bodyField.value = ''; status.textContent = 'This document was removed.'; }
+        else if (fresh.rev !== current.rev) { current = fresh; titleField.value = fresh.data.title || ''; bodyField.value = fresh.data.body || ''; }
+      }
+    }
+
+    function open(id) {
+      const record = store.records.find(r => r.id === id);
+      if (!record) return;
+      current = record; dirty = false;
+      titleField.value = record.data.title || '';
+      bodyField.value = record.data.body || '';
+      status.textContent = 'Saved ' + tkit.ago(record.updated_at);
+      app.view = 'editor';
+      bodyField.focus();
+      render(store.records);
+    }
+    async function save() {
+      if (!current) return;
+      const patch = { title: titleField.value.trim(), body: bodyField.value };
+      try {
+        current = await docs.update(current.id, patch, { rev: current.rev });
+        dirty = false; tendly.host.holdReload(false);
+        status.textContent = 'Saved';
+      } catch (error) {
+        if (error.code === 'conflict') { status.textContent = 'Changed elsewhere; your text was kept, save again to overwrite.'; current = error.current; }
+        else { status.textContent = 'Could not save: ' + error.message; }
+      }
+    }
+    function typed() {
+      if (!current) return;
+      dirty = true; tendly.host.holdReload(true);
+      status.textContent = 'Typing…';
+      clearTimeout(timer);
+      timer = setTimeout(save, 600);
+    }
+    titleField.addEventListener('input', typed);
+    bodyField.addEventListener('input', typed);
+    document.getElementById('search').addEventListener('input', event => { query = event.target.value; render(store.records); });
+    document.getElementById('new-doc').addEventListener('click', async () => {
+      try { const record = await docs.insert({ title: '', body: '' }); current = record; open(record.id); titleField.focus(); } catch (error) { fail(error); }
+    });
+    document.getElementById('delete').addEventListener('click', async () => {
+      if (!current || !await tkit.confirm('Delete "' + (current.data.title || 'Untitled') + '"?', { confirm: 'Delete', tone: 'danger' })) return;
+      try { await docs.remove(current.id); current = null; dirty = false; tendly.host.holdReload(false); titleField.value = ''; bodyField.value = ''; status.textContent = 'Deleted.'; app.view = 'docs'; } catch (error) { fail(error); }
+    });
+
+    list.appendChild(tkit.h('t-state', { kind: 'loading' }));
+    store = tkit.live(docs, render, { order: '-updated_at', onError: error => {
+      tkit.clear(list);
+      list.appendChild(tkit.h('t-state', { kind: 'error', title: 'Could not load the documents', text: error.message }));
+    } });
+  </script>
+</body>
+</html>

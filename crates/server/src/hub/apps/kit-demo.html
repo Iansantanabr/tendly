@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en" data-app-color="teal">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tendly app kit</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .demo-section { display: grid; gap: var(--t-space-3); }
+    .demo-section > h2 { font-size: var(--t-text-lg); font-weight: 600; padding-top: var(--t-space-2); border-top: 1px solid var(--t-line); }
+    .swatches { display: flex; flex-wrap: wrap; gap: var(--t-space-2); }
+    .swatch { display: grid; gap: 2px; width: 92px; font-size: var(--t-text-xs); color: var(--t-muted); }
+    .swatch > i { display: block; height: 28px; border-radius: var(--t-radius-sm); border: 1px solid var(--t-line); }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Sections">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">K</span><span>Kit demo</span></span>
+      <button data-view="pieces" data-icon="home">Pieces</button>
+      <button data-view="board" data-icon="board">Kanban</button>
+      <button data-view="table" data-icon="table">Table</button>
+      <button data-view="calendar" data-icon="calendar">Calendar</button>
+      <button data-view="charts" data-icon="chart">Charts</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="pieces">
+        <div class="t-page demo-section">
+          <header class="t-page-head"><div><h1 class="t-title">Tendly app kit</h1><p class="t-muted">What an app gets from kit.css and kit.js. Make the frame narrow: the sidebar becomes a bottom bar.</p></div></header>
+          <h2>Colours</h2>
+          <div class="swatches" id="swatches"></div>
+          <h2>Buttons</h2>
+          <div class="t-toolbar">
+            <button type="button" class="t-button primary">Primary</button>
+            <button type="button" class="t-button">Default</button>
+            <button type="button" class="t-button danger">Danger</button>
+            <button type="button" class="t-button ghost">Ghost</button>
+            <button type="button" class="t-button small">Small</button>
+            <button type="button" class="t-icon-button" aria-label="Settings" id="icon-button"></button>
+            <button type="button" class="t-button" disabled>Disabled</button>
+          </div>
+          <h2>Fields</h2>
+          <form class="t-card t-form" style="max-width: 520px" onsubmit="return false">
+            <div class="t-form-row">
+              <label class="t-field"><span>Name</span><input name="name" type="text" placeholder="Placeholder"></label>
+              <label class="t-field"><span>Stage</span><select name="stage"><option>New</option><option>Won</option></select></label>
+            </div>
+            <label class="t-field"><span>Notes</span><textarea name="notes"></textarea></label>
+            <div class="t-actions"><button type="button" class="t-button" id="open-modal">Open a modal</button><button type="button" class="t-button" id="ask">Confirm something</button><button type="button" class="t-button primary" id="toast">Show a toast</button></div>
+          </form>
+          <h2>Pills, badges, stats</h2>
+          <t-pills id="pills"></t-pills>
+          <div class="t-toolbar"><span class="t-badge">Plain</span><span class="t-badge accent">Accent</span><span class="t-badge ok">Done</span><span class="t-badge warn">Attention</span><span class="t-badge danger">Urgent</span></div>
+          <div class="t-grid">
+            <div class="t-card t-stat"><strong>1.284</strong><span>Leads</span></div>
+            <div class="t-card t-stat"><strong>42%</strong><span>Won</span></div>
+            <div class="t-card t-stat"><strong>R$ 18.900</strong><span>This month</span></div>
+          </div>
+          <h2>List rows</h2>
+          <ul class="t-list">
+            <li><button type="button" class="t-row"><div class="t-row-text"><span>Ana Lima</span><small>Called yesterday · follow up Friday</small></div><span class="t-badge ok">Won</span></button></li>
+            <li><button type="button" class="t-row"><div class="t-row-text"><span>Bruno Costa</span><small>Waiting for a quote</small></div><span class="t-badge warn">Pending</span></button></li>
+          </ul>
+          <h2>States</h2>
+          <div class="t-grid">
+            <div class="t-card"><t-state kind="empty" title="Nothing here yet" text="Add the first item."><button type="button" class="t-button primary small">Add</button></t-state></div>
+            <div class="t-card"><t-state kind="loading"></t-state></div>
+            <div class="t-card"><t-state kind="error" title="Could not load" text="The server did not answer."><button type="button" class="t-button small">Try again</button></t-state></div>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="board">
+        <div class="t-page wide" style="height: 100%; grid-template-rows: auto minmax(0, 1fr)">
+          <header class="t-page-head"><h1 class="t-title">Kanban</h1><span class="t-muted">Drag a card (hold on touch), or focus one and press ← →.</span></header>
+          <t-kanban id="kanban" addable empty-text="Drop a card here"></t-kanban>
+        </div>
+      </t-view>
+      <t-view name="table">
+        <div class="t-page wide">
+          <header class="t-page-head"><h1 class="t-title">Table</h1><span class="t-muted">Filter as you type; click a header to sort; Enter on a row opens it.</span></header>
+          <t-table id="table" searchable></t-table>
+        </div>
+      </t-view>
+      <t-view name="calendar">
+        <div class="t-page wide">
+          <header class="t-page-head"><h1 class="t-title">Calendar</h1><span class="t-muted">Narrow: the chips become dots.</span></header>
+          <t-calendar id="calendar"></t-calendar>
+        </div>
+      </t-view>
+      <t-view name="charts">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Charts</h1></header>
+          <div class="t-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))">
+            <section class="t-card"><h2>Bars</h2><t-chart id="bars" type="bar" label="Leads by month"></t-chart></section>
+            <section class="t-card"><h2>Line</h2><t-chart id="line" type="line" label="Revenue by week"></t-chart></section>
+          </div>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-modal id="modal" title="A modal">
+    <p>Its body scrolls when long; on a phone it rises from the bottom. Esc, the backdrop and the × close it.</p>
+    <label class="t-field"><span>Something</span><input type="text"></label>
+    <div class="t-actions"><button type="button" class="t-button" id="modal-close">Cancel</button><button type="button" class="t-button primary" id="modal-ok">Save</button></div>
+  </t-modal>
+
+  <script>
+    // The Design page says which theme Tendly is on: ?theme=dark|light.
+    (function () {
+      var theme = new URLSearchParams(location.search).get('theme');
+      if (theme === 'dark' || theme === 'light') document.documentElement.setAttribute('data-tendly-theme', theme);
+    })();
+    var names = ['bg', 'surface', 'elevated', 'fill', 'line', 'ink', 'muted', 'accent', 'accent-soft', 'danger', 'ok', 'warn', 'app', 'app-soft'];
+    var swatches = document.getElementById('swatches');
+    names.forEach(function (name) { swatches.appendChild(tkit.h('div', { class: 'swatch' }, tkit.h('i', { style: { background: 'var(--t-' + name + ')' } }), tkit.h('span', { text: '--t-' + name }))); });
+    document.getElementById('icon-button').appendChild(tkit.icon('settings', 16));
+    document.getElementById('toast').addEventListener('click', function () { tkit.toast('Saved', { tone: 'success' }); });
+    document.getElementById('ask').addEventListener('click', async function () { tkit.toast((await tkit.confirm('Delete this lead?', { confirm: 'Delete', tone: 'danger' })) ? 'Deleted' : 'Kept'); });
+    var modal = document.getElementById('modal');
+    document.getElementById('open-modal').addEventListener('click', function () { modal.open(); });
+    document.getElementById('modal-close').addEventListener('click', function () { modal.close(); });
+    document.getElementById('modal-ok').addEventListener('click', function () { modal.close(); tkit.toast('Saved', { tone: 'success' }); });
+    var pills = document.getElementById('pills');
+    pills.options = [{ value: '', label: 'All', count: 12 }, { value: 'new', label: 'New', count: 5 }, { value: 'won', label: 'Won', count: 4 }, { value: 'lost', label: 'Lost', count: 3 }];
+    pills.value = '';
+    pills.addEventListener('t-change', function (event) { tkit.toast('Filter: ' + (event.detail.value || 'all')); });
+
+    var kanban = document.getElementById('kanban');
+    kanban.columns = [{ id: 'new', title: 'New' }, { id: 'talking', title: 'Talking' }, { id: 'won', title: 'Won' }];
+    kanban.cards = [
+      { id: '1', column: 'new', title: 'Ana Lima', text: 'Asked for a quote on the premium plan.', meta: 'today' },
+      { id: '2', column: 'new', title: 'Bruno Costa', meta: 'yesterday' },
+      { id: '3', column: 'talking', title: 'Carla Souza', text: 'Second call booked.', tone: 'warn', meta: 'Friday' },
+      { id: '4', column: 'won', title: 'Diego Alves', tone: 'ok', meta: 'Won' }
+    ];
+    kanban.addEventListener('t-move', function (event) { tkit.toast(event.detail.card.title + ' → ' + event.detail.to); });
+    kanban.addEventListener('t-open', function (event) { tkit.toast('Open ' + event.detail.card.title); });
+    kanban.addEventListener('t-add', function (event) { tkit.toast('Add to ' + event.detail.column); });
+
+    var table = document.getElementById('table');
+    table.columns = [{ key: 'name', label: 'Name' }, { key: 'stage', label: 'Stage', type: 'badge', tones: { Won: 'ok', Lost: 'danger' } }, { key: 'amount', label: 'Amount', type: 'money' }, { key: 'date', label: 'Date', type: 'date' }];
+    table.rows = [
+      { id: 'a', name: 'Ana Lima', stage: 'New', amount: 1200, date: '2026-11-02' },
+      { id: 'b', name: 'Bruno Costa', stage: 'Won', amount: 4800, date: '2026-10-28' },
+      { id: 'c', name: 'Carla Souza', stage: 'Lost', amount: 300, date: '2026-10-12' },
+      { id: 'd', name: 'Diego Alves', stage: 'New', amount: 2250, date: '2026-11-05' }
+    ];
+    table.addEventListener('t-open', function (event) { tkit.toast('Open ' + event.detail.row.name); });
+
+    var calendar = document.getElementById('calendar');
+    var month = tkit.today().slice(0, 7);
+    calendar.events = [
+      { id: 'e1', date: month + '-03', title: 'Call Ana', tone: 'ok' },
+      { id: 'e2', date: month + '-03', title: 'Send quote' },
+      { id: 'e3', date: month + '-12', title: 'Visit Bruno', tone: 'warn' },
+      { id: 'e4', date: month + '-12', title: 'Lunch' }, { id: 'e5', date: month + '-12', title: 'Follow up' }, { id: 'e6', date: month + '-12', title: 'Report' },
+      { id: 'e7', date: month + '-21', title: 'Deadline', tone: 'danger' }
+    ];
+    calendar.addEventListener('t-day', function (event) { tkit.toast(tkit.date(event.detail.date, 'long')); });
+    calendar.addEventListener('t-open', function (event) { tkit.toast('Open ' + event.detail.event.title); });
+
+    document.getElementById('bars').data = [{ label: 'Jun', value: 12 }, { label: 'Jul', value: 18 }, { label: 'Aug', value: 9 }, { label: 'Sep', value: 24 }, { label: 'Oct', value: 20 }, { label: 'Nov', value: 31 }];
+    document.getElementById('line').data = [{ label: 'W1', value: 3200 }, { label: 'W2', value: 4100 }, { label: 'W3', value: 2800 }, { label: 'W4', value: 5600 }, { label: 'W5', value: 6100 }];
+  </script>
+</body>
+</html>

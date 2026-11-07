@@ -161,7 +161,7 @@ pub(crate) struct Live {
 
 /// The folders at the top of an app that are what it keeps, not what it is:
 /// its saved state and the files a person uploaded (`uploads.rs`).
-const KEPT: &[&str] = &["data", super::uploads::FOLDER];
+pub(super) const KEPT: &[&str] = &["data", super::uploads::FOLDER];
 
 /// `apps/<slug>/<rest>` for a path whose change reloads the app: not the
 /// folder itself, not `data/` or `files/`, not a dot-file.
