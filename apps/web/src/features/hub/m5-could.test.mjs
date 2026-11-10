@@ -233,8 +233,8 @@ test('the reports app is made once, in the first project, and only opened after 
 test('the sidebar footer creates the app on a click and never by itself', () => {
   const footer = read('ReportProblem.vue');
   const sidebar = readFileSync(new URL('../WorkspaceSidebar.vue', here), 'utf8');
-  // Still the sidebar's last child; on the Mesa with the icon rail (Apps A) the rail has its own button instead.
-  assert.match(sidebar, /<ReportProblem v-if="!compact" :workspaces="projectWorkspaces" :on-mesa="currentPage === 'canvas'" @open-app="emit\('openApp', \$event\)" \/>\n  <\/div>\n<\/template>/);
+  // Still the sidebar's last child; with the icon rail (Apps A) the rail has its own button instead.
+  assert.match(sidebar, /<ReportProblem v-if="!compact" :workspaces="projectWorkspaces" @open-app="emit\('openApp', \$event\)" \/>\n  <\/div>\n<\/template>/);
   // The only way in is the button's click: no mount hook, no watcher, no timer.
   assert.doesNotMatch(footer, /onMounted|watch\(|watchEffect|setTimeout|setInterval/);
   assert.equal(footer.match(/openReportApp\(/g).length, 1);

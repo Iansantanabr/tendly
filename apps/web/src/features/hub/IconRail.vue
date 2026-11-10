@@ -198,7 +198,7 @@ async function report(event: MouseEvent) {
   catch (cause) { openMenu({ kind: "notice", text: errorMessage(cause) }, from, true); }
   finally { reporting.value = false; }
 }
-/** "Show the full sidebar here": once saved, this rail gives way to the sidebar. */
+/** "Show the full sidebar": once saved, this rail gives way to the sidebar. */
 async function expand() {
   const from = opener;
   closeMenu(true);
@@ -240,7 +240,7 @@ async function expand() {
         <div v-else-if="menu.kind === 'more'" class="rail-menu" role="menu" :aria-label="t('More')">
           <button v-for="item in RAIL_MORE" :key="item.id" type="button" role="menuitem" @click="go(item.id)"><Icon :name="item.icon" :size="14" /><span>{{ t(item.label) }}</span></button>
           <hr />
-          <button type="button" role="menuitem" :title="t('Shows the full sidebar on the Mesa too. Change it back in Settings → Addresses and time zone, or at the foot of the sidebar.')" @click="expand"><Icon name="panelLeft" :size="14" /><span>{{ t('Show the full sidebar here') }}</span></button>
+          <button type="button" role="menuitem" :title="t('Shows the full sidebar with names instead of the icons. Change it back in Settings → Addresses and time zone, or at the foot of the sidebar.')" @click="expand"><Icon name="panelLeft" :size="14" /><span>{{ t('Show the full sidebar') }}</span></button>
         </div>
         <div v-else class="rail-notice" role="alert"><p>{{ menu.text }}</p><button type="button" class="small-button" @click="closeMenu(true)">{{ t('Close') }}</button></div>
       </div>
@@ -250,37 +250,48 @@ async function expand() {
 
 <style scoped>
 /* The column itself: a grid item of the shell (styles.css gives it 56px). It
-   sits above its neighbours so the panel handle can straddle the panel's edge. */
-.hub-rail { position: relative; z-index: 6; display: flex; min-width: 0; min-height: 0; border-right: 1px solid var(--glass-edge); background: var(--glass-side); }
+   sits above its neighbours so the panel handle can straddle the panel's edge,
+   also over the pages (Home, Apps, Settings are drawn at z-index 20), and
+   under the top bar (30). */
+.hub-rail { position: relative; z-index: 25; display: flex; min-width: 0; min-height: 0; border-right: 1px solid var(--glass-edge); background: var(--glass-side); }
 .rail-scroll { display: flex; flex: 1; min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
-.rail-bar { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; min-width: 0; padding: 10px 0 8px; }
+.rail-bar { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 0; padding: 10px 0 8px; }
 .rail-scroll::-webkit-scrollbar, .rail-apps::-webkit-scrollbar { display: none; }
-.rail-group { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
-.rail-foot { padding-top: 6px; border-top: 1px solid var(--fill-hover); }
-.rail-divider { flex: none; width: 24px; height: 1px; margin: 6px 0; background: var(--line); }
+.rail-group { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+/* Both breaks in the rail are the same short rule, centred: the foot is a group, not a new panel. */
+.rail-foot { position: relative; padding-top: 11px; }
+.rail-foot::before, .rail-divider { content: ""; flex: none; width: 24px; height: 1px; background: var(--line); }
+.rail-foot::before { position: absolute; top: 0; left: 50%; transform: translateX(-50%); }
+.rail-divider { margin: 4px 0; }
 /* Many apps scroll here, on their own, between the navigation and the foot.
    In a short window they keep room for two tiles and the whole rail scrolls. */
-.rail-apps { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1 0 84px; width: 100%; min-height: 0; padding: 2px 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
-.rail-item { position: relative; display: grid; place-items: center; flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-md); background: none; color: var(--muted); cursor: pointer; transition: background var(--duration-fast), color var(--duration-fast); }
+.rail-apps { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1 0 84px; width: 100%; min-height: 0; padding: 2px 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+.rail-item { position: relative; display: grid; place-items: center; flex: none; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-md); background: none; color: var(--muted); cursor: pointer; transition: background var(--duration-fast), color var(--duration-fast), transform var(--duration-fast) var(--ease-out); }
 .rail-item:hover, .rail-item.selected { background: var(--fill); color: var(--ink); }
-.rail-item.current { background: var(--selected); color: var(--accent); }
+/* A press answers at once, without moving anything around it. */
+.rail-item:active:not([aria-disabled="true"]) { transform: scale(.94); }
+.rail-item.current { background: var(--selected); color: var(--accent-ink, var(--accent)); }
+/* Where you are, on every page: the same accent bar at the rail's edge for a page and for an app. */
+.rail-item.current::before { content: ""; position: absolute; left: -8px; top: 10px; bottom: 10px; width: 3px; border-radius: var(--radius-full); background: var(--accent); }
 .rail-item[aria-disabled="true"] { opacity: .6; cursor: progress; }
 /* The rail clips what spills past its edge: the focus ring is drawn inside the item. */
 .rail-item:focus-visible, .rail-panel-toggle:focus-visible { outline-offset: -2px; }
 .rail-app { cursor: grab; }
 .rail-app.current { background: var(--elevated); box-shadow: 0 0 0 1px var(--line-strong), var(--shadow-sm); }
-.rail-app.current::before { content: ""; position: absolute; left: -7px; top: 10px; bottom: 10px; width: 3px; border-radius: var(--radius-full); background: var(--accent); }
 .rail-open-dot { position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg-accent); }
 .rail-link { cursor: pointer; }
 .rail-link-mark { position: absolute; right: 2px; top: 2px; display: grid; place-items: center; width: 12px; height: 12px; border-radius: 50%; background: var(--elevated); color: var(--muted); box-shadow: 0 0 0 1px var(--line); }
 .rail-new { width: 32px; height: 32px; margin-top: 2px; border: 1px dashed var(--line-input); color: var(--muted); }
-.rail-new:hover { border-style: solid; }
-.rail-badge { position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--radius-full); background: var(--accent); color: var(--on-accent); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-align: center; }
+.rail-new:hover { border-style: solid; border-color: var(--accent); color: var(--accent-ink, var(--accent)); background: none; }
+/* The badge sits on a ring of the page colour, so it never runs into the bell. */
+.rail-badge { position: absolute; top: 2px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--radius-full); background: var(--accent); color: var(--on-accent); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--bg); font-variant-numeric: tabular-nums; }
 .rail-panel-toggle { position: absolute; top: 50%; left: calc(100% + var(--rail-left, 0px) - 11px); display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-full); background: var(--elevated); color: var(--muted); box-shadow: var(--shadow-sm); cursor: pointer; transform: translateY(-50%); }
 .rail-panel-toggle:hover { color: var(--ink); border-color: var(--line-strong); }
 .rail-panel-toggle > svg { transform: rotate(180deg); }
 .rail-panel-toggle.folded > svg { transform: none; }
-.rail-tip { position: fixed; z-index: 91; max-width: 240px; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--ink); color: var(--bg); font-size: var(--text-xs); font-weight: 500; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; transform: translateY(-50%); box-shadow: var(--shadow-md); }
+.rail-tip { position: fixed; z-index: 91; max-width: 240px; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--ink); color: var(--bg); font-size: var(--text-xs); font-weight: 500; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; transform: translateY(-50%); box-shadow: var(--shadow-md); animation: rail-tip-in var(--duration-fast) var(--ease-out) 120ms both; }
+/* A short wait, so sweeping the mouse down the rail does not flash every name. */
+@keyframes rail-tip-in { from { opacity: 0; transform: translate(-3px, -50%); } }
 .rail-flyout { position: fixed; z-index: 90; width: 220px; max-width: calc(100vw - 80px); padding: 5px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-lg); }
 .rail-flyout-title { display: block; padding: 4px 8px 6px; font-size: var(--text-xs); font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail-menu { display: grid; gap: 1px; }
@@ -297,5 +308,5 @@ async function expand() {
   /* The handle stays small to look at; its target reaches 44px around it. */
   .rail-panel-toggle::after { content: ""; position: absolute; inset: -11px; }
 }
-@media (prefers-reduced-motion: reduce) { .rail-item { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .rail-item { transition: none; } .rail-item:active:not([aria-disabled="true"]) { transform: none; } .rail-tip { animation: none; } }
 </style>

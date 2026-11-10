@@ -1,5 +1,5 @@
 // Apps, stage A: the icon rail of the Mesa, the apps list of the expanded
-// sidebar, the order of the apps and the "Sidebar on the Mesa" preference.
+// sidebar, the order of the apps and the "Sidebar" preference.
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -133,11 +133,14 @@ test('a change shows at once, and comes back if it could not be saved', async ()
 
 // ---------------------------------------------------------------- what the rail decides
 
-test('the rail is for the Mesa on a desktop-width window with the preference on icons', () => {
+test('the rail is on every page of a desktop-width window with the preference on icons', () => {
   const on = { page: undefined, wide: true, mobile: false, preference: 'icons' };
   assert.equal(sidebarLayout(on), 'rail');
   assert.equal(sidebarLayout({ ...on, preference: 'expanded' }), 'expanded');
-  for (const page of ['home', 'apps', 'settings', 'inbox', 'skills', 'automations', 'integrations', 'sessions']) assert.equal(sidebarLayout({ ...on, page }), 'expanded', page);
+  for (const page of ['home', 'apps', 'settings', 'inbox', 'skills', 'automations', 'integrations', 'sessions', 'usage', 'system']) {
+    assert.equal(sidebarLayout({ ...on, page }), 'rail', page);
+    assert.equal(sidebarLayout({ ...on, page, preference: 'expanded' }), 'expanded', page);
+  }
   // Stage B: an app in full screen keeps the rail alone, whatever the Mesa preference is.
   assert.equal(sidebarLayout({ ...on, page: 'app' }), 'app');
   assert.equal(sidebarLayout({ ...on, page: 'app', preference: 'expanded' }), 'app');
@@ -375,12 +378,12 @@ test('the options of an app say what they will do, and which moves are possible'
   assert.match(html, /Hidden: it is only on the Apps page\./);
 });
 
-test('Settings offers "Sidebar on the Mesa" with the saved choice selected', async () => {
+test('Settings offers "Sidebar" with the saved choice selected', async () => {
   stage([]);
   settings.zoneList.value = { zones: ['America/Sao_Paulo'], server: 'America/Sao_Paulo' };
   let html = await render(Panel);
   assert.match(html, /role="radiogroup"[^>]*aria-labelledby="addr-sidebar-title"/);
-  assert.match(html, /<h2[^>]*id="addr-sidebar-title"[^>]*>Sidebar on the Mesa<\/h2>/);
+  assert.match(html, /<h2[^>]*id="addr-sidebar-title"[^>]*>Sidebar<\/h2>/);
   const radios = source => tags(source, /<input[^>]*type="radio"[^>]*>/g);
   assert.equal(radios(html).length, 2);
   assert.match(radios(html)[0], /value="icons"/);
@@ -425,7 +428,7 @@ test('the sidebar keeps its lists whole, and the menu only where the rail is not
   const sidebar = read('../WorkspaceSidebar.vue');
   assert.match(sidebar, /<nav v-if="!compact" class="workspace-global-nav"/);
   assert.match(sidebar, /<SidebarApps v-if="!compact" @catalog="emit\('apps'\)" @open-app="emit\('openAppPage', \$event\)" \/>/);
-  assert.match(sidebar, /<ReportProblem v-if="!compact" :workspaces="projectWorkspaces" :on-mesa="currentPage === 'canvas'"/);
+  assert.match(sidebar, /<ReportProblem v-if="!compact" :workspaces="projectWorkspaces" @open-app/);
   assert.doesNotMatch(sidebar, /sidebar-app\b|sidebarApps/, 'the wrapped chips are gone');
   // The Workspaces/Conversations switch and the lists are in both layouts.
   const template = /<template>([\s\S]*)<\/template>/.exec(sidebar)[1];
@@ -437,7 +440,8 @@ test('the sidebar keeps its lists whole, and the menu only where the rail is not
   assert.match(sidebar, /\.workspace-sidebar > \.workspace-groups \{ flex: 1 0 180px; \}/);
   // The way back to the rail is in the sidebar's foot, and not in a phone's drawer.
   const foot = read('ReportProblem.vue');
-  assert.match(foot, /<button v-if="onMesa"[^>]*class="nav-item report-button only-icons"/);
+  // On every page now (the rail is on every page): no condition on the button.
+  assert.match(foot, /<button type="button" class="nav-item report-button only-icons"/);
   assert.match(foot, /setMesaSidebar\("icons"\)/);
   assert.match(foot, /@media \(max-width: 760px\) \{ \.only-icons \{ display: none; \} \}/);
 });
@@ -476,7 +480,7 @@ test('every string of this stage has a Brazilian Portuguese translation with the
   // Strings chosen by a value, which the scan below can not see.
   const keys = new Set([
     ...RAIL_NAV.map(item => item.label), ...RAIL_MORE.map(item => item.label),
-    'Icons', 'Expanded', 'The full sidebar with names, as on Home and the other pages.',
+    'Icons', 'Expanded', 'The full sidebar with names, on every page.',
     'A narrow rail with the pages, your apps and the bell. Workspaces and conversations get a panel of their own beside it.',
     'Unpin', 'Pin to the top', 'Show again', 'Hide', 'See all', 'See all ({count})', 'Saving…', 'Show only icons here', 'Opening…', 'Report a problem',
     'Hide the workspaces and conversations panel', 'Show the workspaces and conversations panel',
@@ -491,7 +495,7 @@ test('every string of this stage has a Brazilian Portuguese translation with the
     assert.ok(key in translations, `missing pt-BR for ${JSON.stringify(key)}`);
     assert.deepEqual(placeholders(translations[key]), placeholders(key), key);
   }
-  assert.equal(translations['Sidebar on the Mesa'], 'Barra lateral na Mesa');
+  assert.equal(translations['Sidebar'], 'Barra lateral');
   assert.equal(translations['Pin to the top'], 'Fixar no topo');
   // The file keeps its shape: one space of indentation, no trailing newline.
   assert.equal(raw, JSON.stringify(translations, null, 1));

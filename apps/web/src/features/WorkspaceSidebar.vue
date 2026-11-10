@@ -255,7 +255,7 @@ defineExpose({ revealSession });
       <OtherMachines :query="query" @settings="emit('machines')" @open-session="(machine, session) => emit('openRemoteSession', machine, session)" />
     </nav>
     </template>
-    <ReportProblem v-if="!compact" :workspaces="projectWorkspaces" :on-mesa="currentPage === 'canvas'" @open-app="emit('openApp', $event)" />
+    <ReportProblem v-if="!compact" :workspaces="projectWorkspaces" @open-app="emit('openApp', $event)" />
   </div>
 </template>
 

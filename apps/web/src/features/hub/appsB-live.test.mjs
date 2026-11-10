@@ -383,7 +383,7 @@ test('an app has an address of its own, and its page keeps the rail alone', () =
   const wide = { wide: true, mobile: false, preference: 'icons' };
   assert.equal(sidebarLayout({ ...wide, page: 'app' }), 'app');
   assert.equal(sidebarLayout({ ...wide, page: 'app', preference: 'expanded' }), 'app');
-  assert.equal(sidebarLayout({ ...wide, page: 'apps' }), 'expanded');
+  assert.equal(sidebarLayout({ ...wide, page: 'apps' }), 'rail');
   assert.equal(sidebarLayout({ ...wide, page: undefined }), 'rail');
   assert.equal(sidebarLayout({ wide: false, mobile: true, preference: 'icons', page: 'app' }), 'expanded', 'a phone keeps its drawer');
 });

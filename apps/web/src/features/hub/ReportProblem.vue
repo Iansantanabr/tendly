@@ -12,7 +12,7 @@ import type { HubApp } from "./apps";
 import { openReportApp } from "./report";
 import { setMesaSidebar } from "./rail";
 
-const props = defineProps<{ workspaces: Workspace[]; /** The sidebar is showing on the Mesa, where it could be icons instead. */ onMesa?: boolean }>();
+const props = defineProps<{ workspaces: Workspace[] }>();
 const emit = defineEmits<{ openApp: [app: HubApp] }>();
 const { t } = useI18n();
 const busy = ref(false);
@@ -39,7 +39,7 @@ async function onlyIcons() {
 
 <template>
   <footer class="report-foot">
-    <button v-if="onMesa" type="button" class="nav-item report-button only-icons" :disabled="shrinking" :title="t('On the Mesa, shows the navigation as a narrow rail of icons and gives the lists the whole panel.')" @click="onlyIcons">
+    <button type="button" class="nav-item report-button only-icons" :disabled="shrinking" :title="t('Shows the navigation as a narrow rail of icons on every page and gives the lists the whole panel.')" @click="onlyIcons">
       <Icon name="panelLeft" :size="16" /><span>{{ shrinking ? t('Saving…') : t('Show only icons here') }}</span>
     </button>
     <button type="button" class="nav-item report-button" :disabled="busy" :title="t('Opens your list of problems. The first time, it creates the app apps/reportes in your first project.')" @click="report">

@@ -97,7 +97,7 @@ async function toggleDictation(input: HTMLInputElement) {
 
 const SIDEBAR_CHOICES: { value: MesaSidebar; label: string; hint: string }[] = [
   { value: "icons", label: "Icons", hint: "A narrow rail with the pages, your apps and the bell. Workspaces and conversations get a panel of their own beside it." },
-  { value: "expanded", label: "Expanded", hint: "The full sidebar with names, as on Home and the other pages." },
+  { value: "expanded", label: "Expanded", hint: "The full sidebar with names, on every page." },
 ];
 async function chooseSidebar(value: MesaSidebar, input: HTMLInputElement) {
   if (value === mesaSidebar.value) return;
@@ -176,8 +176,8 @@ async function chooseSidebar(value: MesaSidebar, input: HTMLInputElement) {
     </div>
 
     <div class="addr-card" role="radiogroup" aria-labelledby="addr-sidebar-title" :aria-busy="saving === 'mesa_sidebar'">
-      <h2 id="addr-sidebar-title">{{ t('Sidebar on the Mesa') }}</h2>
-      <p class="addr-hint">{{ t('How the sidebar looks while you are on the Mesa, on a computer. On a phone it stays a drawer.') }}</p>
+      <h2 id="addr-sidebar-title">{{ t('Sidebar') }}</h2>
+      <p class="addr-hint">{{ t('How the sidebar looks on every page, on a computer. On a phone it stays a drawer.') }}</p>
       <label v-for="choice in SIDEBAR_CHOICES" :key="choice.value" :class="['addr-radio-row', { disabled: !ready || saving === 'mesa_sidebar' }]">
         <input type="radio" name="mesa-sidebar" :value="choice.value" :checked="mesaSidebar === choice.value" :disabled="!ready || saving === 'mesa_sidebar'" @change="chooseSidebar(choice.value, $event.target as HTMLInputElement)" />
         <span class="addr-switch-text"><strong>{{ t(choice.label) }}</strong><small>{{ t(choice.hint) }}</small></span>
