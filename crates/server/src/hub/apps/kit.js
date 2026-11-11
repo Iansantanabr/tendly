@@ -86,7 +86,7 @@
  *   tkit.monthGrid(year, month, weekStart), tkit.today()    pure helpers (kit.test.mjs covers them)
  *   tkit.t(key)                      the kit's own few strings, in the page's language (en, pt)
  *
- * HELPERS, version 2 (tkit.version is 2; kit-v2.test.mjs covers every pure one)
+ * HELPERS, version 2 (tkit.version is 2, tkit.minor 1; kit-v2.test.mjs covers every pure one)
  *   tkit.parseRoute(hash)            '#board/a%20b' -> { view: 'board', id: 'a b' }; '' -> { view: '', id: null }
  *   tkit.route.get()                 { view, id } now.            tkit.route.close()   sets "#<view>"
  *   tkit.route.open(id)              sets "#<view>/<id>" (the view does not change)
@@ -129,8 +129,8 @@
  *   tkit.parseNumber(text)           "1.234,5" (pt) / "1,234.5" (en) / "1234.5" / "R$ 12,50" -> number or null
  *
  * SCHEMA (what the forms, details, CSV and editors share)
- *   A field is { id, label, type, options?, required?, help?, formula?, currency?, placeholder? }; type is one of
- *   tkit.fieldTypes: text longtext number money date datetime choice multi checkbox image file url email phone formula
+ *   A field is { id, label, type, options?, required?, help?, formula?, currency?, placeholder?, creatable? }; type is one of
+ *   tkit.fieldTypes: text longtext number money date datetime time choice multi checkbox image file url email phone formula
  *   (formula is read-only, computed from `formula`; image/file are { path, name, type } of tendly.files).
  *   An option is { id, label, tone? }, tone one of tkit.tones: '' accent ok warn danger info violet (the .t-badge colours).
  *   Ids are [a-z0-9_] and never change once made; labels can. Dates are YYYY-MM-DD, date-times ISO 8601 with an offset,
@@ -142,6 +142,49 @@
  *   tkit.validate(fields, data)      { ok, errors: { fieldId: message } }: required, numbers, e-mail, http(s) links, dates
  *   tkit.compute(fields, data)       a copy of data with every formula field computed; failures give null and are in
  *                                    result._errors (not enumerable); cycles say "Circular formula"
+ *
+ * KIT v2.1 (tkit.minor is 1; tkit.version stays 2; kit-v2.test.mjs covers every pure part)
+ *   <t-data-tools hide="import examples danger">   the Dados, Exemplos and Zona de perigo cards of an Ajustes screen (Data, Examples,
+ *                                    Danger zone). .collection (a tendly.db collection), .fields (schema: CSV columns and import),
+ *                                    .records (the current records: counts, and what to export), .examples (array of docs, or a
+ *                                    function called at click time so dates are fresh), .filename ('Cards': the file is
+ *                                    "<document.title> - Cards - YYYY-MM-DD.csv"), .noun { one, many } ('card', 'cards'),
+ *                                    .exportRows (records -> rows; default: tkit.compute of each record's data), .exportColumns (array or
+ *                                    function; default tkit.csv.columnsFor(fields)), .beforeInsert (doc -> doc | null to skip, for
+ *                                    importing), .beforeExamples (async, runs before examples load: seed settings). Hides: export
+ *                                    import examples danger. Events "t-imported" {count, failed}, "t-examples" {action: 'loaded'|'cleared',
+ *                                    loaded, cleared, count}, "t-cleared" {count}. Import inserts one by one with a progress toast every 50.
+ *   <t-empty-start title text action>  the main view's empty state: <t-state> with a primary button (the `action` label; none if
+ *                                    left out) and "See with examples". Events "t-action" and "t-examples"; it calls nothing itself.
+ *   <t-table>.footer = { key: 'sum' | 'avg' | 'count' | 'text' | fn(rows, column) }   a <tfoot> over the rows shown (filtered, searched),
+ *                                    kept through sorting; money/number cells like their column. count = rows with a value in it.
+ *   <t-kanban>.columnMeta = fn(columnId, cards) -> text   shown in each column header after the count (a money total, say).
+ *   <t-calendar hide-weekends week-start="1">   5 columns; events on a Saturday or Sunday are listed under the Friday they follow,
+ *                                    after a "+ weekend" label (a grid that starts on a weekend day uses the Friday after it).
+ *   <t-fields-editor>.extra = fn(field) -> Node | null   the page's own controls inside the field's detail panel (a switch, a number
+ *                                    box); any field type gets the panel when it returns a Node. fe.update(fieldId, patch) changes a
+ *                                    field from such a control and fires "t-change" without redrawing (undefined removes a key).
+ *   <t-record-form>   type "time" (HH:MM, <input type="time">); a choice or multi field with creatable: true ends with "New option…":
+ *                                    type the label, Enter adds { id: tkit.slug(label), label } to the form's field and fires
+ *                                    "t-option-added" {fieldId, option} so the page saves it; Esc cancels. Setting .fields to what
+ *                                    the page saved afterwards keeps what was typed.
+ *   tkit.h('t-state', { title, text, kind })   for tags starting with t-, props (text and title included) are attributes; other
+ *                                    tags keep text -> textContent. Objects and functions are still assigned as properties.
+ *   tkit.copy(text)                  Promise of true/false: Clipboard API, else a hidden textarea; a "Copied" toast on success.
+ *   tkit.csv.columnsFor(fields, settings)  columns for tkit.csv.stringify from a schema: labels as header, numbers with ".", dates
+ *                                    and times ISO, choices by label, files by name (compute formula fields first). tkit.csv.filename(app, name, day)
+ *                                    is the file name "<app> - <name> - day.csv" without characters a file cannot have.
+ *   tkit.search.match(text, query)   [[start, end)] of every query word (accents and case ignored; every word must be there) or null
+ *   tkit.search.highlight(text, ranges)  a DocumentFragment with <mark> around the ranges;  tkit.search.snippet(text, ranges, size = 160)
+ *                                    about `size` characters around the first range, with … at cut ends ('' with no match)
+ *   tkit.autosave(saveFn, { delay: 800, onStatus(status, error) })  -> { touch(), flush(), status, error }: debounced, one save at a
+ *                                    time; status idle | typing | saving | saved | error; tendly.host.holdReload(true) while there is
+ *                                    unsaved text, false once saved; an error keeps it dirty (next touch or flush retries). flush() is
+ *                                    a Promise that resolves when nothing is pending (use it before leaving the editor).
+ *   tkit.textarea.wrap(area, before, after, placeholder?)  wraps the selection (placeholder if none) / .prefixLines(area, prefix) toggles
+ *                                    a prefix on the selected lines; execCommand('insertText') so undo works, else setRangeText.
+ *                                    wrapEdit / prefixEdit are the pure parts: (value, start, end, …) -> { from, to, insert, selFrom, selTo }.
+ *   tkit.tableFooter(columns, footer, rows) and tkit.weekdayGrid(year, month, weekStart) are the pure parts of the footer and hide-weekends.
  *
  * CSS classes added in kit.css: t-nav-end, t-card-head, t-kv, t-segment (buttons with aria-pressed), t-switch (a checkbox),
  * t-drawer, t-chip, t-input-group, t-pre, t-md, t-badge.info and .violet; see kit-demo.html for every element working.
@@ -182,7 +225,14 @@
     mapRequired: 'Match the required field: {x}', csvEmpty: 'This file has no rows', csvReadError: 'Could not read the file',
     rowsReadyOne: '{n} row ready', rowsReadyMany: '{n} rows ready', rowsProblems: '{n} with problems', andMore: 'and {n} more',
     importN: 'Import {n}', samplesOne: 'You are seeing {n} example.', samplesMany: 'You are seeing {n} examples.',
-    clearSamples: 'Delete examples', createWiki: 'Create article "{x}"', doneBy: 'by {by} at {at}', doneAt: 'at {at}' },
+    clearSamples: 'Delete examples', createWiki: 'Create article "{x}"', doneBy: 'by {by} at {at}', doneAt: 'at {at}',
+    badTime: 'Not a valid time', type_time: 'Time', newOption: 'New option…', newOptionName: 'Name of the new option',
+    copied: 'Copied', weekendMore: '+ weekend', nounOne: 'record', nounMany: 'records',
+    dataTitle: 'Data', dataTextBoth: 'Export {x} to a spreadsheet, or import them from a CSV file.', dataTextExport: 'Export {x} to a spreadsheet.',
+    exportCsv: 'Export CSV', importCsv: 'Import CSV', exported: 'Exported: {x}', imported: 'Imported: {x}', importing: 'Importing… {n} of {m}',
+    importFailed: 'Could not save {n}', examplesTitle: 'Examples', examplesText: 'Fill the app with sample data to see how it works. You can delete it any time.',
+    seeExamples: 'See with examples', dangerTitle: 'Danger zone', dangerText: 'Delete all the data in this app at once. This cannot be undone.',
+    deleteAll: 'Delete all records', deleteAllOne: 'Delete {n} {x}? This cannot be undone.', deleteAllMany: 'Delete all {n} {x}? This cannot be undone.' },
     pt: { filter: 'Filtrar', noResults: 'Nada encontrado', of: 'de', close: 'Fechar', cancel: 'Cancelar', ok: 'OK', today: 'Hoje', prev: 'Mês anterior', next: 'Mês seguinte', empty: 'Nada por aqui ainda', loading: 'Carregando…', error: 'Algo deu errado', add: 'Adicionar', more: 'mais', moved: 'Movido para', items: 'itens',
     yes: 'Sim', no: 'Não', required: 'Obrigatório', notNumber: 'Não é um número', badEmail: 'E-mail inválido',
     badUrl: 'Deve começar com http:// ou https://', badDate: 'Data inválida', delete: 'Apagar', change: 'Mudar', back: 'Voltar',
@@ -214,7 +264,14 @@
     csvReadError: 'Não consegui ler o arquivo', rowsReadyOne: '{n} linha pronta', rowsReadyMany: '{n} linhas prontas',
     rowsProblems: '{n} com problemas', andMore: 'e mais {n}', importN: 'Importar {n}', samplesOne: 'Você está vendo {n} exemplo.',
     samplesMany: 'Você está vendo {n} exemplos.', clearSamples: 'Apagar exemplos', createWiki: 'Criar artigo "{x}"',
-    doneBy: 'por {by} às {at}', doneAt: 'às {at}' }
+    doneBy: 'por {by} às {at}', doneAt: 'às {at}',
+    badTime: 'Hora inválida', type_time: 'Hora', newOption: 'Nova opção…', newOptionName: 'Nome da nova opção',
+    copied: 'Copiado', weekendMore: '+ fim de semana', nounOne: 'registro', nounMany: 'registros',
+    dataTitle: 'Dados', dataTextBoth: 'Exporte {x} para uma planilha ou importe de um arquivo CSV.', dataTextExport: 'Exporte {x} para uma planilha.',
+    exportCsv: 'Exportar CSV', importCsv: 'Importar CSV', exported: 'Exportado: {x}', imported: 'Importado: {x}', importing: 'Importando… {n} de {m}',
+    importFailed: 'Não consegui salvar {n}', examplesTitle: 'Exemplos', examplesText: 'Preencha o app com dados de exemplo para ver como funciona. Você pode apagá-los quando quiser.',
+    seeExamples: 'Ver com exemplos', dangerTitle: 'Zona de perigo', dangerText: 'Apaga de uma vez todos os dados deste app. Isso não pode ser desfeito.',
+    deleteAll: 'Apagar todos os registros', deleteAllOne: 'Apagar {n} {x}? Isso não pode ser desfeito.', deleteAllMany: 'Apagar {n} {x}? Isso não pode ser desfeito.' }
   };
   function language() {
     var lang = '';
@@ -436,6 +493,29 @@
     }
     return null;
   }
+  /** "9h30", "9:30", "0930", "930", "9h", "9", "09:30:15", "9:30pm" -> "HH:MM" (24 hours), or null when it is not a time. */
+  function normalizeTime(raw) {
+    var s = normalize(raw).replace(/\s+/g, ''), m, hour, minute, meridiem = '';
+    if (!s) return null;
+    if ((m = /(am|pm)$/.exec(s))) { meridiem = m[1]; s = s.slice(0, -2); }
+    if ((m = /^(\d{1,2})(?:[:h.](\d{2})?(?::\d{2}(?:\.\d+)?)?)?$/.exec(s))) { hour = +m[1]; minute = m[2] ? +m[2] : 0; }
+    else if ((m = /^(\d{2})(\d{2})$/.exec(s)) || (m = /^(\d)(\d{2})$/.exec(s))) { hour = +m[1]; minute = +m[2]; }
+    else return null;
+    if (meridiem) {
+      if (hour < 1 || hour > 12) return null;
+      if (meridiem === 'pm' && hour < 12) hour += 12;
+      if (meridiem === 'am' && hour === 12) hour = 0;
+    }
+    return hour > 23 || minute > 59 ? null : pad(hour) + ':' + pad(minute);
+  }
+  /** "HH:MM" as the page's language writes it (9:30 AM, 09:30). */
+  function timeText(value) {
+    var hhmm = normalizeTime(value);
+    if (hhmm === null) return text(value);
+    if (language() === 'pt') return hhmm; // Brazil writes 09:30
+    var parts = hhmm.split(':');
+    try { return new Intl.DateTimeFormat(locale(), { hour: 'numeric', minute: '2-digit' }).format(new Date(2000, 0, 1, +parts[0], +parts[1])); } catch (_) { return hhmm; }
+  }
   /** YYYY-MM-DD, n days from today (n may be negative): for relative example dates. */
   function daysFromToday(n) {
     var now = new Date();
@@ -443,7 +523,7 @@
   }
 
   // ---- Fields: the schema forms, details and imports share ------------------------------------
-  var FIELD_TYPES = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'choice', 'multi', 'checkbox', 'image', 'file', 'url', 'email', 'phone', 'formula'];
+  var FIELD_TYPES = ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'time', 'choice', 'multi', 'checkbox', 'image', 'file', 'url', 'email', 'phone', 'formula'];
   var TONES = ['', 'accent', 'ok', 'warn', 'danger', 'info', 'violet'];
   var RESERVED = ['true', 'false', 'and', 'or', 'not'];
   /** A [a-z0-9_] id from a label ("Valor total" -> valor_total), made unique against `taken` (-> valor_total_2). */
@@ -492,6 +572,7 @@
       case 'number': case 'money': { var n = parseNumber(raw); return n === null ? text(raw).trim() : n; }
       case 'date': { var d = normalizeDate(raw); return d === null ? text(raw).trim() : d; }
       case 'datetime': { var dt = normalizeDateTime(raw); return dt === null ? text(raw).trim() : dt; }
+      case 'time': { var tm = normalizeTime(raw); return tm === null ? text(raw).trim() : tm; }
       case 'choice': { var option = findOption(field, raw); return option ? option.id : text(raw).trim(); }
       case 'image': case 'file':
         if (isPlain(raw) && raw.path !== undefined) return { path: text(raw.path), name: text(raw.name || basename(raw.path)), type: text(raw.type) };
@@ -512,6 +593,7 @@
       case 'money': return money(value, field.currency || settings.currency);
       case 'date': return date(value);
       case 'datetime': return date(value, 'time');
+      case 'time': return timeText(value);
       case 'choice': { var option = findOption(field, value); return option ? text(option.label) : text(value); }
       case 'multi': return (Array.isArray(value) ? value : [value]).map(function (id) { var o = findOption(field, id); return o ? text(o.label) : text(id); }).join(', ');
       case 'image': case 'file': return isPlain(value) ? text(value.name || basename(value.path)) : basename(value);
@@ -537,6 +619,7 @@
       else if (field.type === 'url' && !/^https?:\/\/\S+$/i.test(text(value))) message = t('badUrl');
       else if (field.type === 'date' && normalizeDate(value) !== text(value)) message = t('badDate'); // also catches 2026-02-31
       else if (field.type === 'datetime' && normalizeDateTime(value) === null) message = t('badDate');
+      else if (field.type === 'time' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(text(value))) message = t('badTime');
       if (message) errors[field.id] = message;
     });
     return { ok: Object.keys(errors).length === 0, errors: errors };
@@ -1044,18 +1127,273 @@
     return parseMarkdown(src).filter(function (b) { return b.type === 'heading'; }).map(function (b) { return { level: b.level, text: mdPlain(b.children), anchor: b.anchor }; });
   }
 
+  // ==== v2.1: pure helpers ============================================================
+
+  // ---- Search: tkit.search ------------------------------------------------------------------
+  /** Folds `src` and remembers, for every folded character, where it came from (folding can change the length). */
+  function foldMap(src) {
+    var f = normalize(src);
+    if (f.length === src.length) return { f: f, map: null };
+    var out = '', map = [];
+    for (var i = 0; i < src.length; i++) {
+      var piece = normalize(src.charAt(i));
+      for (var k = 0; k < piece.length; k++) { out += piece.charAt(k); map.push(i); }
+    }
+    return { f: out, map: map };
+  }
+  /** [[start, end)] of every occurrence of every word of `query` in `src` (accents and case ignored, overlaps merged),
+   *  or null when there is no word or some word is missing. The ranges index the original text. */
+  function searchMatch(src, query) {
+    var words = normalize(query).split(/\s+/).filter(Boolean);
+    if (!words.length) return null;
+    var folded = foldMap(text(src)), f = folded.f, map = folded.map, found = [];
+    for (var w = 0; w < words.length; w++) {
+      var word = words[w], at = f.indexOf(word), hits = 0;
+      if (at < 0) return null;
+      while (at >= 0 && hits < 500) {
+        found.push([map ? map[at] : at, (map ? map[at + word.length - 1] : at + word.length - 1) + 1]);
+        at = f.indexOf(word, at + word.length); hits++;
+      }
+    }
+    found.sort(function (a, b) { return a[0] - b[0]; });
+    var merged = [];
+    found.forEach(function (r) { var last = merged[merged.length - 1]; if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]); else merged.push([r[0], r[1]]); });
+    return merged;
+  }
+  /** About `size` characters of `src` around the first range, with … where it was cut; '' when there is no match. */
+  function searchSnippet(src, ranges, size) {
+    src = text(src);
+    size = size > 0 ? size : 160;
+    if (!ranges || !ranges.length) return '';
+    var lead = Math.min(50, Math.floor(size / 3)), start = Math.max(0, ranges[0][0] - lead);
+    if (start > 0) { var space = src.indexOf(' ', start); if (space >= 0 && space < ranges[0][0]) start = space + 1; }
+    var end = Math.min(src.length, start + size);
+    return (start > 0 ? '…' : '') + src.slice(start, end).trim() + (end < src.length ? '…' : '');
+  }
+  /** `src` as a DocumentFragment with the ranges wrapped in <mark> (DOM nodes only, never innerHTML). */
+  function searchHighlight(src, ranges) {
+    src = text(src);
+    var out = document.createDocumentFragment(), at = 0;
+    (ranges || []).forEach(function (r) {
+      if (r[0] < at) return;
+      if (r[0] > at) out.appendChild(document.createTextNode(src.slice(at, r[0])));
+      out.appendChild(h('mark', { text: src.slice(r[0], r[1]) }));
+      at = r[1];
+    });
+    if (at < src.length) out.appendChild(document.createTextNode(src.slice(at)));
+    return out;
+  }
+
+  // ---- Text areas: tkit.textarea ----------------------------------------------------------------------
+  /** What wrapping the selection start..end of `value` in before/after changes: { from, to, insert, selFrom, selTo }.
+   *  With nothing selected, `placeholder` (default empty) goes between and is left selected. */
+  function wrapEdit(value, start, end, before, after, placeholder) {
+    var chosen = value.slice(start, end) || text(placeholder);
+    return { from: start, to: end, insert: before + chosen + after, selFrom: start + before.length, selTo: start + before.length + chosen.length };
+  }
+  /** What putting `prefix` in front of every line touched by start..end changes. If every non-empty line already has it, it
+   *  is taken off instead. */
+  function prefixEdit(value, start, end, prefix) {
+    var from = start === 0 ? 0 : value.lastIndexOf('\n', start - 1) + 1;
+    var stop = end > start && value.charAt(end - 1) === '\n' ? end - 1 : end;
+    var to = value.indexOf('\n', stop);
+    if (to < 0) to = value.length;
+    if (to < from) to = from;
+    var lines = value.slice(from, to).split('\n');
+    var filled = lines.filter(function (line) { return line.trim() !== ''; });
+    var remove = filled.length > 0 && filled.every(function (line) { return line.indexOf(prefix) === 0; });
+    var out = lines.map(function (line) {
+      if (remove) return line.indexOf(prefix) === 0 ? line.slice(prefix.length) : line;
+      return (line.trim() === '' && lines.length > 1) || line.indexOf(prefix) === 0 ? line : prefix + line;
+    }).join('\n');
+    return { from: from, to: to, insert: out, selFrom: from, selTo: from + out.length };
+  }
+  /** Writes an edit into a textarea the way typing would (execCommand keeps the browser's undo), else with setRangeText. */
+  function applyEdit(area, edit) {
+    var before = area.value;
+    area.focus();
+    area.setSelectionRange(edit.from, edit.to);
+    var ok = false;
+    try { ok = document.execCommand('insertText', false, edit.insert); } catch (_) { /* not available */ }
+    if (!ok || (area.value === before && edit.insert !== before.slice(edit.from, edit.to))) {
+      area.setRangeText(edit.insert, edit.from, edit.to, 'end');
+      area.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    area.setSelectionRange(edit.selFrom, edit.selTo);
+  }
+  function textareaWrap(area, before, after, placeholder) { applyEdit(area, wrapEdit(area.value, area.selectionStart, area.selectionEnd, text(before), text(after), placeholder)); }
+  function textareaPrefixLines(area, prefix) { applyEdit(area, prefixEdit(area.value, area.selectionStart, area.selectionEnd, text(prefix))); }
+
+  // ---- Autosave: tkit.autosave ---------------------------------------------------------------------------
+  function holdReload(on) {
+    try { if (window.tendly && tendly.host && typeof tendly.host.holdReload === 'function') tendly.host.holdReload(on); } catch (_) { /* no SDK */ }
+  }
+  /** Debounced, one save at a time. touch() says "the text changed"; flush() saves now and resolves when nothing is pending.
+   *  status is idle | typing | saving | saved | error. Reloads are held while there is unsaved text. A failed save keeps the
+   *  text dirty (status error) and is tried again by the next touch() or flush(). saveFn() may return a Promise. */
+  function autosave(saveFn, options) {
+    options = options || {};
+    var delay = options.delay === undefined ? 800 : options.delay;
+    var dirty = false, timer = null, saving = null, status = 'idle', failure = null;
+    var api = {};
+    function setStatus(next, error) {
+      status = next; failure = error || null;
+      if (typeof options.onStatus === 'function') { try { options.onStatus(next, error); } catch (e) { setTimeout(function () { throw e; }); } }
+    }
+    function run() {
+      clearTimeout(timer); timer = null;
+      if (saving) return saving;
+      if (!dirty) return Promise.resolve();
+      dirty = false;
+      setStatus('saving');
+      saving = Promise.resolve().then(saveFn).then(function () { return null; }, function (error) { return error || new Error(t('error')); }).then(function (error) {
+        saving = null;
+        if (error) { dirty = true; setStatus('error', error); return; }
+        if (dirty) { setStatus('typing'); if (!timer) timer = setTimeout(run, Math.min(delay, 300)); return; }
+        setStatus('saved');
+        holdReload(false);
+      });
+      return saving;
+    }
+    api.touch = function () {
+      dirty = true;
+      holdReload(true);
+      setStatus('typing');
+      clearTimeout(timer);
+      if (!saving) timer = setTimeout(run, delay);
+    };
+    api.flush = function () {
+      clearTimeout(timer); timer = null;
+      var rounds = 0;
+      function step() {
+        if (!dirty && !saving) return Promise.resolve();
+        if (++rounds > 3) return Promise.resolve();
+        return run().then(function () { return status === 'error' ? undefined : step(); });
+      }
+      return step();
+    };
+    Object.defineProperty(api, 'status', { get: function () { return status; }, enumerable: true });
+    Object.defineProperty(api, 'error', { get: function () { return failure; }, enumerable: true });
+    return api;
+  }
+
+  // ---- CSV from a schema ---------------------------------------------------------------------------------------
+  function csvFormat(field, value) {
+    if (value === undefined || value === null || value === '') return '';
+    switch (field.type) {
+      case 'number': case 'money': return typeof value === 'number' ? String(value) : text(value);
+      case 'formula': return typeof value === 'number' ? String(Math.round(value * 1e10) / 1e10) : typeof value === 'boolean' ? (value ? t('yes') : t('no')) : text(value);
+      case 'multi': return (Array.isArray(value) ? value : [value]).map(function (id) { var o = findOption(field, id); return o ? text(o.label) : text(id); }).join('; ');
+      case 'choice': case 'checkbox': case 'image': case 'file': return fieldText(field, value);
+      default: return text(value); // text, dates and times are written as stored (ISO), so a spreadsheet can read them back
+    }
+  }
+  /** Columns for tkit.csv.stringify from a field list: label as the header, numbers with ".", dates ISO, choices by label,
+   *  files by name. Formula fields are exported too: compute the rows with tkit.compute first. `settings` is accepted so a
+   *  later version can use it (money is exported as a plain number, with no symbol). */
+  function csvColumnsFor(fields, settings) {
+    return (fields || []).map(function (field) {
+      return { key: field.id, label: field.label === undefined ? field.id : field.label, format: function (value) { return csvFormat(field, value, settings); } };
+    });
+  }
+  /** "<app> - <name> - YYYY-MM-DD.csv" without characters a file name cannot hold. */
+  function csvFileName(app, name, day) {
+    var parts = [app, name, day || today()].map(function (part) { return text(part).replace(/[\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim(); }).filter(Boolean);
+    return parts.join(' - ') + '.csv';
+  }
+
+  // ---- Table footer ------------------------------------------------------------------------------------------------------
+  function footerNumbers(rows, key) {
+    var out = [];
+    (rows || []).forEach(function (row) {
+      var v = row[key];
+      if (typeof v === 'number') { if (isFinite(v)) out.push(v); }
+      else if (typeof v === 'string' && v.trim() !== '' && isFinite(Number(v))) out.push(Number(v));
+    });
+    return out;
+  }
+  /** The footer of a table: one { key, value, num } per column. A column's spec is 'sum' | 'avg' (over the numbers it has;
+   *  empty if none) | 'count' (rows with a value in it) | any other text (as it is) | a function (rows, column) -> text or Node.
+   *  money columns are formatted with their currency, the rest as numbers. */
+  function tableFooter(columns, footer, rows) {
+    return (columns || []).map(function (column) {
+      var spec = footer && Object.prototype.hasOwnProperty.call(footer, column.key) ? footer[column.key] : undefined, value = '';
+      var numeric = column.type === 'number' || column.type === 'money';
+      if (typeof spec === 'function') value = spec(rows, column);
+      else if (spec === 'sum' || spec === 'avg') {
+        var nums = footerNumbers(rows, column.key);
+        if (nums.length) {
+          var total = nums.reduce(function (s, x) { return s + x; }, 0);
+          if (spec === 'avg') total = total / nums.length;
+          value = column.type === 'money' ? money(total, column.currency) : number(total, 2);
+        }
+      } else if (spec === 'count') value = number((rows || []).filter(function (row) { return !emptyValue(row[column.key]); }).length, 0);
+      else if (typeof spec === 'string') value = spec;
+      return { key: column.key, value: value === undefined || value === null ? '' : value, num: numeric };
+    });
+  }
+
+  // ---- Weekdays only: the calendar without Saturday and Sunday --------------------------------------------------
+  /** monthGrid without Saturdays and Sundays (weekday 0 and 6). Each cell has `weekend`, the dates of the weekend days that
+   *  belong to it: a Friday gets the Saturday and Sunday after it (or, at the start of a grid that begins on a weekend day,
+   *  before it); the other cells have an empty list. */
+  function weekdayGrid(year, month, weekStart) {
+    var all = monthGrid(year, month, weekStart);
+    all.forEach(function (cell) { cell.weekend = []; });
+    all.forEach(function (cell, i) {
+      if (cell.weekday !== 0 && cell.weekday !== 6) return;
+      var back = cell.weekday === 6 ? 1 : 2, target = all[i - back];
+      if (!target || target.weekday !== 5) target = all[i + (cell.weekday === 6 ? 6 : 5)];
+      if (target) target.weekend.push(cell.date);
+    });
+    return all.filter(function (cell) { return cell.weekday !== 0 && cell.weekday !== 6; });
+  }
+
+  // ---- Clipboard -----------------------------------------------------------------------------------------------------------
+  function copyFallback(str) {
+    var area, kept = null, ok = false;
+    try {
+      kept = document.activeElement;
+      area = h('textarea', { readonly: true, 'aria-hidden': 'true', tabindex: '-1', style: { position: 'fixed', top: '0', left: '0', opacity: '0' } });
+      area.value = str;
+      document.body.appendChild(area);
+      area.select();
+      ok = !!document.execCommand('copy');
+    } catch (_) { ok = false; }
+    try { if (area && area.parentNode) area.parentNode.removeChild(area); if (kept && kept.focus) kept.focus(); } catch (_) { /* gone */ }
+    return ok;
+  }
+  /** Puts text on the clipboard: the Clipboard API first, then a hidden textarea (frames often refuse the API). Resolves
+   *  true or false; on success it shows a "Copied" toast. */
+  function copy(str) {
+    str = text(str);
+    var first = Promise.resolve(false);
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        first = Promise.resolve(navigator.clipboard.writeText(str)).then(function () { return true; }, function () { return false; });
+      }
+    } catch (_) { /* no Clipboard API */ }
+    return first.then(function (ok) { return ok || copyFallback(str); }).then(function (ok) {
+      if (ok) { try { toast(t('copied'), { tone: 'success' }); } catch (_) { /* no page to show it on */ } }
+      return ok;
+    });
+  }
+
   // ---- DOM helpers -----------------------------------------------------------
   function h(tag, props) {
     var el = document.createElement(tag);
+    var custom = tag.indexOf('t-') === 0; // a kit element: its props are attributes (text, title, kind…), not DOM properties
     props = props || {};
     Object.keys(props).forEach(function (key) {
       var value = props[key];
       if (value === undefined || value === null || value === false) return;
       if (key === 'class') el.className = value;
-      else if (key === 'text') el.textContent = value;
       else if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
       else if (key === 'dataset') Object.keys(value).forEach(function (k) { el.dataset[k] = value[k]; });
       else if (key.indexOf('on') === 0 && typeof value === 'function') el.addEventListener(key.slice(2).toLowerCase(), value);
+      else if (custom && key === 'children') append(el, value);
+      else if (custom && typeof value !== 'object' && typeof value !== 'function') el.setAttribute(key, value === true ? '' : String(value));
+      else if (key === 'text') el.textContent = value;
       else if (key in el && typeof value !== 'string' && key !== 'value') el[key] = value;
       else el.setAttribute(key, value === true ? '' : value);
     });
@@ -1640,7 +1978,7 @@
     Object.setPrototypeOf(TTable, HTMLElement);
     TTable.prototype.connectedCallback = function () {
       var self = this;
-      adopt(self, ['columns', 'rows', 'filter']);
+      adopt(self, ['columns', 'rows', 'filter', 'footer']);
       if (!self._bound) {
         self._bound = true;
         self._query = ''; self._sort = null;
@@ -1707,7 +2045,8 @@
         head.appendChild(th);
       });
       self._body = h('tbody');
-      self.appendChild(h('div', { class: 't-table-scroll' }, h('table', { class: 't-table' }, h('thead', {}, head), self._body)));
+      self._table = h('table', { class: 't-table' }, h('thead', {}, head), self._body);
+      self.appendChild(h('div', { class: 't-table-scroll' }, self._table));
       self._drawBody();
     };
     TTable.prototype._drawBody = function () {
@@ -1723,9 +2062,22 @@
         body.appendChild(tr);
       });
       if (self._count) self._count.textContent = rows.length === all.length ? all.length + ' ' + t('items') : rows.length + ' ' + t('of') + ' ' + all.length;
+      // The footer sums what is shown (filtered and searched), and is rebuilt with the body so sorting keeps it.
+      var table = self._table, old = table ? table.querySelector('tfoot') : null;
+      if (old) old.parentNode.removeChild(old);
+      if (table && self._footer && rows.length) {
+        var foot = h('tr');
+        tableFooter(columns, self._footer, rows).forEach(function (cell) {
+          var td = h('td', { class: cell.num ? 'num' : null });
+          if (cell.value instanceof Node) td.appendChild(cell.value); else td.textContent = text(cell.value);
+          foot.appendChild(td);
+        });
+        table.appendChild(h('tfoot', {}, foot));
+      }
     };
     Object.defineProperty(TTable.prototype, 'columns', { get: function () { return this._columns || []; }, set: function (v) { this._columns = Array.isArray(v) ? v : []; this._draw(); } });
     Object.defineProperty(TTable.prototype, 'rows', { get: function () { return this._rows || []; }, set: function (v) { this._rows = Array.isArray(v) ? v : []; this._drawBody(); if (!this._body) this._draw(); } });
+    Object.defineProperty(TTable.prototype, 'footer', { get: function () { return this._footer || null; }, set: function (v) { this._footer = isPlain(v) ? v : null; this._drawBody(); } });
     Object.defineProperty(TTable.prototype, 'filter', { get: function () { return this._filter; }, set: function (v) { this._filter = typeof v === 'function' ? v : null; this._drawBody(); } });
     define('t-table', TTable);
 
@@ -1736,7 +2088,7 @@
     Object.setPrototypeOf(TKanban, HTMLElement);
     TKanban.prototype.connectedCallback = function () {
       var self = this;
-      adopt(self, ['columns', 'cards']);
+      adopt(self, ['columns', 'cards', 'columnMeta']);
       if (!self._bound) {
         self._bound = true;
         self.setAttribute('role', 'group');
@@ -1866,6 +2218,10 @@
       (self._columns || []).forEach(function (column) {
         var mine = cards.filter(function (c) { return text(c.column) === text(column.id); });
         var head = h('div', { class: 't-kanban-head' }, h('span', { text: column.title || column.id }), h('span', { class: 't-badge', text: String(mine.length) }));
+        if (typeof self._columnMeta === 'function') {
+          var extra = self._columnMeta(column.id, mine);
+          if (extra !== undefined && extra !== null && extra !== '') head.appendChild(h('span', { class: 't-kanban-meta', text: text(extra) }));
+        }
         if (self.hasAttribute('addable')) head.appendChild(h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('add') + ': ' + (column.title || column.id), dataset: { add: text(column.id) } }, icon('plus', 16)));
         var list = h('div', { class: 't-kanban-list' });
         mine.forEach(function (card) {
@@ -1885,6 +2241,7 @@
     };
     Object.defineProperty(TKanban.prototype, 'columns', { get: function () { return this._columns || []; }, set: function (v) { this._columns = Array.isArray(v) ? v : []; this._draw(); } });
     Object.defineProperty(TKanban.prototype, 'cards', { get: function () { return this._cards || []; }, set: function (v) { this._cards = Array.isArray(v) ? v.slice() : []; this._draw(); } });
+    Object.defineProperty(TKanban.prototype, 'columnMeta', { get: function () { return this._columnMeta || null; }, set: function (v) { this._columnMeta = typeof v === 'function' ? v : null; this._draw(); } });
     define('t-kanban', TKanban);
 
     // <t-chart>
@@ -1952,7 +2309,7 @@
     TCalendar.prototype = Object.create(HTMLElement.prototype);
     TCalendar.prototype.constructor = TCalendar;
     Object.setPrototypeOf(TCalendar, HTMLElement);
-    TCalendar.observedAttributes = ['month'];
+    TCalendar.observedAttributes = ['month', 'hide-weekends', 'week-start'];
     TCalendar.prototype.connectedCallback = function () {
       var self = this;
       adopt(self, ['events', 'selected']);
@@ -1984,7 +2341,8 @@
       if (!self.isConnected) return;
       var m = self.month, year = +m.slice(0, 4), month = +m.slice(5, 7);
       var weekStart = Number(self.getAttribute('week-start')) || 0;
-      var cells = monthGrid(year, month, weekStart);
+      var hide = self.hasAttribute('hide-weekends');
+      var cells = hide ? weekdayGrid(year, month, weekStart) : monthGrid(year, month, weekStart);
       var byDay = groupBy(self._events || [], 'date');
       clear(self);
       var title;
@@ -1996,18 +2354,26 @@
         h('button', { type: 'button', class: 't-button small', dataset: { nav: 'today' }, text: t('today') }),
         h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('prev'), dataset: { nav: 'prev' } }, icon('chevronLeft', 16)),
         h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('next'), dataset: { nav: 'next' } }, icon('chevronRight', 16))));
-      var grid = h('div', { class: 't-cal-grid', role: 'grid' });
+      var grid = h('div', { class: 't-cal-grid' + (hide ? ' five' : ''), role: 'grid' });
       for (var w = 0; w < 7; w++) {
-        var name;
+        var name, dow = (w + weekStart) % 7;
+        if (hide && (dow === 0 || dow === 6)) continue;
         try { name = new Intl.DateTimeFormat(locale(), { weekday: 'short' }).format(new Date(2024, 0, 7 + ((w + weekStart) % 7))); } catch (_) { name = String(w); }
         grid.appendChild(h('div', { class: 't-cal-weekday', role: 'columnheader', text: name.replace(/\.$/, '') }));
       }
       cells.forEach(function (cell) {
-        var mine = byDay[cell.date] || [];
-        var day = h('button', { type: 'button', class: 't-cal-day' + (cell.other ? ' other' : '') + (cell.today ? ' today' : ''), role: 'gridcell', dataset: { date: cell.date }, 'aria-label': date(cell.date, 'long') + (mine.length ? ', ' + mine.length : ''), 'aria-pressed': self._selected === cell.date ? 'true' : 'false' }, h('span', { class: 't-cal-num', text: String(cell.day) }));
+        var mine = byDay[cell.date] || [], weekend = [];
+        (cell.weekend || []).forEach(function (iso) { weekend = weekend.concat(byDay[iso] || []); }); // hidden Saturday and Sunday: listed under this Friday
+        var count = mine.length + weekend.length;
+        var day = h('button', { type: 'button', class: 't-cal-day' + (cell.other ? ' other' : '') + (cell.today ? ' today' : ''), role: 'gridcell', dataset: { date: cell.date }, 'aria-label': date(cell.date, 'long') + (count ? ', ' + count : ''), 'aria-pressed': self._selected === cell.date ? 'true' : 'false' }, h('span', { class: 't-cal-num', text: String(cell.day) }));
         mine.slice(0, 3).forEach(function (ev) { day.appendChild(h('span', { class: 't-cal-event' + (ev.tone ? ' ' + ev.tone : ''), dataset: { id: text(ev.id) }, text: text(ev.title), title: text(ev.title) })); });
         if (mine.length > 3) day.appendChild(h('span', { class: 't-cal-more', text: '+' + (mine.length - 3) + ' ' + t('more') }));
-        if (mine.length) day.appendChild(h('span', { class: 't-cal-dots' }, mine.slice(0, 3).map(function () { return h('i'); })));
+        if (weekend.length) {
+          day.appendChild(h('span', { class: 't-cal-wkend', text: t('weekendMore') }));
+          weekend.slice(0, 2).forEach(function (ev) { day.appendChild(h('span', { class: 't-cal-event' + (ev.tone ? ' ' + ev.tone : ''), dataset: { id: text(ev.id) }, text: text(ev.title), title: date(ev.date) + ' · ' + text(ev.title) })); });
+          if (weekend.length > 2) day.appendChild(h('span', { class: 't-cal-more', text: '+' + (weekend.length - 2) + ' ' + t('more') }));
+        }
+        if (count) day.appendChild(h('span', { class: 't-cal-dots' }, mine.concat(weekend).slice(0, 3).map(function () { return h('i'); })));
         grid.appendChild(day);
       });
       self.appendChild(grid);
@@ -2269,7 +2635,26 @@
       draw();
       return control;
     }
-    function recordControl(field, value, settings) {
+    var NEW_OPTION = '\u0001new';
+    /** A small input that takes the place of `slot` until Enter (confirm) or Esc (cancel); done(label) gets '' on cancel. */
+    function askOptionName(slot, done) {
+      var finished = false;
+      var input = h('input', { class: 't-input t-new-option', type: 'text', maxlength: '80', autocomplete: 'off', placeholder: t('newOptionName'), 'aria-label': t('newOptionName') });
+      function finish(label) {
+        if (finished) return;
+        finished = true;
+        done(label);
+      }
+      input.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); finish(input.value.trim()); }
+        else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(''); } // not the dialog's Esc
+      });
+      input.addEventListener('blur', function () { finish(input.value.trim()); });
+      slot.parentNode.replaceChild(input, slot);
+      input.focus();
+      return input;
+    }
+    function recordControl(field, value, settings, hooks) {
       var id = domId('tf'), type = field.type, c;
       var placeholder = field.placeholder ? text(field.placeholder) : null;
       function textInput(extra) {
@@ -2282,22 +2667,71 @@
         c = { kind: 'single', node: area, input: area, get: function () { return area.value; }, focus: function () { area.focus(); } };
       } else if (type === 'choice') {
         var select = h('select', { class: 't-input', id: id });
-        var options = field.options || [];
-        if (!field.required) select.appendChild(h('option', { value: '', text: '' }));
-        else if (emptyValue(value)) select.appendChild(h('option', { value: '', text: t('choose'), disabled: true }));
-        options.forEach(function (o) { select.appendChild(h('option', { value: text(o.id), text: text(o.label) })); });
-        if (!emptyValue(value) && !findOption(field, value)) select.appendChild(h('option', { value: text(value), text: text(value) + ' ' + t('removedOption') }));
-        select.value = emptyValue(value) ? '' : (findOption(field, value) ? findOption(field, value).id : text(value));
-        c = { kind: 'single', node: select, input: select, get: function () { return select.value; }, focus: function () { select.focus(); } };
+        var options = (field.options || []).slice(), previous = emptyValue(value) ? '' : (findOption(field, value) ? findOption(field, value).id : text(value));
+        var fillSelect = function (selected) {
+          clear(select);
+          if (!field.required) select.appendChild(h('option', { value: '', text: '' }));
+          else if (emptyValue(selected)) select.appendChild(h('option', { value: '', text: t('choose'), disabled: true }));
+          options.forEach(function (o) { select.appendChild(h('option', { value: text(o.id), text: text(o.label) })); });
+          if (!emptyValue(selected) && !findOption({ options: options }, selected)) select.appendChild(h('option', { value: text(selected), text: text(selected) + ' ' + t('removedOption') }));
+          if (field.creatable) select.appendChild(h('option', { value: NEW_OPTION, text: t('newOption') }));
+          select.value = emptyValue(selected) ? '' : (findOption({ options: options }, selected) ? findOption({ options: options }, selected).id : text(selected));
+        };
+        fillSelect(previous);
+        c = { kind: 'single', node: select, input: select, get: function () { return select.value === NEW_OPTION ? previous : select.value; }, focus: function () { select.focus(); } };
+        if (field.creatable) select.addEventListener('change', function () {
+          if (select.value !== NEW_OPTION) { previous = select.value; return; }
+          var slotParent = select.parentNode;
+          askOptionName(select, function (label) {
+            var existing = label ? findOption({ options: options }, label) : null, option = existing;
+            if (label && !existing) {
+              option = { id: slug(label, options.map(function (o) { return text(o.id); })), label: label };
+              options.push(option);
+              if (hooks && hooks.optionAdded) hooks.optionAdded(option);
+            }
+            if (option) previous = option.id;
+            fillSelect(previous);
+            var typed = slotParent.querySelector('.t-new-option');
+            if (typed) slotParent.replaceChild(select, typed); else slotParent.appendChild(select);
+            select.focus();
+            if (option) select.dispatchEvent(new Event('input', { bubbles: true }));
+          });
+        });
       } else if (type === 'multi') {
         var group = h('div', { class: 't-check-group' });
         var chosen = Array.isArray(value) ? value.map(text) : emptyValue(value) ? [] : [text(value)];
         var known = (field.options || []).map(function (o) { return { id: text(o.id), label: text(o.label) }; });
         chosen.forEach(function (v) { if (!known.some(function (k) { return k.id === v; })) known.push({ id: v, label: v + ' ' + t('removedOption') }); });
-        known.forEach(function (o) {
-          group.appendChild(h('label', { class: 't-check' }, h('input', { type: 'checkbox', value: o.id, checked: chosen.indexOf(o.id) >= 0 }), h('span', { text: o.label })));
-        });
-        c = { kind: 'fieldset', node: group, get: function () { return Array.prototype.filter.call(group.querySelectorAll('input'), function (i) { return i.checked; }).map(function (i) { return i.value; }); }, focus: function () { var first = group.querySelector('input'); if (first) first.focus(); } };
+        var adder = null;
+        var addCheck = function (o, on) {
+          var box = h('input', { type: 'checkbox', value: o.id, checked: on });
+          var line = h('label', { class: 't-check' }, box, h('span', { text: o.label }));
+          if (adder) group.insertBefore(line, adder); else group.appendChild(line);
+          return box;
+        };
+        known.forEach(function (o) { addCheck(o, chosen.indexOf(o.id) >= 0); });
+        if (field.creatable) {
+          adder = h('button', { type: 'button', class: 't-button small ghost t-new-option-button', text: t('newOption') });
+          adder.addEventListener('click', function () {
+            askOptionName(adder, function (label) {
+              var typed = group.querySelector('.t-new-option');
+              if (typed) group.replaceChild(adder, typed); // the button is back first: new boxes go before it
+              var existing = label ? known.filter(function (k) { return k.id === label || normalize(k.label) === normalize(label); })[0] : null, focusBox = null;
+              if (existing) {
+                Array.prototype.forEach.call(group.querySelectorAll('input[type="checkbox"]'), function (i) { if (i.value === existing.id) { i.checked = true; focusBox = i; } });
+              } else if (label) {
+                var option = { id: slug(label, known.map(function (k) { return k.id; })), label: label };
+                known.push({ id: option.id, label: option.label });
+                focusBox = addCheck(option, true);
+                if (hooks && hooks.optionAdded) hooks.optionAdded(option);
+              }
+              (focusBox || adder).focus();
+              if (label) adder.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+          });
+          group.appendChild(adder);
+        }
+        c = { kind: 'fieldset', node: group, get: function () { return Array.prototype.filter.call(group.querySelectorAll('input[type="checkbox"]'), function (i) { return i.checked; }).map(function (i) { return i.value; }); }, focus: function () { var first = group.querySelector('input[type="checkbox"]'); if (first) first.focus(); else if (adder) adder.focus(); } };
       } else if (type === 'checkbox') {
         var box = h('input', { type: 'checkbox', class: 't-switch', id: id, checked: value === true });
         c = { kind: 'inline', node: h('label', { class: 't-switch-line', for: id }, box, h('span', { text: text(field.label) }, field.required ? h('i', { class: 't-req', 'aria-hidden': 'true', text: ' *' }) : null)), input: box, get: function () { return box.checked; }, focus: function () { box.focus(); } };
@@ -2308,11 +2742,12 @@
         if (type === 'number' || type === 'money') input = textInput({ inputmode: 'decimal' });
         else if (type === 'date') input = h('input', { class: 't-input', type: 'date', id: id });
         else if (type === 'datetime') input = h('input', { class: 't-input', type: 'datetime-local', id: id });
+        else if (type === 'time') input = h('input', { class: 't-input', type: 'time', id: id });
         else if (type === 'email') input = textInput({ inputmode: 'email', autocomplete: 'email', autocapitalize: 'off' });
         else if (type === 'url') input = textInput({ inputmode: 'url', autocapitalize: 'off', placeholder: placeholder || 'https://' });
         else if (type === 'phone') input = textInput({ inputmode: 'tel', autocomplete: 'tel' });
         else input = textInput();
-        input.value = type === 'number' || type === 'money' ? numberInputText(value) : type === 'date' ? (normalizeDate(value) || '') : type === 'datetime' ? localInput(value) : text(value);
+        input.value = type === 'number' || type === 'money' ? numberInputText(value) : type === 'date' ? (normalizeDate(value) || '') : type === 'time' ? (normalizeTime(value) || '') : type === 'datetime' ? localInput(value) : text(value);
         var node = input;
         if (type === 'money') node = h('div', { class: 't-input-group' }, h('span', { class: 't-input-prefix', text: currencySymbol(field.currency || (settings && settings.currency)), 'aria-hidden': 'true' }), input);
         c = { kind: 'single', node: node, input: input, get: function () { return input.value; }, focus: function () { input.focus(); } };
@@ -2360,12 +2795,21 @@
           self._outputs[field.id] = output;
           self.appendChild(h('div', { class: 't-field', dataset: { field: field.id } }, h('span', { text: text(field.label) }), output, field.help ? h('small', { class: 't-help', text: text(field.help) }) : null));
         } else {
-          var control = recordControl(field, value[field.id], self._settings);
+          var control = recordControl(field, value[field.id], self._settings, { optionAdded: function (option) { self._optionAdded(field.id, option); } });
           self._controls[field.id] = control;
           self.appendChild(control.root);
         }
       });
       self._refresh();
+    };
+    /** A "New option…" was typed in a creatable choice: keep it in this form's field and tell the page, which saves it. */
+    TRecordForm.prototype._optionAdded = function (fieldId, option) {
+      var self = this;
+      self._fields = (self._fields || []).map(function (f) { return f.id === fieldId ? Object.assign({}, f, { options: (f.options || []).concat([Object.assign({}, option)]) }) : f; });
+      // The page will set .fields to what it saved: for a little while that must not wipe what is being typed.
+      var echo = self._echo = {};
+      setTimeout(function () { if (self._echo === echo) self._echo = null; }, 3000);
+      emit(self, 't-option-added', { fieldId: fieldId, option: Object.assign({}, option) });
     };
     /** The values as they stand now, normalized; a file waiting to be uploaded shows as its name. */
     TRecordForm.prototype._collect = function () {
@@ -2416,8 +2860,18 @@
       var first = this._fields && this._fields.filter(function (f) { return f.type !== 'formula'; })[0];
       if (first && this._controls[first.id]) this._controls[first.id].focus();
     };
-    Object.defineProperty(TRecordForm.prototype, 'fields', { get: function () { return this._fields || []; }, set: function (v) { this._fields = Array.isArray(v) ? v : []; this._draw(); } });
-    Object.defineProperty(TRecordForm.prototype, 'value', { get: function () { return this._value || {}; }, set: function (v) { this._value = isPlain(v) ? Object.assign({}, v) : {}; this._draw(); } });
+    Object.defineProperty(TRecordForm.prototype, 'fields', { get: function () { return this._fields || []; }, set: function (v) {
+      var next = Array.isArray(v) ? v : [], echo = this._echo;
+      this._echo = null;
+      if (echo && this._controls) {
+        if (sameJson(next, this._fields)) { this._fields = next; return; } // the page saved the option just added: nothing changes
+        var typed = this._collect();
+        next.forEach(function (f) { if (f.type === 'image' || f.type === 'file') delete typed[f.id]; });
+        this._value = Object.assign({}, this._value, typed); // some other change came with it: redraw, but keep what was typed
+      }
+      this._fields = next; this._draw();
+    } });
+    Object.defineProperty(TRecordForm.prototype, 'value', { get: function () { return this._value || {}; }, set: function (v) { this._echo = null; this._value = isPlain(v) ? Object.assign({}, v) : {}; this._draw(); } });
     Object.defineProperty(TRecordForm.prototype, 'settings', { get: function () { return this._settings || {}; }, set: function (v) { this._settings = isPlain(v) ? v : {}; this._draw(); } });
     define('t-record-form', TRecordForm);
 
@@ -2594,7 +3048,7 @@
     var TFieldsEditor = makeElement();
     TFieldsEditor.prototype.connectedCallback = function () {
       var self = this;
-      adopt(self, ['fields', 'inUse', 'optionsInUse', 'types']);
+      adopt(self, ['fields', 'inUse', 'optionsInUse', 'types', 'extra']);
       if (!self._bound) {
         self._bound = true;
         self._open = {}; self._fresh = {}; self._menu = false;
@@ -2747,7 +3201,9 @@
       this._checkFormula(area);
       this._edit(row.dataset.id, { formula: area.value.trim() }, false);
     };
-    TFieldsEditor.prototype._detail = function (field) {
+    /** Changes a field from outside (a page's `extra` control) and tells the page, without redrawing the row: undefined removes a key. */
+    TFieldsEditor.prototype.update = function (id, patch) { this._edit(id, patch || {}, false); };
+    TFieldsEditor.prototype._detail = function (field, extra) {
       var self = this, box = h('div', { class: 't-fe-detail' });
       if (field.type === 'choice' || field.type === 'multi') {
         var editor = h('t-list-editor', { tones: true });
@@ -2771,6 +3227,7 @@
         box.appendChild(h('div', { class: 't-field' }, h('span', { text: t('formula') }), area, error, chips, h('small', { class: 't-help', text: t('formulaFunctions') + ' ' + Object.keys(FORMULA_FUNCTIONS).join(', ') })));
         if (field.formula) setTimeout(function () { self._checkFormula(area); }, 0);
       }
+      if (extra) box.appendChild(h('div', { class: 't-fe-extra' }, extra));
       return box;
     };
     TFieldsEditor.prototype._draw = function () {
@@ -2780,7 +3237,10 @@
       clear(self);
       var list = h('ul', { class: 't-fe-list' });
       fields.forEach(function (field, index) {
-        var open = !!self._open[field.id] && DETAIL_TYPES.indexOf(field.type) >= 0;
+        var extra = typeof self._extra === 'function' ? self._extra(Object.assign({}, field)) : null; // the page's own controls for this field
+        if (!(extra instanceof Node)) extra = null;
+        var hasDetail = DETAIL_TYPES.indexOf(field.type) >= 0 || !!extra;
+        var open = !!self._open[field.id] && hasDetail;
         var typeSelect = h('select', { class: 't-input t-fe-type', 'aria-label': t('fieldType') });
         (allowed.indexOf(field.type) >= 0 ? allowed : allowed.concat([field.type])).forEach(function (type) { typeSelect.appendChild(h('option', { value: type, text: t('type_' + type) })); });
         typeSelect.value = field.type;
@@ -2791,10 +3251,10 @@
           h('input', { class: 't-input t-fe-label', type: 'text', value: text(field.label), 'aria-label': t('fieldName') }),
           typeSelect);
         if (field.type !== 'formula') main.appendChild(h('label', { class: 't-fe-req' }, h('input', { type: 'checkbox', class: 't-switch', checked: !!field.required, dataset: { act: 'required' } }), h('span', { text: t('requiredToggle') })));
-        if (DETAIL_TYPES.indexOf(field.type) >= 0) main.appendChild(h('button', { type: 'button', class: 't-icon-button t-fe-toggle', 'aria-expanded': open ? 'true' : 'false', 'aria-label': t('details') + ': ' + text(field.label), dataset: { act: 'toggle' } }, icon('chevron-down', 16)));
+        if (hasDetail) main.appendChild(h('button', { type: 'button', class: 't-icon-button t-fe-toggle', 'aria-expanded': open ? 'true' : 'false', 'aria-label': t('details') + ': ' + text(field.label), dataset: { act: 'toggle' } }, icon('chevron-down', 16)));
         main.appendChild(h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('delete') + ': ' + text(field.label), dataset: { act: 'delete' } }, icon('trash', 14)));
         var row = h('li', { class: 't-fe-row' + (open ? ' open' : ''), dataset: { id: text(field.id) } }, main);
-        if (open) row.appendChild(self._detail(field));
+        if (open) row.appendChild(self._detail(field, extra));
         list.appendChild(row);
       });
       self.appendChild(list);
@@ -2818,6 +3278,7 @@
     ['inUse', 'optionsInUse', 'types'].forEach(function (name) {
       Object.defineProperty(TFieldsEditor.prototype, name, { get: function () { return this['_' + name]; }, set: function (v) { this['_' + name] = v; if (name !== 'inUse') this._draw(); } });
     });
+    Object.defineProperty(TFieldsEditor.prototype, 'extra', { get: function () { return this._extra || null; }, set: function (v) { this._extra = typeof v === 'function' ? v : null; this._draw(); } });
     define('t-fields-editor', TFieldsEditor);
 
     // ---- <t-detail> ----------------------------------------------------------------------------------------------------------------
@@ -3092,10 +3553,203 @@
     };
     Object.defineProperty(TImport.prototype, 'fields', { get: function () { return this._fields || []; }, set: function (v) { this._fields = Array.isArray(v) ? v : []; } });
     define('t-import', TImport);
+
+    // ==== v2.1 elements ===============================================================================
+
+    // ---- <t-data-tools> ---------------------------------------------------------------------------------------
+    function appTitle() { try { return document.title || ''; } catch (_) { return ''; } }
+    function failToast(error) { toast(error && error.message ? error.message : t('error'), { tone: 'error' }); }
+    var TDataTools = makeElement();
+    TDataTools.prototype.connectedCallback = function () {
+      var self = this;
+      adopt(self, ['collection', 'fields', 'records', 'examples', 'filename', 'exportRows', 'exportColumns', 'noun', 'beforeInsert', 'beforeExamples']);
+      if (!self._bound) {
+        self._bound = true;
+        self._body = h('div', { class: 't-dt-body' });
+        self._importer = h('t-import'); // outside the body: a redraw must not take an open import dialog away
+        self.appendChild(self._body);
+        self.appendChild(self._importer);
+        self.addEventListener('click', function (event) {
+          var button = event.target.closest ? event.target.closest('button[data-act]') : null;
+          if (!button || !self.contains(button) || button.disabled || self._busy) return;
+          var act = button.dataset.act;
+          if (act === 'export') self._export();
+          else if (act === 'import') self._import();
+          else if (act === 'examples') self._loadExamples();
+          else if (act === 'clear-examples') self._clearExamples();
+          else if (act === 'delete-all') self._deleteAll();
+        });
+      }
+      self._draw();
+    };
+    TDataTools.prototype.attributeChangedCallback = function () { if (this.isConnected && this._bound) this._draw(); };
+    TDataTools.observedAttributes = ['hide'];
+    TDataTools.prototype._hidden = function (block) {
+      return (this.getAttribute('hide') || '').toLowerCase().split(/[\s,]+/).indexOf(block) >= 0;
+    };
+    TDataTools.prototype._nounMany = function () { return (this._noun && this._noun.many) || t('nounMany'); };
+    TDataTools.prototype._draw = function () {
+      var self = this;
+      if (!self.isConnected || !self._body) return;
+      var focused = document.activeElement && self.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.act : null;
+      var known = Array.isArray(self._records), total = known ? self._records.length : 0, samples = known ? samplesCount(self._records) : 0, busy = !!self._busy;
+      clear(self._body);
+      function button(act, label, iconName, kind, disabled) {
+        return h('button', { type: 'button', class: 't-button' + (kind ? ' ' + kind : ''), disabled: busy || !!disabled, dataset: { act: act } }, iconName ? icon(iconName, 14) : null, h('span', { text: label }));
+      }
+      function card(title, body, buttons, kind) {
+        return h('section', { class: 't-card t-dt-card' + (kind ? ' ' + kind : '') }, h('div', { class: 't-card-head' }, h('h2', { text: title })), h('p', { class: 't-muted', text: body }), h('div', { class: 't-dt-actions' }, buttons));
+      }
+      var canImport = !self._hidden('import'), canExport = !self._hidden('export');
+      if (canImport || canExport) {
+        var buttons = [];
+        if (canExport) buttons.push(button('export', t('exportCsv'), 'download'));
+        if (canImport) buttons.push(button('import', t('importCsv'), 'upload'));
+        self._body.appendChild(card(t('dataTitle'), tf(canImport ? 'dataTextBoth' : 'dataTextExport', { x: self._nounMany() }), buttons));
+      }
+      if (!self._hidden('examples')) {
+        var examples = [];
+        if (!known || samples === 0) examples.push(button('examples', t('seeExamples'), 'play'));
+        if (!known || samples > 0) examples.push(button('clear-examples', t('clearSamples'), 'trash'));
+        self._body.appendChild(card(t('examplesTitle'), samples > 0 ? plural(samples, 'samplesOne', 'samplesMany') : t('examplesText'), examples));
+      }
+      if (!self._hidden('danger')) self._body.appendChild(card(t('dangerTitle'), t('dangerText'), [button('delete-all', t('deleteAll'), 'trash', 'danger', known && total === 0)], 't-dt-danger'));
+      if (focused) { var again = self._body.querySelector('button[data-act="' + focused + '"]:not(:disabled)'); if (again) again.focus(); }
+    };
+    TDataTools.prototype._work = function (job) { // one job at a time: buttons are off while it runs
+      var self = this;
+      self._busy = true; self._draw();
+      var finish = function () { self._busy = false; self._draw(); };
+      return Promise.resolve().then(job).then(function (value) { finish(); return value; }, function (error) { finish(); failToast(error); });
+    };
+    TDataTools.prototype._current = function () {
+      var self = this;
+      if (!self._collection) return Promise.reject(new Error(t('error')));
+      return Promise.resolve(self._collection.list({ limit: 5000 }));
+    };
+    TDataTools.prototype._export = function () {
+      var self = this;
+      self._work(function () {
+        var load = Array.isArray(self._records) ? Promise.resolve(self._records) : self._current();
+        return load.then(function (records) {
+          var fields = self._fields || [];
+          var rows = typeof self._exportRows === 'function' ? self._exportRows(records) : records.map(function (r) { return compute(fields, r.data || {}); });
+          return Promise.resolve(rows).then(function (list) {
+            var columns = typeof self._exportColumns === 'function' ? self._exportColumns() : Array.isArray(self._exportColumns) ? self._exportColumns : csvColumnsFor(fields);
+            csvDownload(csvStringify(list, columns, { delimiter: csvDelimiter() }), csvFileName(appTitle(), self._filename !== undefined ? self._filename : self.getAttribute('filename'), today()));
+            toast(tf('exported', { x: plural(list.length, 'rowsOne', 'rowsMany') }));
+          });
+        });
+      });
+    };
+    TDataTools.prototype._import = function () {
+      var self = this;
+      self._importer.fields = self._fields || [];
+      self._importer.open().then(function (docs) {
+        if (!docs || !docs.length) return;
+        return self._work(function () {
+          var made = 0, failed = 0, chain = Promise.resolve();
+          docs.forEach(function (doc, index) {
+            chain = chain.then(function () {
+              var prepared;
+              try { prepared = typeof self._beforeInsert === 'function' ? self._beforeInsert(doc) : doc; } catch (_) { failed++; return null; }
+              return Promise.resolve(prepared).then(function (data) {
+                if (!data) return null; // the page skipped this row
+                return self._collection.insert(data).then(function () { made++; }, function () { failed++; });
+              });
+            }).then(function () { if ((index + 1) % 50 === 0 && index + 1 < docs.length) toast(tf('importing', { n: index + 1, m: docs.length })); });
+          });
+          return chain.then(function () {
+            toast(tf('imported', { x: plural(made, 'rowsOne', 'rowsMany') }), { tone: made ? 'success' : 'error' });
+            if (failed) toast(tf('importFailed', { n: failed }), { tone: 'error' });
+            emit(self, 't-imported', { count: made, failed: failed });
+          });
+        });
+      });
+    };
+    TDataTools.prototype._loadExamples = function () {
+      var self = this;
+      self._work(function () {
+        return Promise.resolve(typeof self._beforeExamples === 'function' ? self._beforeExamples() : null).then(function () {
+          return typeof self._examples === 'function' ? self._examples() : self._examples;
+        }).then(function (docs) {
+          return samplesLoad(self._collection, Array.isArray(docs) ? docs : []);
+        }).then(function (count) { emit(self, 't-examples', { action: 'loaded', loaded: true, cleared: false, count: count }); });
+      });
+    };
+    TDataTools.prototype._clearExamples = function () {
+      var self = this;
+      self._work(function () {
+        return samplesClear(self._collection).then(function (count) { emit(self, 't-examples', { action: 'cleared', loaded: false, cleared: true, count: count }); });
+      });
+    };
+    TDataTools.prototype._deleteAll = function () {
+      var self = this;
+      self._work(function () {
+        var load = Array.isArray(self._records) ? Promise.resolve(self._records) : self._current();
+        return load.then(function (records) {
+          var n = records.length, noun = self._noun || {};
+          if (!n) return;
+          var message = tf(n === 1 ? 'deleteAllOne' : 'deleteAllMany', { n: n, x: n === 1 ? (noun.one || t('nounOne')) : (noun.many || t('nounMany')) });
+          return confirm(message, { confirm: t('delete'), tone: 'danger' }).then(function (yes) {
+            if (!yes) return;
+            var gone = 0;
+            function sweep(round) { // lists again, in case there are more than one page of records
+              return self._current().then(function (all) {
+                if (!all.length || round > 20) return gone;
+                var chain = Promise.resolve();
+                all.forEach(function (record) { chain = chain.then(function () { return self._collection.remove(record.id); }).then(function () { gone++; }); });
+                return chain.then(function () { return sweep(round + 1); });
+              });
+            }
+            return sweep(0).then(function (count) { emit(self, 't-cleared', { count: count }); });
+          });
+        });
+      });
+    };
+    ['collection', 'fields', 'records', 'examples', 'filename', 'exportRows', 'exportColumns', 'noun', 'beforeInsert', 'beforeExamples'].forEach(function (name) {
+      Object.defineProperty(TDataTools.prototype, name, { get: function () { return this['_' + name]; }, set: function (v) { this['_' + name] = v; if (name === 'records' || name === 'noun') this._draw(); } });
+    });
+    define('t-data-tools', TDataTools);
+
+    // ---- <t-empty-start> -----------------------------------------------------------------------------------------
+    var TEmptyStart = makeElement();
+    TEmptyStart.observedAttributes = ['title', 'text', 'action'];
+    TEmptyStart.prototype.connectedCallback = function () {
+      var self = this;
+      if (!self._bound) {
+        self._bound = true;
+        self.addEventListener('click', function (event) {
+          var button = event.target.closest ? event.target.closest('button[data-act]') : null;
+          if (!button || !self.contains(button)) return;
+          emit(self, button.dataset.act === 'examples' ? 't-examples' : 't-action', {});
+        });
+      }
+      self._draw();
+    };
+    TEmptyStart.prototype.attributeChangedCallback = function (name, before, after) {
+      if (name === 'title') { if (after === null) return; this._title = after; this.removeAttribute('title'); } // no browser tooltip over the whole block
+      if (this.isConnected && this._bound) this._draw();
+    };
+    TEmptyStart.prototype._draw = function () {
+      var self = this;
+      if (!self.isConnected) return;
+      if (self.hasAttribute('title')) { self._title = self.getAttribute('title'); self.removeAttribute('title'); }
+      clear(self);
+      var actions = h('div', { class: 't-state-actions' });
+      if (self.getAttribute('action')) actions.appendChild(h('button', { type: 'button', class: 't-button primary', dataset: { act: 'action' }, text: self.getAttribute('action') }));
+      actions.appendChild(h('button', { type: 'button', class: 't-button', dataset: { act: 'examples' }, text: t('seeExamples') }));
+      self.appendChild(h('t-state', { kind: 'empty', title: self._title === undefined ? null : self._title, text: self.getAttribute('text') }, actions));
+    };
+    define('t-empty-start', TEmptyStart);
   }
+
+  /** csv.download: the text as a UTF-8 .csv file. */
+  function csvDownload(source, filename) { download(new Blob([source], { type: 'text/csv;charset=utf-8' }), filename); }
 
   window.tkit = {
     version: 2,
+    minor: 1,
     elements: elements,
     icons: Object.keys(ICONS),
     h: h, icon: icon, clear: clear, toast: toast, confirm: confirm, live: live, form: form, fill: fill,
@@ -3109,8 +3763,12 @@
     fieldTypes: FIELD_TYPES.slice(), tones: TONES.slice(),
     slug: slug, fieldValue: fieldValue, fieldText: fieldText, validate: validate, compute: compute,
     formula: { compile: compileFormula, evaluate: evaluateFormula, functions: Object.keys(FORMULA_FUNCTIONS) },
-    csv: { stringify: csvStringify, parse: csvParse, download: function (source, filename) { download(new Blob([source], { type: 'text/csv;charset=utf-8' }), filename); }, delimiter: csvDelimiter },
+    csv: { stringify: csvStringify, parse: csvParse, download: csvDownload, delimiter: csvDelimiter, columnsFor: csvColumnsFor, filename: csvFileName },
     samples: { load: samplesLoad, clear: samplesClear, count: samplesCount },
-    parseMarkdown: parseMarkdown, markdown: markdown, markdownOutline: markdownOutline
+    parseMarkdown: parseMarkdown, markdown: markdown, markdownOutline: markdownOutline,
+    // v2.1
+    copy: copy, autosave: autosave, tableFooter: tableFooter, weekdayGrid: weekdayGrid,
+    search: { match: searchMatch, highlight: searchHighlight, snippet: searchSnippet },
+    textarea: { wrap: textareaWrap, prefixLines: textareaPrefixLines, wrapEdit: wrapEdit, prefixEdit: prefixEdit }
   };
 })();

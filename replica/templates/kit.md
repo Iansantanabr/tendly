@@ -155,3 +155,10 @@ Stage-1 templates came out 410–800 lines because every page re-implements the 
 14. **`<t-fields-editor>` row extras**: optional `.extra = fn(field) → Node|null` rendered inside each row's detail panel (lets Checklist add a "required" switch to steps, Calculator add default/min/max/unit to inputs) — mark the old KIT-CANDIDATE needs as solved.
 
 Acceptance: all tests pass (including the stage-1 templates, unchanged by you); new pure parts tested in `kit-v2.test.mjs`; every new element in `kit-demo.html`; header comment updated; report the API added.
+
+### Using v2.1 in templates (mandatory from stage 2 on)
+
+- The Ajustes screen ends with ONE `<t-data-tools>` (set `.collection`, `.fields`, `.records` on every render, `.examples` as a function, `.filename`, `.noun`, hooks `.beforeInsert` / `.beforeExamples` / `.exportRows` / `.exportColumns` as needed). Do not hand-write the Dados / Exemplos / Zona de perigo cards.
+- The main view's empty state is `<t-empty-start title text action>` (listen to `t-action` and `t-examples` on that element).
+- Use `<t-table>.footer`, `<t-kanban>.columnMeta`, `<t-calendar hide-weekends>`, the `time` field type, `creatable: true` choices (persist `t-option-added` into settings), `tkit.copy`, `tkit.csv.columnsFor`, `tkit.search.*`, `tkit.autosave`, `tkit.textarea.*`, `<t-fields-editor>.extra` + `.update()` instead of local re-implementations. `tkit.h('t-state', { title, text })` now sets attributes.
+- `t-examples` detail is `{ action: 'loaded'|'cleared', count }`.

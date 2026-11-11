@@ -29,6 +29,8 @@
  * Elements (kit.js): t-app, t-nav, t-view, t-kanban, t-table, t-pills, t-modal, t-state, t-chart,
  * t-calendar, t-record-form, t-list-editor, t-fields-editor, t-detail, t-import, t-sample-banner,
  * t-gallery, t-checklist, t-progress, t-steps.
+ * Version 2.1 adds the elements t-data-tools and t-empty-start, a footer row in t-table, .t-kanban-meta (a column total),
+ * the five-day t-calendar (.t-cal-grid.five, .t-cal-wkend), .t-state-actions, .t-fe-extra and a mark style for search hits.
  */
 :root {
   color-scheme: light;
@@ -212,6 +214,9 @@ t-kanban { display: flex; align-items: flex-start; gap: var(--t-space-3); min-wi
 .t-kanban-drop { height: 3px; border-radius: var(--t-radius-full); background: var(--t-accent); }
 .t-kanban-empty { padding: var(--t-space-2) var(--t-space-1); color: var(--t-muted); font-size: var(--t-text-sm); text-align: center; }
 @container t-app (max-width: 640px) { .t-kanban-col { flex-basis: 82%; max-width: none; } }
+/* A per-column extra (a money total) after the count; the add button stays at the right edge. */
+.t-kanban-meta { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--t-muted); font-size: var(--t-text-sm); font-weight: 500; font-variant-numeric: tabular-nums; }
+.t-kanban-meta + .t-icon-button { margin-left: 0; }
 
 /* ---- t-table --------------------------------------------------------------- */
 t-table { display: grid; gap: var(--t-space-2); min-width: 0; }
@@ -230,6 +235,7 @@ t-table { display: grid; gap: var(--t-space-2); min-width: 0; }
 .t-table tbody tr[tabindex]:hover { background: var(--t-fill); }
 .t-table tbody tr:focus-visible { outline-offset: -2px; }
 .t-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.t-table tfoot td { padding: 8px 12px; border-top: 1px solid var(--t-line); background: var(--t-surface); font-weight: 600; }
 .t-table th.num > button { justify-content: flex-end; }
 
 /* ---- t-pills --------------------------------------------------------------- */
@@ -261,6 +267,7 @@ t-state { display: grid; justify-items: center; gap: var(--t-space-2); padding: 
 t-state > .t-state-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--t-radius-full); background: var(--t-fill); color: var(--t-muted); }
 t-state > .t-state-title { color: var(--t-ink); font-size: var(--t-text-lg); font-weight: 600; }
 t-state > .t-state-text { max-width: 44ch; }
+t-state > .t-state-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--t-space-2); margin-top: var(--t-space-2); }
 t-state[kind="error"] > .t-state-icon { background: var(--t-danger-soft); color: var(--t-danger-ink); }
 t-state[kind="loading"] > .t-state-icon > svg { animation: t-spin 900ms linear infinite; }
 @keyframes t-spin { to { transform: rotate(360deg); } }
@@ -298,9 +305,12 @@ t-calendar { container: t-calendar / inline-size; display: grid; gap: var(--t-sp
 .t-cal-more { color: var(--t-muted); font-size: var(--t-text-xs); }
 .t-cal-dots { display: none; gap: 3px; }
 .t-cal-dots > i { width: 6px; height: 6px; border-radius: 50%; background: var(--t-accent); }
+/* hide-weekends: five columns; Saturday and Sunday events are listed under the Friday after a small label. */
+.t-cal-grid.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.t-cal-wkend { margin-top: 2px; padding-top: 2px; border-top: 1px dashed var(--t-line-input); color: var(--t-muted); font-size: var(--t-text-xs); }
 @container t-calendar (max-width: 520px) {
   .t-cal-day { min-height: 48px; justify-items: center; }
-  .t-cal-event, .t-cal-more { display: none; }
+  .t-cal-event, .t-cal-more, .t-cal-wkend { display: none; }
   .t-cal-dots { display: flex; }
 }
 
@@ -521,3 +531,24 @@ t-checklist { display: grid; gap: var(--t-space-3); min-width: 0; }
 .t-wikilink { color: var(--t-accent-ink); }
 button.t-wikilink { display: inline; padding: 0; border: 0; border-bottom: 1px dashed var(--t-muted); background: none; color: var(--t-muted); font: inherit; cursor: pointer; }
 button.t-wikilink > small { margin-left: 4px; padding: 0 6px; border-radius: var(--t-radius-full); background: var(--t-fill); font-size: var(--t-text-xs); }
+
+/* ==== Version 2.1 ============================================================== */
+
+/* ---- t-data-tools: Data, Examples and Danger zone cards ------------------------------------------------ */
+t-data-tools { display: block; min-width: 0; }
+.t-dt-body { display: grid; gap: var(--t-space-3); min-width: 0; }
+.t-dt-card > .t-card-head > h2 { font-size: var(--t-text-md); font-weight: 600; }
+.t-dt-card > p { max-width: 62ch; }
+.t-dt-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--t-space-2); }
+.t-dt-actions > .t-button { display: inline-flex; align-items: center; gap: 6px; }
+.t-dt-danger { border-color: var(--t-danger); }
+.t-dt-danger > .t-card-head > h2 { color: var(--t-danger-ink); }
+
+/* ---- t-empty-start ------------------------------------------------------------------------------------------ */
+t-empty-start { display: block; min-width: 0; }
+
+/* ---- Small additions ---------------------------------------------------------------------------------------- */
+.t-fe-extra { display: grid; gap: var(--t-space-2); }
+.t-new-option { min-width: 0; }
+.t-new-option-button { justify-self: start; }
+mark { padding: 0 2px; border-radius: 3px; background: var(--t-warn-soft); color: var(--t-ink); }

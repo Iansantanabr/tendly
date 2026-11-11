@@ -180,7 +180,8 @@ function inlineScripts(html) {
 
 test('kit.js defines every element the stylesheet and the templates expect', () => {
   assert.deepEqual(definedTags, ['t-app', 't-nav', 't-view', 't-state', 't-pills', 't-modal', 't-table', 't-kanban', 't-chart', 't-calendar',
-    't-sample-banner', 't-progress', 't-steps', 't-gallery', 't-checklist', 't-record-form', 't-list-editor', 't-fields-editor', 't-detail', 't-import']);
+    't-sample-banner', 't-progress', 't-steps', 't-gallery', 't-checklist', 't-record-form', 't-list-editor', 't-fields-editor', 't-detail', 't-import',
+    't-data-tools', 't-empty-start']);
   for (const tag of definedTags) assert.ok(KIT_CSS.includes(tag), `kit.css styles ${tag}`);
   for (const tag of definedTags) if (tag !== 't-view') assert.ok(DEMO.includes(`<${tag}`) || DEMO.includes(`'${tag}'`), `kit-demo.html shows ${tag}`);
   for (const cls of ['t-nav-end', 't-drawer', 't-switch', 't-card-head', 't-kv', 't-segment', 't-md', 't-badge', 't-wikilink']) assert.ok(cssClasses.has(cls), `.${cls} is styled`);

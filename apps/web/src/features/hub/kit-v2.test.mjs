@@ -638,6 +638,7 @@ test('markdown: markdownOutline lists headings with unique anchors', () => {
 
 test('kit v2: the public surface', () => {
   assert.equal(en.version, 2);
+  assert.equal(en.minor, 1, 'kit 2.1');
   for (const name of ['fold', 'download', 'daysFromToday', 'parseNumber', 'parseRoute', 'context', 'mergeContext', 'settings', 'mergeSettings', 'slug', 'fieldValue', 'fieldText', 'validate', 'compute', 'parseMarkdown', 'markdown', 'markdownOutline']) {
     assert.equal(typeof en[name], 'function', name);
   }
@@ -645,7 +646,7 @@ test('kit v2: the public surface', () => {
     for (const name of group[1]) assert.equal(typeof en[group[0]][name], 'function', `${group[0]}.${name}`);
   }
   assert.equal(en.fold('Ação ÉLAN'), 'acao elan');
-  assert.deepEqual(plain(en.fieldTypes), ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'choice', 'multi', 'checkbox', 'image', 'file', 'url', 'email', 'phone', 'formula']);
+  assert.deepEqual(plain(en.fieldTypes), ['text', 'longtext', 'number', 'money', 'date', 'datetime', 'time', 'choice', 'multi', 'checkbox', 'image', 'file', 'url', 'email', 'phone', 'formula']);
   for (const icon of ['image', 'grid', 'check-square', 'calculator', 'scale', 'book', 'map-pin', 'map', 'help', 'repeat', 'play', 'clipboard', 'filter', 'external', 'copy', 'drag', 'arrow-left', 'arrow-right', 'chevron-down', 'file', 'bell']) {
     assert.ok(en.icons.includes(icon), icon);
   }
@@ -674,4 +675,328 @@ test('kit v2: every string exists in English and in Portuguese', () => {
   assert.equal(pt.t('required'), 'Obrigatório');
   assert.equal(pt.t('type_money'), 'Dinheiro');
   assert.equal(en.t('type_money'), 'Money');
+});
+
+// ================================================================ kit v2.1
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/** A very small DOM: enough for tkit.h, tkit.copy and tkit.search.highlight to run in Node. */
+class FakeNode {}
+function fakeDom(extra = {}, lang = 'en') {
+  function element(tag) {
+    const el = new FakeNode();
+    Object.assign(el, {
+      tagName: tag, attrs: {}, children: [], style: {}, dataset: {}, className: '', textContent: '', listeners: {},
+      setAttribute(name, value) { this.attrs[name] = String(value); },
+      addEventListener(name, fn) { this.listeners[name] = fn; },
+      appendChild(child) { this.children.push(child); return child; },
+      removeChild(child) { this.children.splice(this.children.indexOf(child), 1); return child; },
+      select() {}, focus() {}
+    });
+    return el;
+  }
+  const document = {
+    documentElement: { lang }, readyState: 'complete', addEventListener() {}, title: 'My app', activeElement: null,
+    createElement: element, createDocumentFragment: () => element('#fragment'),
+    createTextNode: value => Object.assign(new FakeNode(), { text: String(value) }),
+    body: element('body'), execCommand: () => false, ...extra
+  };
+  // Long timers (toasts) must not keep the test process alive.
+  const timers = (fn, ms, ...rest) => (ms > 1000 ? 0 : setTimeout(fn, ms, ...rest));
+  return { document, Node: FakeNode, setTimeout: timers };
+}
+
+test('time: fieldValue reads how people write a time', () => {
+  const field = { id: 'at', type: 'time' };
+  for (const [typed, stored] of [['9h30', '09:30'], ['9:30', '09:30'], ['0930', '09:30'], ['930', '09:30'], ['09:30', '09:30'], ['9h', '09:00'], ['9', '09:00'], ['18', '18:00'], ['23:59', '23:59'], ['00:00', '00:00'], ['09:30:15', '09:30'], ['9:30pm', '21:30'], ['12am', '00:00'], ['12:15 PM', '12:15'], ['7.05', '07:05'], [' 7h05 ', '07:05']]) {
+    assert.equal(pt.fieldValue(field, typed), stored, typed);
+  }
+  assert.equal(pt.fieldValue(field, ''), null);
+  assert.equal(pt.fieldValue(field, undefined), null);
+  for (const bad of ['25:00', '9:60', '24:00', 'noon', '13pm', '0am', '99']) assert.equal(pt.fieldValue(field, bad), bad, `${bad} is kept so validate can say so`);
+});
+
+test('time: fieldText follows the language and validate checks 00:00 to 23:59', () => {
+  const field = { id: 'at', type: 'time' };
+  assert.equal(pt.fieldText(field, '09:30'), '09:30');
+  assert.equal(pt.fieldText(field, '21:05'), '21:05');
+  assert.equal(pt.fieldText(field, '9h5'), '9h5', 'what is not a time shows as it is');
+  assert.equal(en.fieldText(field, '09:30').replace(/\s/g, ' '), '9:30 AM');
+  assert.equal(en.fieldText(field, '21:05').replace(/\s/g, ' '), '9:05 PM');
+  assert.equal(en.fieldText(field, null), '');
+  assert.equal(en.fieldText(field, 'later'), 'later', 'what is not a time shows as it is');
+  assert.ok(pt.validate([field], { at: '00:00' }).ok && pt.validate([field], { at: '23:59' }).ok);
+  assert.equal(pt.validate([field], { at: '24:00' }).errors.at, 'Hora inválida');
+  assert.equal(en.validate([field], { at: '12:60' }).errors.at, 'Not a valid time');
+  assert.equal(pt.validate([field], { at: '9:30' }).ok, false, 'stored values are HH:MM');
+  assert.equal(pt.validate([field], {}).ok, true);
+  assert.equal(pt.validate([{ ...field, required: true }], {}).errors.at, 'Obrigatório');
+  assert.ok(en.fieldTypes.includes('time'));
+  assert.equal(pt.t('type_time'), 'Hora');
+  // a time can be used in a formula as text
+  assert.equal(en.formula.evaluate('a & "!"', { a: '09:30' }), '09:30!');
+});
+
+test('search: match finds every word, folded, and maps back to the original text', () => {
+  assert.deepEqual(plain(en.search.match('Café com Leite', 'cafe leite')), [[0, 4], [9, 14]]);
+  assert.deepEqual(plain(en.search.match('Café com Leite', 'CAFÉ')), [[0, 4]]);
+  assert.equal(en.search.match('Café com Leite', 'cafe pao'), null, 'every word must be there');
+  assert.equal(en.search.match('abc', ''), null);
+  assert.equal(en.search.match('abc', '   '), null);
+  assert.equal(en.search.match('', 'a'), null);
+  assert.equal(en.search.match(undefined, 'a'), null);
+  assert.deepEqual(plain(en.search.match('abc abc', 'ab')), [[0, 2], [4, 6]], 'all occurrences');
+  assert.deepEqual(plain(en.search.match('abcd', 'ab bc cd')), [[0, 4]], 'overlaps merge');
+  assert.deepEqual(plain(en.search.match('한글 abc', 'abc')), [[3, 6]], 'folding can change the length: ranges still index the original');
+  assert.deepEqual(plain(en.search.match('Ação e reação', 'acao reacao')), [[0, 4], [7, 13]]);
+});
+
+test('search: snippet cuts around the first match', () => {
+  const long = 'word '.repeat(60) + 'the needle is here ' + 'word '.repeat(60);
+  const ranges = en.search.match(long, 'needle');
+  const snippet = en.search.snippet(long, ranges);
+  assert.ok(snippet.startsWith('…') && snippet.endsWith('…'), snippet);
+  assert.ok(snippet.includes('needle'));
+  assert.ok(snippet.length <= 164, String(snippet.length));
+  assert.ok(en.search.snippet(long, ranges, 40).length <= 44);
+  assert.equal(en.search.snippet('short text', en.search.match('short text', 'text')), 'short text', 'nothing cut: no dots');
+  assert.equal(en.search.snippet('abc', null), '');
+  assert.equal(en.search.snippet('abc', []), '');
+  const early = en.search.snippet('needle at the very start ' + 'x '.repeat(200), en.search.match('needle at the very start ' + 'x '.repeat(200), 'needle'));
+  assert.ok(early.startsWith('needle') && early.endsWith('…'));
+});
+
+test('search: highlight wraps the ranges in <mark> using nodes only', () => {
+  const dom = fakeDom();
+  const kit = loadKit('en', dom);
+  const fragment = kit.search.highlight('Café com Leite', kit.search.match('Café com Leite', 'leite cafe'));
+  const parts = fragment.children.map(node => (node.tagName === 'mark' ? ['mark', node.textContent] : ['text', node.text]));
+  assert.deepEqual(parts, [['mark', 'Café'], ['text', ' com '], ['mark', 'Leite']]);
+  const plainOnly = kit.search.highlight('nothing', null);
+  assert.deepEqual(plainOnly.children.map(node => node.text), ['nothing']);
+  const evil = kit.search.highlight('<b>x</b>', kit.search.match('<b>x</b>', 'x'));
+  assert.equal(evil.children.map(node => node.text || node.textContent).join(''), '<b>x</b>', 'markup stays text');
+});
+
+test('csv: columnsFor turns a schema into columns, with numbers, dates and choices ready for a spreadsheet', () => {
+  const fields = [
+    { id: 'name', label: 'Nome', type: 'text' }, { id: 'stage', label: 'Etapa', type: 'choice', options: [{ id: 'won', label: 'Ganho' }] },
+    { id: 'tags', label: 'Tags', type: 'multi', options: [{ id: 'a', label: 'Alfa' }, { id: 'b', label: 'Beta' }] },
+    { id: 'price', label: 'Preço', type: 'money' }, { id: 'qty', label: 'Qtd', type: 'number' }, { id: 'due', label: 'Prazo', type: 'date' },
+    { id: 'at', label: 'Hora', type: 'time' }, { id: 'paid', label: 'Pago', type: 'checkbox' }, { id: 'photo', label: 'Foto', type: 'image' },
+    { id: 'total', label: 'Total', type: 'formula', formula: 'price * qty' }, { id: 'note', label: 'Nota', type: 'longtext' }
+  ];
+  const columns = pt.csv.columnsFor(fields, { currency: 'BRL' });
+  assert.deepEqual(plain(columns.map(c => [c.key, c.label])), fields.map(f => [f.id, f.label]));
+  const row = pt.compute(fields, { name: 'Ana', stage: 'won', tags: ['a', 'b'], price: 0.1, qty: 3, due: '2026-11-03', at: '09:30', paid: true, photo: { path: 'files/a.png', name: 'foto.png' }, note: 'a\nb' });
+  const text = pt.csv.stringify([row], columns, { delimiter: pt.csv.delimiter() });
+  const parsed = pt.csv.parse(text);
+  assert.deepEqual(plain(parsed.header), fields.map(f => f.label));
+  assert.deepEqual(plain(parsed.rows[0]), ['Ana', 'Ganho', 'Alfa; Beta', '0.1', '3', '2026-11-03', '09:30', 'Sim', 'foto.png', '0.3', 'a\nb'], '"." decimals, ISO dates, labels, file names, no float noise');
+  const empty = pt.csv.stringify([{}], columns);
+  assert.equal(pt.csv.parse(empty).rows[0].every(cell => cell === ''), true, 'missing values are empty cells');
+  const unchecked = pt.csv.parse(pt.csv.stringify([{ paid: false }], columns)).rows[0][7];
+  assert.equal(unchecked, 'Não');
+  assert.deepEqual(plain(pt.csv.columnsFor(undefined)), []);
+  assert.equal(pt.csv.stringify([{ name: '=HYPERLINK("x")' }], columns.slice(0, 1)).includes("'=HYPERLINK"), true, 'formula-looking text is still defused');
+});
+
+test('csv: filename is "<app> - <name> - date.csv" without characters a file cannot have', () => {
+  assert.equal(pt.csv.filename('Meu app', 'Cartões', '2026-11-11'), 'Meu app - Cartões - 2026-11-11.csv');
+  assert.equal(pt.csv.filename('A/B: C', 'x?*', '2026-11-11'), 'A B C - x - 2026-11-11.csv');
+  assert.equal(pt.csv.filename('', 'Cartões', '2026-11-11'), 'Cartões - 2026-11-11.csv');
+  assert.equal(pt.csv.filename('App', undefined, '2026-11-11'), 'App - 2026-11-11.csv');
+  assert.equal(pt.csv.filename('App', 'Lista', undefined), `App - Lista - ${pt.today()}.csv`);
+});
+
+test('table footer: sum, avg, count, text and functions over the rows given', () => {
+  const columns = [{ key: 'name', label: 'Name' }, { key: 'amount', label: 'Amount', type: 'money', currency: 'USD' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'date', label: 'Date', type: 'date' }, { key: 'note' }];
+  const rows = [{ name: 'a', amount: 1000, qty: 1, date: '2026-11-01' }, { name: 'b', amount: '2500.5', qty: 2, date: '' }, { name: 'c', amount: null, qty: '3', date: '2026-11-03' }, { name: 'd', amount: 'n/a', qty: true }];
+  const cells = plain(en.tableFooter(columns, { name: 'Total', amount: 'sum', qty: 'avg', date: 'count', note: rows2 => `${rows2.length} rows` }, rows));
+  assert.deepEqual(cells.map(c => c.key), ['name', 'amount', 'qty', 'date', 'note']);
+  assert.equal(cells[0].value, 'Total');
+  assert.equal(cells[1].value, '$3,500.50', 'money with its column currency; text numbers count, "n/a" and null do not');
+  assert.equal(cells[2].value, '2', 'avg of 1, 2 and "3"; true is not a number');
+  assert.equal(cells[3].value, '2', 'count: rows with a value');
+  assert.equal(cells[4].value, '4 rows');
+  assert.deepEqual(cells.map(c => c.num), [false, true, true, false, false]);
+  const none = plain(en.tableFooter(columns, { amount: 'sum', qty: 'avg' }, [{ amount: null }]));
+  assert.equal(none[1].value, '', 'no numbers: nothing to show');
+  assert.equal(none[0].value, '', 'a column with no spec is empty');
+  assert.equal(pt.tableFooter([{ key: 'v', type: 'number' }], { v: 'sum' }, [{ v: 1234.5 }, { v: 1 }])[0].value, '1.235,5', 'numbers follow the language');
+  assert.equal(plain(en.tableFooter([{ key: 'v' }], { v: 'sum' }, []))[0].value, '');
+  assert.deepEqual(plain(en.tableFooter(undefined, {}, [])), []);
+});
+
+test('calendar: weekdayGrid drops Saturday and Sunday and hands their dates to a Friday', () => {
+  for (const weekStart of [0, 1, 6]) {
+    const cells = plain(en.weekdayGrid(2026, 11, weekStart));
+    assert.equal(cells.length, 30, `six weeks of five days (week starts on ${weekStart})`);
+    assert.ok(cells.every(c => c.weekday >= 1 && c.weekday <= 5));
+    const owners = cells.filter(c => c.weekend.length);
+    assert.ok(owners.every(c => c.weekday === 5), 'only Fridays hold weekend dates');
+    const handed = owners.flatMap(c => c.weekend).sort();
+    assert.equal(handed.length, 12, 'six Saturdays and six Sundays, none lost');
+    assert.equal(new Set(handed).size, 12);
+  }
+  const monday = plain(en.weekdayGrid(2026, 11, 1));
+  assert.equal(monday[0].date, '2026-10-26');
+  const friday = monday.find(c => c.date === '2026-11-06');
+  assert.deepEqual(friday.weekend, ['2026-11-07', '2026-11-08'], 'Saturday and Sunday belong to the Friday before them');
+  assert.equal(monday.filter(c => c.today).length, en.today().startsWith('2026-11') || en.today() >= '2026-10-26' && en.today() <= '2026-12-04' ? 1 : 0);
+  const sunday = plain(en.weekdayGrid(2026, 11, 0));
+  assert.equal(sunday[0].date, '2026-11-02', 'the grid starts on a Sunday, which is dropped');
+  assert.deepEqual(sunday.find(c => c.date === '2026-11-06').weekend, ['2026-11-01', '2026-11-07', '2026-11-08'], 'a Sunday with no Friday before it in the grid uses the one after');
+  assert.equal(plain(en.monthGrid(2026, 11, 1)).length, 42, 'monthGrid is untouched');
+});
+
+test('textarea: wrapEdit and prefixEdit say what to write', () => {
+  const wrap = en.textarea.wrapEdit;
+  assert.deepEqual(plain(wrap('hello world', 6, 11, '**', '**')), { from: 6, to: 11, insert: '**world**', selFrom: 8, selTo: 13 });
+  assert.deepEqual(plain(wrap('hello ', 6, 6, '**', '**', 'text')), { from: 6, to: 6, insert: '**text**', selFrom: 8, selTo: 12 }, 'nothing selected: the placeholder, selected');
+  assert.deepEqual(plain(wrap('', 0, 0, '[[', ']]')), { from: 0, to: 0, insert: '[[]]', selFrom: 2, selTo: 2 }, 'no placeholder: the caret goes between');
+  const prefix = en.textarea.prefixEdit;
+  assert.deepEqual(plain(prefix('one\ntwo\nthree', 5, 5, '- ')), { from: 4, to: 7, insert: '- two', selFrom: 4, selTo: 9 }, 'the line with the caret');
+  assert.equal(prefix('one\ntwo\nthree', 0, 13, '- ').insert, '- one\n- two\n- three');
+  assert.equal(prefix('- one\n- two', 0, 11, '- ').insert, 'one\ntwo', 'all have it: take it off');
+  assert.equal(prefix('- one\ntwo', 0, 9, '- ').insert, '- one\n- two', 'mixed: add to the ones without');
+  assert.equal(prefix('a\n\nb', 0, 4, '> ').insert, '> a\n\n> b', 'blank lines in a block are left alone');
+  assert.equal(prefix('one\ntwo\n', 0, 8, '# ').insert, '# one\n# two', 'a selection ending after a newline does not take the next line');
+  assert.deepEqual(plain(prefix('', 0, 0, '- ')), { from: 0, to: 0, insert: '- ', selFrom: 0, selTo: 2 });
+  assert.equal(typeof en.textarea.wrap, 'function');
+  assert.equal(typeof en.textarea.prefixLines, 'function');
+});
+
+test('autosave: debounces, saves one at a time, holds reloads while dirty and reports its status', async () => {
+  const holds = [];
+  const kit = loadKit('en', { tendly: { host: { holdReload: on => holds.push(on) } } });
+  let calls = 0, running = 0, overlap = false;
+  const statuses = [];
+  const saver = kit.autosave(async () => { calls++; running++; if (running > 1) overlap = true; await sleep(25); running--; }, { delay: 30, onStatus: status => statuses.push(status) });
+  assert.equal(saver.status, 'idle');
+  saver.touch(); saver.touch(); saver.touch();
+  assert.equal(saver.status, 'typing');
+  assert.deepEqual(holds, [true, true, true]);
+  await sleep(15);
+  assert.equal(calls, 0, 'not before the delay');
+  await sleep(120);
+  assert.equal(calls, 1, 'three touches, one save');
+  assert.equal(saver.status, 'saved');
+  assert.equal(holds.at(-1), false, 'reloads are free again');
+  assert.deepEqual(statuses.filter((s, i) => s !== statuses[i - 1]), ['typing', 'saving', 'saved']);
+  // typing during a save: a second save follows, never two at once
+  saver.touch();
+  await sleep(45); // the save started at 30 and takes 25
+  assert.equal(saver.status, 'saving');
+  saver.touch();
+  await saver.flush();
+  assert.equal(calls, 3);
+  assert.equal(overlap, false);
+  assert.equal(saver.status, 'saved');
+  assert.equal(holds.at(-1), false);
+  await saver.flush(); // nothing pending: resolves at once
+  assert.equal(calls, 3);
+});
+
+test('autosave: a failed save stays dirty and is tried again', async () => {
+  const holds = [];
+  const kit = loadKit('en', { tendly: { host: { holdReload: on => holds.push(on) } } });
+  let calls = 0;
+  const seen = [];
+  const saver = kit.autosave(() => { calls++; if (calls === 1) throw new Error('offline'); if (calls === 2) return Promise.reject(new Error('still offline')); }, { delay: 5, onStatus: (status, error) => seen.push([status, error && error.message]) });
+  saver.touch();
+  await saver.flush();
+  assert.equal(saver.status, 'error');
+  assert.equal(saver.error.message, 'offline');
+  assert.deepEqual(seen.at(-1), ['error', 'offline']);
+  assert.equal(holds.at(-1), true, 'the text is not saved: reloads stay held');
+  await saver.flush();
+  assert.equal(saver.status, 'error', 'a rejected promise is an error too');
+  await saver.flush();
+  assert.equal(saver.status, 'saved');
+  assert.equal(calls, 3);
+  assert.equal(holds.at(-1), false);
+  // without the SDK or options it still works
+  const bare = en.autosave(() => {});
+  bare.touch();
+  await bare.flush();
+  assert.equal(bare.status, 'saved');
+});
+
+test('copy: the Clipboard API first, a hidden textarea when it fails, and a toast on success', async () => {
+  const written = [];
+  const dom = fakeDom();
+  const withApi = loadKit('en', { ...dom, navigator: { language: 'en', clipboard: { writeText: async value => { written.push(value); } } } });
+  assert.equal(await withApi.copy('hello'), true);
+  assert.deepEqual(written, ['hello']);
+  const toasts = dom.document.body.children.flatMap(region => region.children).map(node => node.textContent);
+  assert.deepEqual(toasts, ['Copied']);
+
+  const dom2 = fakeDom({}, 'pt-BR');
+  dom2.document.execCommand = command => command === 'copy';
+  let created;
+  const original = dom2.document.createElement;
+  dom2.document.createElement = tag => { const el = original(tag); if (tag === 'textarea') created = el; return el; };
+  const fallback = loadKit('pt-BR', { ...dom2, navigator: { language: 'pt-BR', clipboard: { writeText: async () => { throw new Error('blocked'); } } } });
+  assert.equal(await fallback.copy(42), true);
+  assert.equal(created.value, '42', 'the text went through the textarea');
+  assert.equal(dom2.document.body.children.at(-1).children.at(-1).textContent, 'Copiado');
+
+  const dom3 = fakeDom();
+  const failing = loadKit('en', { ...dom3, navigator: { language: 'en' } });
+  assert.equal(await failing.copy('x'), false, 'no API and execCommand refuses');
+  const noDom = loadKit('en', { navigator: undefined });
+  assert.equal(await noDom.copy('x'), false, 'no document at all: false, no throw');
+});
+
+test('h: for t-* tags every prop is an attribute; other tags keep text as textContent', () => {
+  const kit = loadKit('en', fakeDom());
+  const state = kit.h('t-state', { kind: 'empty', title: 'Nothing here', text: 'Add the first one.', hidden: true, class: 'a b', dataset: { x: '1' }, 'aria-label': 'L', onClick() {}, tabindex: 0 });
+  assert.equal(state.tagName, 't-state');
+  assert.deepEqual(plain(state.attrs), { kind: 'empty', title: 'Nothing here', text: 'Add the first one.', hidden: '', 'aria-label': 'L', tabindex: '0' });
+  assert.equal(state.textContent, '', 'text did not become text content');
+  assert.equal(state.className, 'a b');
+  assert.equal(state.dataset.x, '1');
+  assert.equal(typeof state.listeners.click, 'function');
+  const span = kit.h('span', { text: 'hello', class: 'x', title: 'tip' });
+  assert.equal(span.textContent, 'hello', 'a plain tag keeps text -> textContent');
+  assert.equal(span.attrs.text, undefined);
+  assert.equal(span.attrs.title, 'tip');
+  const skipped = kit.h('t-state', { kind: undefined, text: null, title: false });
+  assert.deepEqual(plain(skipped.attrs), {}, 'undefined, null and false are left out');
+  const withChildren = kit.h('t-state', { kind: 'empty' }, 'child', kit.h('button'));
+  assert.equal(withChildren.children.length, 2);
+  const list = kit.h('t-list-editor', { tones: true });
+  assert.equal(list.attrs.tones, '');
+  const style = kit.h('t-card', { style: { color: 'red' } });
+  assert.equal(style.style.color, 'red', 'a style object is still a style');
+  const prop = kit.h('t-calendar', { events: [{ id: 1 }] });
+  assert.equal(Array.isArray(prop.events) || prop.attrs.events === '[object Object]', true, 'objects are never turned into attributes on purpose');
+  assert.equal(kit.h('t-progress', { value: 3, max: 10 }).attrs.value, '3');
+});
+
+test('kit 2.1: the public surface, the elements and the strings', () => {
+  assert.equal(en.minor, 1);
+  assert.equal(en.version, 2, 'the version number stays');
+  for (const name of ['copy', 'autosave', 'tableFooter', 'weekdayGrid']) assert.equal(typeof en[name], 'function', name);
+  for (const group of [['search', ['match', 'highlight', 'snippet']], ['textarea', ['wrap', 'prefixLines', 'wrapEdit', 'prefixEdit']], ['csv', ['columnsFor', 'filename']]]) {
+    for (const name of group[1]) assert.equal(typeof en[group[0]][name], 'function', `${group[0]}.${name}`);
+  }
+  for (const tag of ['t-data-tools', 't-empty-start']) assert.ok(KIT_JS.includes(`define('${tag}'`), tag);
+  for (const word of ['hide-weekends', 'columnMeta', 'creatable', 't-option-added', 'beforeInsert', 'beforeExamples', 'exportRows', 'extra']) assert.ok(KIT_JS.includes(word), word);
+  assert.match(KIT_JS, /KIT v2\.1/);
+  const header = KIT_JS.slice(0, KIT_JS.indexOf('(function () {'));
+  for (const documented of ['t-data-tools', 't-empty-start', 'tkit.copy', 'tkit.csv.columnsFor', 'tkit.search.match', 'tkit.autosave', 'tkit.textarea.wrap', 'footer', 'columnMeta', 'hide-weekends', 'extra', 'creatable', 'tkit.h(\'t-state\'']) {
+    assert.ok(header.includes(documented), `the header comment documents ${documented}`);
+  }
+  for (const key of ['badTime', 'newOption', 'newOptionName', 'copied', 'weekendMore', 'exportCsv', 'importCsv', 'seeExamples', 'dangerTitle', 'deleteAll']) {
+    assert.notEqual(en.t(key), key, `en ${key}`);
+    assert.notEqual(pt.t(key), key, `pt ${key}`);
+    assert.notEqual(en.t(key), pt.t(key), `${key} is translated`);
+  }
+  assert.equal(pt.t('seeExamples'), 'Ver com exemplos');
+  assert.equal(pt.t('weekendMore'), '+ fim de semana');
+  assert.equal(pt.t('newOption'), 'Nova opção…');
+  assert.equal(pt.t('copied'), 'Copiado');
 });

@@ -28,6 +28,7 @@
       <button data-view="forms" data-icon="form">Forms</button>
       <button data-view="records" data-icon="grid">Records</button>
       <button data-view="more" data-icon="check-square">More</button>
+      <button data-view="tools" data-icon="clipboard">Kit 2.1</button>
       <button data-view="settings" data-icon="settings" class="t-nav-end">Settings</button>
     </t-nav>
     <main class="t-app-main">
@@ -78,19 +79,19 @@
       </t-view>
       <t-view name="board">
         <div class="t-page wide" style="height: 100%; grid-template-rows: auto minmax(0, 1fr)">
-          <header class="t-page-head"><h1 class="t-title">Kanban</h1><span class="t-muted">Drag a card (hold on touch), or focus one and press ← →.</span></header>
+          <header class="t-page-head"><h1 class="t-title">Kanban</h1><span class="t-muted">Drag a card (hold on touch), or focus one and press ← →. The amount in each header is <code>columnMeta</code>.</span></header>
           <t-kanban id="kanban" addable empty-text="Drop a card here"></t-kanban>
         </div>
       </t-view>
       <t-view name="table">
         <div class="t-page wide">
-          <header class="t-page-head"><h1 class="t-title">Table</h1><span class="t-muted">Filter as you type; click a header to sort; Enter on a row opens it.</span></header>
+          <header class="t-page-head"><h1 class="t-title">Table</h1><span class="t-muted">Filter as you type; click a header to sort; Enter on a row opens it. The footer sums what is shown.</span></header>
           <t-table id="table" searchable></t-table>
         </div>
       </t-view>
       <t-view name="calendar">
         <div class="t-page wide">
-          <header class="t-page-head"><h1 class="t-title">Calendar</h1><span class="t-muted">Narrow: the chips become dots.</span></header>
+          <header class="t-page-head"><h1 class="t-title">Calendar</h1><span class="t-muted">Narrow: the chips become dots.</span><div class="t-segment" role="group" aria-label="Weekends" id="weekends"><button type="button" aria-pressed="true" data-hide="no">Show weekends</button><button type="button" aria-pressed="false" data-hide="yes">Hide weekends</button></div></header>
           <t-calendar id="calendar"></t-calendar>
         </div>
       </t-view>
@@ -183,6 +184,49 @@
           </section>
         </div>
       </t-view>
+      <t-view name="tools">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Kit 2.1</h1><p class="t-muted">What the stage-1 templates kept re-writing. Everything here runs without the SDK; the records live in memory.</p></div></header>
+          <h2>&lt;t-empty-start&gt;</h2>
+          <section class="t-card">
+            <t-empty-start id="empty-start" title="No cards yet" text="Add your first card, or look around with examples first." action="New card"></t-empty-start>
+            <pre class="demo-out" id="empty-out" aria-live="polite">Click a button: the element only fires t-action or t-examples.</pre>
+          </section>
+          <h2>&lt;t-data-tools&gt;</h2>
+          <p class="t-muted">The Data, Examples and Danger zone cards of every Settings screen. <code>records</code> here: <strong id="dt-count">0</strong>.</p>
+          <t-data-tools id="tools" filename="Cards"></t-data-tools>
+          <div class="demo-two">
+            <section class="t-card">
+              <div class="t-card-head"><h2>tkit.search</h2></div>
+              <label class="t-field"><span>Search the notes</span><input type="search" id="search-in" placeholder="try: cafe  or  reuniao  or  preço"></label>
+              <ul class="t-list" id="search-out"></ul>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>tkit.autosave and tkit.textarea</h2><span class="t-badge" id="save-status">idle</span></div>
+              <div class="t-toolbar">
+                <button type="button" class="t-button small" data-tool="bold">Bold</button>
+                <button type="button" class="t-button small" data-tool="list">List</button>
+                <button type="button" class="t-button small" data-tool="quote">Quote</button>
+                <button type="button" class="t-button small" data-tool="flush">Save now</button>
+              </div>
+              <label class="t-field"><span>Note (saves 800 ms after you stop typing; the save below takes a moment)</span><textarea id="note" rows="5">Select a few words, then press Bold.
+Select two lines, then press List twice.</textarea></label>
+              <p class="t-muted" id="save-out"></p>
+            </section>
+          </div>
+          <div class="demo-two">
+            <section class="t-card">
+              <div class="t-card-head"><h2>tkit.copy and tkit.h('t-state')</h2></div>
+              <div class="t-actions" style="justify-content: flex-start"><button type="button" class="t-button" id="copy-btn">Copy a sentence</button><button type="button" class="t-button" id="state-btn">Make a t-state with tkit.h</button></div>
+              <div id="state-slot"></div>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>tkit.csv.columnsFor</h2></div>
+              <pre class="demo-out" id="csv-cols-out"></pre>
+            </section>
+          </div>
+        </div>
+      </t-view>
       <t-view name="settings">
         <div class="t-page">
           <header class="t-page-head"><div><h1 class="t-title">Settings</h1><p class="t-muted">tkit.settings merges the saved value over the defaults. Standalone it lives in memory; inside Tendly it is saved.</p></div></header>
@@ -230,6 +274,8 @@
       { id: '3', column: 'talking', title: 'Carla Souza', text: 'Second call booked.', tone: 'warn', meta: 'Friday' },
       { id: '4', column: 'won', title: 'Diego Alves', tone: 'ok', meta: 'Won' }
     ];
+    kanban.cards.forEach(function (card) { card.value = { '1': 1200, '2': 300, '3': 2250, '4': 4800 }[card.id]; });
+    kanban.columnMeta = function (columnId, cards) { var total = cards.reduce(function (sum, card) { return sum + (card.value || 0); }, 0); return total ? tkit.money(total, 'USD') : ''; };
     kanban.addEventListener('t-move', function (event) { tkit.toast(event.detail.card.title + ' → ' + event.detail.to); });
     kanban.addEventListener('t-open', function (event) { tkit.toast('Open ' + event.detail.card.title); });
     kanban.addEventListener('t-add', function (event) { tkit.toast('Add to ' + event.detail.column); });
@@ -242,6 +288,7 @@
       { id: 'c', name: 'Carla Souza', stage: 'Lost', amount: 300, date: '2026-10-12' },
       { id: 'd', name: 'Diego Alves', stage: 'New', amount: 2250, date: '2026-11-05' }
     ];
+    table.footer = { name: 'Total', amount: 'sum', date: 'count' };
     table.addEventListener('t-open', function (event) { tkit.toast('Open ' + event.detail.row.name); });
 
     var calendar = document.getElementById('calendar');
@@ -253,6 +300,16 @@
       { id: 'e4', date: month + '-12', title: 'Lunch' }, { id: 'e5', date: month + '-12', title: 'Follow up' }, { id: 'e6', date: month + '-12', title: 'Report' },
       { id: 'e7', date: month + '-21', title: 'Deadline', tone: 'danger' }
     ];
+    calendar.events.push({ id: 'e8', date: tkit.weekdayGrid(+month.slice(0, 4), +month.slice(5, 7), 1).filter(function (c) { return c.weekend.length && !c.other; })[0].weekend[0], title: 'Saturday market', tone: 'info' });
+    calendar.events = calendar.events;
+    Array.prototype.forEach.call(document.querySelectorAll('#weekends button'), function (button) {
+      button.addEventListener('click', function () {
+        var hide = button.dataset.hide === 'yes';
+        if (hide) calendar.setAttribute('hide-weekends', ''); else calendar.removeAttribute('hide-weekends');
+        calendar.setAttribute('week-start', '1');
+        Array.prototype.forEach.call(document.querySelectorAll('#weekends button'), function (other) { other.setAttribute('aria-pressed', String(other === button)); });
+      });
+    });
     calendar.addEventListener('t-day', function (event) { tkit.toast(tkit.date(event.detail.date, 'long')); });
     calendar.addEventListener('t-open', function (event) { tkit.toast('Open ' + event.detail.event.title); });
 
@@ -275,12 +332,21 @@
       { id: 'notes', label: 'Notes', type: 'longtext' },
       { id: 'paid', label: 'Paid', type: 'checkbox' },
       { id: 'photo', label: 'Photo', type: 'image' },
-      { id: 'contract', label: 'Contract', type: 'file' }
+      { id: 'contract', label: 'Contract', type: 'file' },
+      { id: 'at', label: 'Call at', type: 'time', help: 'Try 9h30, 0930 or 9:30pm' },
+      { id: 'source', label: 'Source', type: 'choice', creatable: true, options: [{ id: 'web', label: 'Website' }, { id: 'ads', label: 'Ads' }] },
+      { id: 'interests', label: 'Interests', type: 'multi', creatable: true, options: [{ id: 'cars', label: 'Cars' }, { id: 'boats', label: 'Boats' }] }
     ];
     var SETTINGS = { currency: 'USD' };
-    var EXAMPLE = { name: 'Ana Lima', stage: 'talking', tags: ['vip'], price: 19.9, qty: 3, due: tkit.daysFromToday(7), email: 'ana@example.com', site: 'https://example.com', phone: '+1 555 0100', notes: 'Asked for a quote.\nCall back on Friday.', paid: false };
+    var EXAMPLE = { name: 'Ana Lima', stage: 'talking', tags: ['vip'], price: 19.9, qty: 3, due: tkit.daysFromToday(7), at: '09:30', source: 'ads', interests: ['cars'], email: 'ana@example.com', site: 'https://example.com', phone: '+1 555 0100', notes: 'Asked for a quote.\nCall back on Friday.', paid: false };
     var rf = document.getElementById('rf'), rfOut = document.getElementById('rf-out');
     rf.fields = FIELDS; rf.settings = SETTINGS; rf.value = {};
+    rf.addEventListener('t-option-added', function (event) {
+      // A page saves the option in its settings; here we only say so. Setting rf.fields to the saved list keeps what was typed.
+      FIELDS = FIELDS.map(function (f) { return f.id === event.detail.fieldId ? Object.assign({}, f, { options: f.options.concat([event.detail.option]) }) : f; });
+      rf.fields = FIELDS;
+      rfOut.textContent = 't-option-added ' + JSON.stringify(event.detail);
+    });
     rf.addEventListener('t-input', function () { rfOut.textContent = 'Typing... (t-input fires on every change; hold reloads here)'; });
     document.getElementById('rf-fill').addEventListener('click', function () { rf.value = EXAMPLE; });
     document.getElementById('rf-reset').addEventListener('click', function () { rf.value = {}; rfOut.textContent = 'Cleared.'; });
@@ -300,6 +366,12 @@
     fe.inUse = { name: 12, price: 5 };
     fe.optionsInUse = { stage: { won: 3 } };
     fe.addEventListener('t-change', function (event) { rf.fields = event.detail.fields; });
+    // extra(): the page's own controls inside a field's panel (here "Show in the list" on any field).
+    fe.extra = function (field) {
+      var box = tkit.h('input', { type: 'checkbox', class: 't-switch', checked: !!field.list, 'aria-label': 'Show in the list' });
+      box.addEventListener('change', function () { fe.update(field.id, { list: box.checked || undefined }); });
+      return tkit.h('label', { class: 't-switch-line' }, box, tkit.h('span', { text: 'Show in the list' }));
+    };
 
     // Records: the gallery opens a detail drawer, and the address says which.
     var RECORDS = [
@@ -403,6 +475,87 @@
         out.textContent = JSON.stringify(value, null, 2) + (S.error ? '\n(read failed: ' + S.error.message + ')' : '');
       }
       S.on(draw); draw(S.value);
+    });
+
+    // ---- Version 2.1 -----------------------------------------------------------------------------
+    // Records for <t-data-tools> live in memory here; in an app they are a tendly.db collection.
+    function memoryCollection() {
+      var rows = [], serial = 0;
+      function match(row, where) { return !where || Object.keys(where).every(function (k) { return row.data[k] === where[k]; }); }
+      return {
+        rows: rows,
+        list: function (options) { return Promise.resolve(rows.filter(function (r) { return match(r, options && options.where); }).slice()); },
+        insert: function (doc) { var row = { id: 'm' + (++serial), rev: 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), data: doc }; rows.push(row); return Promise.resolve(row); },
+        remove: function (id) { rows.splice(rows.findIndex(function (r) { return r.id === id; }), 1); return Promise.resolve(true); }
+      };
+    }
+    var cards = memoryCollection(), tools = document.getElementById('tools'), toolsCount = document.getElementById('dt-count');
+    var CARD_FIELDS = [
+      { id: 'name', label: 'Name', type: 'text', required: true },
+      { id: 'stage', label: 'Stage', type: 'choice', options: [{ id: 'new', label: 'New' }, { id: 'won', label: 'Won' }] },
+      { id: 'amount', label: 'Amount', type: 'money' },
+      { id: 'due', label: 'Due', type: 'date' },
+      { id: 'at', label: 'Time', type: 'time' },
+      { id: 'big', label: 'Big deal', type: 'formula', formula: 'if(amount > 2000, "yes", "no")' }
+    ];
+    function showRecords() { cards.list().then(function (rows) { tools.records = rows; toolsCount.textContent = String(rows.length); }); }
+    tools.collection = cards;
+    tools.fields = CARD_FIELDS;
+    tools.noun = { one: 'card', many: 'cards' };
+    tools.examples = function () { // a function: the dates are computed when the button is clicked
+      return [
+        { name: 'Ana Lima', stage: 'new', amount: 1200, due: tkit.daysFromToday(3), at: '09:30' },
+        { name: 'Bruno Costa', stage: 'won', amount: 4800, due: tkit.daysFromToday(-2), at: '14:00' },
+        { name: 'Carla Souza', stage: 'new', amount: 300, due: tkit.daysFromToday(10), at: '18:45' }
+      ];
+    };
+    tools.beforeInsert = function (doc) { return doc.name ? doc : null; }; // a page can adapt or skip imported rows
+    ['t-imported', 't-examples', 't-cleared'].forEach(function (name) { tools.addEventListener(name, function (event) { showRecords(); document.getElementById('empty-out').textContent = name + ' ' + JSON.stringify(event.detail); }); });
+    showRecords();
+    var emptyOut = document.getElementById('empty-out'), emptyStart = document.getElementById('empty-start');
+    emptyStart.addEventListener('t-action', function () { emptyOut.textContent = 't-action: the page opens its "new card" form'; });
+    emptyStart.addEventListener('t-examples', function () { emptyOut.textContent = 't-examples: the page loads its examples'; });
+    document.getElementById('csv-cols-out').textContent = tkit.csv.stringify([tkit.compute(CARD_FIELDS, { name: 'Ana, "Lima"', stage: 'won', amount: 2500.5, due: '2026-11-20', at: '09:30' })], tkit.csv.columnsFor(CARD_FIELDS), { delimiter: ',' }).replace(/^\uFEFF/, '') + '\nFile name: ' + tkit.csv.filename('Kit demo', 'Cards', tkit.today());
+
+    var NOTES = [
+      'Reunião com o fornecedor de café: preço do pacote de 1 kg subiu para R$ 48,00.',
+      'Call with the coffee supplier about the new price list, and a visit to the roastery next week.',
+      'Lembrete: renovar o seguro do carro antes do fim do mês. Pedir três cotações.',
+      'Ideas for the autumn menu: pumpkin soup, cafe latte with cinnamon, apple tart.'
+    ];
+    var searchIn = document.getElementById('search-in'), searchOut = document.getElementById('search-out');
+    function drawSearch() {
+      tkit.clear(searchOut);
+      NOTES.forEach(function (note) {
+        var ranges = searchIn.value.trim() ? tkit.search.match(note, searchIn.value) : [];
+        if (ranges === null) return;
+        var line = ranges.length ? tkit.search.snippet(note, tkit.search.match(note, searchIn.value), 70) : note;
+        var shown = ranges.length ? tkit.search.highlight(line, tkit.search.match(line, searchIn.value)) : line;
+        searchOut.appendChild(tkit.h('li', { class: 't-row' }, tkit.h('span', {}, shown)));
+      });
+      if (!searchOut.children.length) searchOut.appendChild(tkit.h('li', { class: 't-muted', text: 'Nothing found' }));
+    }
+    searchIn.addEventListener('input', drawSearch); drawSearch();
+
+    var note = document.getElementById('note'), saveStatus = document.getElementById('save-status'), saveOut = document.getElementById('save-out'), saves = 0;
+    var saver = tkit.autosave(function () { saves++; return new Promise(function (resolve) { setTimeout(resolve, 600); }); }, {
+      onStatus: function (status) { saveStatus.textContent = status; saveStatus.className = 't-badge' + (status === 'saved' ? ' ok' : status === 'error' ? ' danger' : status === 'idle' ? '' : ' warn'); saveOut.textContent = saves + ' saves so far'; }
+    });
+    note.addEventListener('input', function () { saver.touch(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-tool]'), function (button) {
+      button.addEventListener('click', function () {
+        var tool = button.dataset.tool;
+        if (tool === 'bold') tkit.textarea.wrap(note, '**', '**', 'text');
+        else if (tool === 'list') tkit.textarea.prefixLines(note, '- ');
+        else if (tool === 'quote') tkit.textarea.prefixLines(note, '> ');
+        else saver.flush().then(function () { tkit.toast('Nothing pending', { tone: 'success' }); });
+      });
+    });
+    document.getElementById('copy-btn').addEventListener('click', function () { tkit.copy('GCore app kit 2.1').then(function (ok) { if (!ok) tkit.toast('Could not copy', { tone: 'error' }); }); });
+    document.getElementById('state-btn').addEventListener('click', function () {
+      var slot = document.getElementById('state-slot');
+      tkit.clear(slot);
+      slot.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Built with tkit.h', text: 'The title and text are attributes on a t-* tag, so this reads correctly.' }));
     });
     tkit.context({ summary: 'Kit demo' }); // outside Tendly nothing is sent
   </script>
