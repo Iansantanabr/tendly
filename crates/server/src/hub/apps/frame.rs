@@ -49,7 +49,15 @@ pub(crate) const TTL_SECONDS: i64 = 8 * 60 * 60;
 const RENEW_SECONDS: i64 = 30 * 60;
 pub(crate) const PREFIX: &str = "/apps-run/";
 /// The static files every app page may load without a token: the SDK and the kit.
-const SHARED_PATHS: &[&str] = &["/api/hub/apps/sdk.js", "/api/hub/apps/kit.js", "/api/hub/apps/kit.css", "/api/hub/apps/kit-demo.html"];
+const SHARED_PATHS: &[&str] = &[
+    "/api/hub/apps/sdk.js",
+    "/api/hub/apps/kit.js",
+    "/api/hub/apps/kit.css",
+    "/api/hub/apps/kit-demo.html",
+    // Fork: the map library the Map template loads.
+    "/api/hub/apps/vendor/leaflet.js",
+    "/api/hub/apps/vendor/leaflet.css",
+];
 /// No `allow-same-origin`: the document has an origin of its own, shared with nothing.
 pub(crate) const POLICY: &str =
     "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-popups; frame-ancestors 'self'";

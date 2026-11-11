@@ -62,6 +62,9 @@ const SDK: &str = include_str!("apps/sdk.js");
 const KIT_CSS: &str = include_str!("apps/kit.css");
 const KIT_JS: &str = include_str!("apps/kit.js");
 const KIT_DEMO: &str = include_str!("apps/kit-demo.html");
+/// Fork: Leaflet 1.9.4 (BSD-2), for the Map template; see `apps/vendor/README.md`.
+const LEAFLET_JS: &str = include_str!("apps/vendor/leaflet.js");
+const LEAFLET_CSS: &str = include_str!("apps/vendor/leaflet.css");
 /// The pages a new app starts with, by template name (`scaffold_route`). Each
 /// works on its own: it uses the kit and keeps what it holds in collections.
 /// `issues` is the list "Report a problem" makes (`report.ts`).
@@ -141,6 +144,8 @@ pub fn routes() -> Router<AppState> {
         .route("/api/hub/apps/sdk.js", get(sdk_route))
         .route("/api/hub/apps/kit.css", get(kit_css_route))
         .route("/api/hub/apps/kit.js", get(kit_js_route))
+        .route("/api/hub/apps/vendor/leaflet.js", get(|| async { shared_file("text/javascript; charset=utf-8", LEAFLET_JS) }))
+        .route("/api/hub/apps/vendor/leaflet.css", get(|| async { shared_file("text/css; charset=utf-8", LEAFLET_CSS) }))
         .route("/api/hub/apps/kit-demo.html", get(kit_demo_route))
         .route("/api/hub/apps/{workspace_id}/scaffold", post(scaffold_route))
         .route("/api/hub/apps/{workspace_id}/{slug}/files", get(entry_route))
