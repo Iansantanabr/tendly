@@ -54,10 +54,10 @@ test('week start: Sunday vs Monday, including a Sunday and the year boundary', (
 
 test('periodFor: daily, weekly (either week start), monthly, once, manual', () => {
   assert.equal(L.periodFor(daily(), '2026-11-11', 0), '2026-11-11');
-  assert.equal(L.periodFor(weekly([1]), '2026-11-11', 1), '2026-11-09');
-  assert.equal(L.periodFor(weekly([1]), '2026-11-11', 0), '2026-11-08');
-  assert.equal(L.periodFor(weekly([1]), '2026-11-08', 1), '2026-11-02');
-  assert.equal(L.periodFor(weekly([1]), '2026-11-08', 0), '2026-11-08');
+  assert.equal(L.periodFor(weekly([1, 4]), '2026-11-09', 1), '2026-11-09', 'a chosen weekday is its own period');
+  assert.equal(L.periodFor(weekly([1, 4]), '2026-11-12', 0), '2026-11-12');
+  assert.equal(L.periodFor(weekly([1, 4]), '2026-11-11', 1), null, 'no period on an unchosen day');
+  assert.equal(L.periodFor(weekly([1, 4]), '2026-11-08', 0), null);
   assert.equal(L.periodFor(monthly(15), '2026-11-30', 0), '2026-11-01');
   assert.equal(L.periodFor(monthly(15), '2027-01-01', 0), '2027-01-01');
   assert.equal(L.periodFor(once('2026-12-25'), '2026-11-11', 0), '2026-12-25');
@@ -94,39 +94,91 @@ test('late: an open run left from an earlier period is late', () => {
   assert.equal(L.isLate(r, [run(r, '2026-11-10', 'done')], at('2026-11-11', '07:00'), 0), false);
 });
 
-test('weekly: one run per week; due from the first chosen day, late after the last (Monday week)', () => {
-  const r = weekly([1, 4], { dueTime: '10:00' });             // Monday to Thursday
-  assert.equal(L.windowFor(r, '2026-11-08', 1).period, '2026-11-02', 'a Sunday still belongs to the Monday-week before');
-  assert.equal(L.isDue(r, [run(r, '2026-11-02')], at('2026-11-08'), 1), false, 'and that week was done');
-  assert.equal(L.isDue(r, [], at('2026-11-09'), 1), true);
-  assert.equal(L.isLate(r, [], at('2026-11-09', '23:00'), 1), false);
-  assert.equal(L.isLate(r, [], at('2026-11-12', '10:00'), 1), false, 'Thursday on the minute');
-  assert.equal(L.isLate(r, [], at('2026-11-12', '10:01'), 1), true, 'Thursday after dueTime');
-  assert.equal(L.isLate(r, [], at('2026-11-13'), 1), true, 'Friday, past the last day');
-  assert.equal(L.isDue(r, [run(r, '2026-11-09')], at('2026-11-12'), 1), false, 'done this week');
-  assert.equal(L.isDue(r, [run(r, '2026-11-09')], at('2026-11-16'), 1), true, 'next week is due again');
+test('weekly: one run per chosen weekday, so two days make two separate due days in a week', () => {
+  const r = weekly([1, 4]);                                    // Monday and Thursday; 2026-11-09 is a Monday
+  assert.equal(L.isDue(r, [run(r, '2026-11-05')], at('2026-11-08'), 1), false, 'Sunday before: last Thursday was done, nothing new until Monday');
+  assert.equal(L.isDue(r, [], at('2026-11-09'), 1), true, 'Monday');
+  assert.equal(L.isDue(r, [run(r, '2026-11-09')], at('2026-11-09'), 1), false, 'Monday done');
+  assert.equal(L.isDue(r, [run(r, '2026-11-09', 'skipped')], at('2026-11-09'), 1), false, 'Monday skipped');
+  assert.equal(L.isDue(r, [run(r, '2026-11-09')], at('2026-11-10'), 1), false, 'Tuesday: Monday is done, Thursday not yet');
+  assert.equal(L.isDue(r, [run(r, '2026-11-09')], at('2026-11-12'), 1), true, 'Thursday is its own run');
+  assert.equal(L.isDue(r, [run(r, '2026-11-09'), run(r, '2026-11-12')], at('2026-11-12'), 1), false, 'both done');
+  assert.equal(L.isDue(r, [run(r, '2026-11-09'), run(r, '2026-11-12')], at('2026-11-13'), 1), false, 'and nothing on Friday');
+  assert.equal(L.isDue(r, [run(r, '2026-11-09'), run(r, '2026-11-12')], at('2026-11-16'), 1), true, 'next Monday again');
+  assert.equal(L.windowFor(r, '2026-11-12', 1).period, '2026-11-12');
 });
 
-test('weekly: Sunday week start moves the boundary', () => {
-  const r = weekly([0]);                                       // Sundays
-  assert.equal(L.windowFor(r, '2026-11-07', 0).period, '2026-11-01', 'Saturday is the end of the week that began on Sunday Nov 1');
-  assert.equal(L.isDue(r, [run(r, '2026-11-01')], at('2026-11-07'), 0), false);
-  assert.equal(L.isDue(r, [], at('2026-11-08'), 0), true);
-  assert.equal(L.isDue(r, [run(r, '2026-11-08')], at('2026-11-14'), 0), false, 'same week through Saturday');
-  assert.equal(L.isDue(r, [run(r, '2026-11-08')], at('2026-11-15'), 0), true);
-  // With a Monday week start, Sunday is the LAST day of the week: due only at the very end.
-  assert.equal(L.isDue(r, [], at('2026-11-09'), 1), false);
-  assert.equal(L.isDue(r, [], at('2026-11-15'), 1), true);
-  assert.equal(L.windowFor(r, '2026-11-15', 1).period, '2026-11-09');
+test('weekly: doing Monday does not mark Thursday done (and the other way round)', () => {
+  const r = weekly([1, 4]);
+  const monday = [run(r, '2026-11-09')];
+  assert.equal(L.isDue(r, monday, at('2026-11-12'), 1), true);
+  assert.equal(L.isLate(r, monday, at('2026-11-12', '23:00'), 1), false, 'no dueTime: not late on its own day');
+  assert.equal(L.isDue(r, [run(r, '2026-11-12')], at('2026-11-09'), 1), true, 'a Thursday run does not cover Monday');
+  assert.equal(L.isDue(r, [run(weekly([1, 4], { id: 'other' }), '2026-11-12')], at('2026-11-12'), 1), true, 'another routine does not count');
+});
+
+test('weekly: a missed Monday is late on Tuesday and Wednesday and replaced by Thursday', () => {
+  const r = weekly([1, 4]);
+  assert.equal(L.isLate(r, [], at('2026-11-09', '08:00'), 1), false, 'Monday, no dueTime');
+  assert.equal(L.isLate(r, [], at('2026-11-10'), 1), true, 'Tuesday');
+  assert.equal(L.isLate(r, [], at('2026-11-11'), 1), true, 'Wednesday');
+  assert.equal(L.windowFor(r, '2026-11-11', 1).period, '2026-11-09', 'the late one is Monday');
+  assert.equal(L.isLate(r, [run(r, '2026-11-09')], at('2026-11-11'), 1), false, 'done Monday is not late');
+  assert.equal(L.isLate(r, [run(r, '2026-11-09', 'skipped')], at('2026-11-11'), 1), false);
+  // Thursday: Thursday's occurrence takes over, Monday no longer piles up.
+  assert.equal(L.windowFor(r, '2026-11-12', 1).period, '2026-11-12');
+  assert.equal(L.isLate(r, [], at('2026-11-12', '08:00'), 1), false, 'Thursday morning, no dueTime: not late yet');
+  assert.equal(L.isDue(r, [], at('2026-11-12'), 1), true);
+  // Friday to Sunday: Thursday is the single late one; the next Monday starts fresh.
+  assert.equal(L.isLate(r, [], at('2026-11-14'), 1), true);
+  assert.equal(L.windowFor(r, '2026-11-15', 1).period, '2026-11-12');
+  assert.equal(L.isLate(r, [run(r, '2026-11-12')], at('2026-11-14'), 1), false, 'Monday was missed but Thursday is done: not late');
+  assert.equal(L.isLate(r, [], at('2026-11-16', '08:00'), 1), false, 'next Monday takes over');
+  assert.equal(L.isLate({ ...r, active: false }, [], at('2026-11-11'), 1), false);
+});
+
+test('weekly: dueTime applies on the chosen day, not on other days', () => {
+  const r = weekly([1, 4], { dueTime: '10:00' });
+  assert.equal(L.isLate(r, [], at('2026-11-09', '10:00'), 1), false, 'Monday on the minute');
+  assert.equal(L.isLate(r, [], at('2026-11-09', '10:01'), 1), true, 'Monday after dueTime');
+  assert.equal(L.isLate(r, [run(r, '2026-11-09')], at('2026-11-09', '10:01'), 1), false);
+  assert.equal(L.isLate(r, [run(r, '2026-11-09')], at('2026-11-12', '09:00'), 1), false, 'Thursday before dueTime');
+  assert.equal(L.isLate(r, [run(r, '2026-11-09')], at('2026-11-12', '10:01'), 1), true, 'Thursday after dueTime, Monday done does not help');
+  assert.equal(L.isLate(r, [], at('2026-11-10', '07:00'), 1), true, 'Tuesday early: Monday is still late');
+});
+
+test('weekly: week start does not matter', () => {
+  const r = weekly([0, 3]);                                    // Sunday and Wednesday; 2026-11-08 is a Sunday
+  for (const ws of [0, 1]) {
+    assert.equal(L.periodFor(r, '2026-11-08', ws), '2026-11-08');
+    assert.equal(L.periodFor(r, '2026-11-09', ws), null);
+    assert.equal(L.isDue(r, [], at('2026-11-08'), ws), true);
+    assert.equal(L.isDue(r, [run(r, '2026-11-08')], at('2026-11-11'), ws), true, 'Wednesday is separate from Sunday');
+    assert.equal(L.nextDue(r, at('2026-11-09'), [run(r, '2026-11-08')], ws), '2026-11-11');
+  }
+});
+
+test('weekly: a run stored with the old week-start period is tolerated', () => {
+  const r = weekly([1, 4]);
+  const old = [run(r, '2026-11-09')];                          // old rule: period = the Monday of the week
+  assert.equal(L.isDue(r, old, at('2026-11-09'), 1), false, 'it simply counts for that date');
+  assert.equal(L.isDue(r, old, at('2026-11-12'), 1), true);
+  const sunday = [run(r, '2026-11-08')];                       // old Sunday-week start: not a chosen day, counts for nothing, no crash
+  assert.doesNotThrow(() => { L.isDue(r, sunday, at('2026-11-10'), 0); L.isLate(r, sunday, at('2026-11-10'), 0); L.nextDue(r, at('2026-11-10'), sunday, 0); });
+  assert.equal(L.isDue(r, sunday, at('2026-11-10'), 0), true);
+  const openOld = [run(r, '2026-11-02', 'open')];
+  assert.equal(L.isLate(r, openOld, at('2026-11-10'), 0), true, 'an old open run is late like any earlier open run');
+  assert.doesNotThrow(() => L.groupToday([r], old, at('2026-11-10'), 1));
 });
 
 test('weekly: across the year boundary', () => {
-  const r = weekly([1]);
+  const r = weekly([1, 4]);                                    // 2026-12-28 is a Monday, 2027-01-01 a Friday
   const w = L.windowFor(r, '2027-01-01', 1);
-  assert.deepEqual({ ...w }, { period: '2026-12-28', opens: '2026-12-28', deadline: '2026-12-28' });
-  assert.equal(L.isLate(r, [], at('2027-01-01'), 1), true, 'Monday Dec 28 was missed');
-  assert.equal(L.isLate(r, [run(r, '2026-12-28')], at('2027-01-01'), 1), false);
-  assert.equal(L.nextDue(r, at('2027-01-01'), [run(r, '2026-12-28')], 1), '2027-01-04');
+  assert.deepEqual({ ...w }, { period: '2026-12-31', opens: '2026-12-31', deadline: '2026-12-31' }, 'Thursday Dec 31');
+  assert.equal(L.isLate(r, [], at('2027-01-01'), 1), true, 'Thursday Dec 31 was missed');
+  assert.equal(L.isLate(r, [run(r, '2026-12-31')], at('2027-01-01'), 1), false);
+  assert.equal(L.isDue(r, [run(r, '2026-12-31')], at('2027-01-04'), 1), true, 'Monday Jan 4');
+  assert.equal(L.periodFor(r, '2027-01-04', 1), '2027-01-04');
 });
 
 test('monthly: due from the day, late after it, clamped in short months, year boundary', () => {
@@ -168,7 +220,8 @@ test('nextDue: today when open, tomorrow/next week/next month when done, null wh
   const now = at('2026-11-11');   // Wednesday
   assert.equal(L.nextDue(daily(), now, [], 0), '2026-11-11');
   assert.equal(L.nextDue(daily(), now, [run(daily(), '2026-11-11')], 0), '2026-11-12');
-  assert.equal(L.nextDue(weekly([5]), now, [], 1), '2026-11-13', 'not open yet: its first day');
+  assert.equal(L.nextDue(weekly([5]), now, [], 1), '2026-11-11', 'last Friday was missed: due now');
+  assert.equal(L.nextDue(weekly([5]), now, [run(weekly([5]), '2026-11-06')], 1), '2026-11-13', 'last Friday done: the next Friday');
   assert.equal(L.nextDue(weekly([1]), now, [], 1), '2026-11-11', 'missed Monday: due now');
   assert.equal(L.nextDue(weekly([1]), now, [run(weekly([1]), '2026-11-09')], 1), '2026-11-16');
   assert.equal(L.nextDue(monthly(20), now, [], 0), '2026-11-20');
@@ -178,6 +231,20 @@ test('nextDue: today when open, tomorrow/next week/next month when done, null wh
   assert.equal(L.nextDue(once('2026-12-24'), now, [], 0), '2026-12-24');
   assert.equal(L.nextDue(once('2026-12-24'), now, [run(once('2026-12-24'), '2026-12-24')], 0), null);
   assert.equal(L.nextDue(daily({ active: false }), now, [], 0), null);
+});
+
+test('nextDue (weekly): today when chosen and not done, skips unchosen days, crosses a week and a year', () => {
+  const r = weekly([1, 4]);                                    // Monday and Thursday
+  assert.equal(L.nextDue(r, at('2026-11-12'), [run(r, '2026-11-09')], 1), '2026-11-12', 'Thursday, not done: today');
+  assert.equal(L.nextDue(r, at('2026-11-09'), [], 1), '2026-11-09', 'Monday, not done: today');
+  assert.equal(L.nextDue(r, at('2026-11-09'), [run(r, '2026-11-09')], 1), '2026-11-12', 'Monday done: Thursday, skipping Tue and Wed');
+  assert.equal(L.nextDue(r, at('2026-11-10'), [run(r, '2026-11-09')], 1), '2026-11-12', 'Tuesday after Monday done');
+  assert.equal(L.nextDue(r, at('2026-11-12'), [run(r, '2026-11-12')], 1), '2026-11-16', 'Thursday done: crosses the week to Monday');
+  assert.equal(L.nextDue(r, at('2026-11-14'), [run(r, '2026-11-12')], 0), '2026-11-16', 'Saturday, any week start');
+  assert.equal(L.nextDue(r, at('2026-12-31'), [run(r, '2026-12-31')], 1), '2027-01-04', 'crosses the year: Thu Dec 31 -> Mon Jan 4');
+  assert.equal(L.nextDue(r, at('2027-01-01'), [run(r, '2026-12-31')], 1), '2027-01-04');
+  assert.equal(L.nextDue(weekly([2]), at('2026-11-10'), [run(weekly([2]), '2026-11-10')], 1), '2026-11-17', 'a single day: a week later');
+  assert.equal(L.nextDue(weekly([1, 4], { active: false }), at('2026-11-09'), [], 1), null);
 });
 
 test('groupToday: late / in progress / for today / done today, sorted by time', () => {
@@ -215,7 +282,9 @@ test('required steps and notification rule', () => {
 });
 
 test('the Portuguese twin runs the same rules', () => {
-  const r = weekly([1]);
-  assert.equal(B.periodFor(r, '2026-11-11', 1), '2026-11-09');
+  const r = weekly([1, 4]);
+  assert.equal(B.periodFor(r, '2026-11-12', 1), '2026-11-12');
+  assert.equal(B.periodFor(r, '2026-11-11', 1), null);
+  assert.equal(B.isLate(r, [], at('2026-11-11'), 1), true);
   assert.equal(B.isLate(daily({ dueTime: '09:00' }), [], at('2026-11-11', '09:01'), 0), true);
 });

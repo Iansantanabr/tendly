@@ -116,7 +116,7 @@
           <button type="button" data-kind="daily">Diária</button><button type="button" data-kind="weekly">Semanal</button><button type="button" data-kind="monthly">Mensal</button><button type="button" data-kind="once">Uma vez</button><button type="button" data-kind="manual">Sob demanda</button>
         </div>
       </div>
-      <div class="t-field" id="r-weekly"><span>Dias da semana</span><div class="days" id="r-days"></div><small class="t-muted">Feita uma vez por semana. Vence a partir do primeiro dia escolhido e atrasa depois do último.</small></div>
+      <div class="t-field" id="r-weekly"><span>Dias da semana</span><div class="days" id="r-days"></div><small class="t-muted">Uma execução em cada dia marcado.</small></div>
       <label class="t-field" id="r-monthly"><span>Dia do mês</span><input id="r-day" type="number" min="1" max="31"></label>
       <label class="t-field" id="r-once"><span>Data</span><input id="r-date" type="date"></label>
       <label class="t-field" id="r-time-field"><span>Horário limite (opcional)</span><input id="r-time" type="time"></label>
@@ -153,15 +153,15 @@
     // DATA: routines `routines` { name, description, steps: [{ id, label, required }], frequency: { kind, weekdays?, day?, date? }, dueTime, owner, active, order };
     // runs `runs` { routineId, routineName, period, startedAt, finishedAt, by, items: [{ stepId, label, required, done, at, note }], status, note }.
     // Settings: tendly.data key `settings` { v, person, weekStart, notifyLate, lastNotified }.
-    // WEEKLY: one run per week. It becomes due on the first chosen weekday and is late after the last chosen weekday (and its dueTime).
+    // WEEKLY: one run per chosen weekday (period = that day). It is due on the day, late after its dueTime, and stays late until the next chosen weekday takes over.
 
     // All visible text of the script lives here (the pt-BR twin of this file only changes this block, the markup and lang).
     const T = {
       sDone: 'Concluída', sSkipped: 'Pulada', sOpen: 'Em andamento',
-      at: time => 'às ' + time, everyDay: 'Todo dia', everyWeekday: day => 'Toda ' + day, weekRange: (a, b) => 'Toda semana, ' + a + ' a ' + b,
+      at: time => 'às ' + time, everyDay: 'Todo dia', everyWeekdays: names => 'Toda ' + (names.length > 1 ? names.slice(0, -1).join(', ') + ' e ' + names[names.length - 1] : names[0]),
       monthly: day => 'Todo mês, dia ' + day, onceOn: date => 'Uma vez, em ' + date, manual: 'Sob demanda',
       dayShort: ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'], dayLong: ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'],
-      weekOf: date => 'Semana de ' + date, todayComma: date => 'Hoje, ' + date, todayWord: 'hoje',
+      todayComma: date => 'Hoje, ' + date, todayWord: 'hoje',
       stepsN: n => n + (n === 1 ? ' passo' : ' passos'), late: 'Atrasada', view: 'Ver', continue: 'Continuar', start: 'Começar',
       secLate: 'Atrasadas', secOpen: 'Em andamento', secToday: 'Para hoje', secDone: 'Feitas hoje',
       nothingTitle: 'Nada para hoje', nothingText: 'Todas as rotinas estão em dia. Comece uma sob demanda em Rotinas.',
@@ -212,15 +212,16 @@
     // The first day of the week that holds `ymd`. weekStart: 0 = Sunday, 1 = Monday.
     function weekStartOf(ymd, weekStart) { return ymdAdd(ymd, -((ymdWeekday(ymd) - (weekStart || 0) + 7) % 7)); }
     // The period around `date`: { period, opens, deadline }, or null when the routine has no schedule (manual, or "once" without a date).
-    // daily: that day. weekly: the week (period = its first day), opens on the first chosen weekday, deadline on the last one.
+    // daily: that day. weekly: the latest chosen weekday up to `date` (period = that day; opens and ends on it, so a missed one stays late
+    // until the next chosen weekday). weekStart is unused here. Runs saved with the old week-start period just count for that date.
     // monthly: the month (period = the 1st), opens and ends on `day` (31 becomes the last day of a short month). once: its date.
     function windowFor(routine, date, weekStart) {
-      const f = routine.frequency || {}, ws = weekStart || 0;
+      const f = routine.frequency || {};
       if (f.kind === 'daily') return { period: date, opens: date, deadline: date };
       if (f.kind === 'weekly') {
-        const start = weekStartOf(date, ws);
-        const offsets = (f.weekdays && f.weekdays.length ? f.weekdays : [1]).map(d => (d - ws + 7) % 7).sort((a, b) => a - b);
-        return { period: start, opens: ymdAdd(start, offsets[0]), deadline: ymdAdd(start, offsets[offsets.length - 1]) };
+        const days = f.weekdays && f.weekdays.length ? f.weekdays : [1];
+        for (let i = 0; i < 7; i++) { const on = ymdAdd(date, -i); if (days.indexOf(ymdWeekday(on)) >= 0) return { period: on, opens: on, deadline: on }; }
+        return null;
       }
       if (f.kind === 'monthly') {
         const p = ymdParts(date), day = Math.min(Math.max(f.day || 1, 1), daysInMonth(p.y, p.m)), on = ymdFormat(p.y, p.m, day);
@@ -230,9 +231,17 @@
       return null;
     }
     // The day a run counts for. A manual routine has no schedule: its runs count for the day they start.
+    // Weekly: `date` itself when it is a chosen weekday, otherwise null (no run is expected that day).
     function periodFor(routine, date, weekStart) {
+      const f = routine.frequency || {};
+      if (f.kind === 'weekly') { const w = windowFor(routine, date, weekStart); return w && w.period === date ? date : null; }
       const w = windowFor(routine, date, weekStart);
-      return w ? w.period : ((routine.frequency || {}).kind === 'manual' ? date : null);
+      return w ? w.period : (f.kind === 'manual' ? date : null);
+    }
+    // The period a run started on `date` belongs to: the open occurrence (a late weekly one included), else the day itself.
+    function runPeriodFor(routine, date, weekStart) {
+      const w = windowFor(routine, date, weekStart);
+      return w ? w.period : (periodFor(routine, date, weekStart) || date);
     }
     const isFinished = run => run.status === 'done' || run.status === 'skipped';
     function periodDone(routine, runs, period) { return (runs || []).some(r => r.routineId === routine.id && r.period === period && isFinished(r)); }
@@ -264,7 +273,11 @@
       if (!periodDone(routine, runs, w.period)) return c.date > w.opens ? c.date : w.opens;
       if (f.kind === 'once') return null;
       const p = ymdParts(w.period);
-      const next = f.kind === 'daily' ? ymdAdd(w.period, 1) : f.kind === 'weekly' ? ymdAdd(w.period, 7) : ymdAdd(w.period, daysInMonth(p.y, p.m));
+      if (f.kind === 'weekly') {   // the next chosen weekday after this occurrence
+        const days = f.weekdays && f.weekdays.length ? f.weekdays : [1];
+        for (let i = 1; i <= 7; i++) { const on = ymdAdd(w.period, i); if (days.indexOf(ymdWeekday(on)) >= 0) return on; }
+      }
+      const next = f.kind === 'daily' ? ymdAdd(w.period, 1) : ymdAdd(w.period, daysInMonth(p.y, p.m));
       return windowFor(routine, next, weekStart).opens;
     }
     // Today's screen: late / open (in progress) / today (due, not started) / done (finished today). Each entry { routine, run }.
@@ -317,7 +330,7 @@
       if (f.kind === 'daily') return T.everyDay + at;
       if (f.kind === 'weekly') {
         const days = (f.weekdays && f.weekdays.length ? f.weekdays : [1]).slice().sort((a, b) => (a - ws() + 7) % 7 - (b - ws() + 7) % 7);
-        return (days.length === 1 ? T.everyWeekday(T.dayLong[days[0]]) : T.weekRange(T.dayShort[days[0]], T.dayShort[days[days.length - 1]])) + at;
+        return T.everyWeekdays(days.map(d => T.dayLong[d])) + at;
       }
       if (f.kind === 'monthly') return T.monthly(f.day || 1) + at;
       if (f.kind === 'once') return T.onceOn(tkit.date(f.date)) + at;
@@ -325,7 +338,6 @@
     }
     function periodText(routine, period) {
       const kind = routine && routine.frequency ? routine.frequency.kind : 'daily', p = ymdParts(period);
-      if (kind === 'weekly') return T.weekOf(tkit.date(period));
       if (kind === 'monthly') return new Intl.DateTimeFormat(document.documentElement.lang, { month: 'long', year: 'numeric' }).format(new Date(p.y, p.m - 1, 1));
       return period === clock().date ? T.todayComma(tkit.date(period)) : tkit.date(period);
     }
@@ -335,7 +347,7 @@
       starting = true;
       try {
         const c = clock();
-        const rec = await runsCol.insert({ routineId: r.id, routineName: r.name, period: periodFor(r, c.date, ws()) || c.date, startedAt: nowIso(), finishedAt: null, by: S.value.person,
+        const rec = await runsCol.insert({ routineId: r.id, routineName: r.name, period: runPeriodFor(r, c.date, ws()), startedAt: nowIso(), finishedAt: null, by: S.value.person,
           items: (r.steps || []).map(s => ({ stepId: s.id, label: s.label, required: !!s.required, help: s.help || '', done: false, at: null, note: '' })), status: 'open', note: '' });
         openRun(rec.id);
       } catch (error) { fail(error); } finally { starting = false; }
@@ -627,7 +639,7 @@
       }
       const run = (r, daysAgo, status, doneCount, extra) => {
         const items = r.steps.map((s, i) => ({ stepId: s.id, label: s.label, required: s.required, done: i < doneCount, at: i < doneCount ? iso(daysAgo, 8 + Math.floor(i / 3), 35 + i) : null, note: '' }));
-        const base = { routineId: r.id, routineName: r.name, period: periodFor(r, clockOf(new Date(iso(daysAgo, 12, 0))).date, ws()), startedAt: iso(daysAgo, 8, 30), by: ex.people[daysAgo % ex.people.length], items, status, note: '', finishedAt: status === 'open' ? null : iso(daysAgo, 9, 5) };
+        const base = { routineId: r.id, routineName: r.name, period: runPeriodFor(r, clockOf(new Date(iso(daysAgo, 12, 0))).date, ws()), startedAt: iso(daysAgo, 8, 30), by: ex.people[daysAgo % ex.people.length], items, status, note: '', finishedAt: status === 'open' ? null : iso(daysAgo, 9, 5) };
         return Object.assign(base, extra || {});
       };
       const [open, ext, close] = made;
