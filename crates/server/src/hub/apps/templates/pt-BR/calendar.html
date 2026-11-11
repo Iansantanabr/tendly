@@ -8,35 +8,107 @@
   <script src="/api/hub/apps/sdk.js"></script>
   <script src="/api/hub/apps/kit.js"></script>
   <style>
-    .agenda-head { display: flex; align-items: center; gap: var(--t-space-2); }
-    .agenda-head > h2 { flex: 1; }
+    .day-head { display: flex; align-items: center; gap: var(--t-space-2); }
+    .day-head > h2 { flex: 1; }
+    .agenda-day { display: grid; gap: var(--t-space-2); }
+    .agenda-day > h2 { font-size: var(--t-text-md); color: var(--t-ink-soft); }
+    .row-time { min-width: 3.5rem; justify-content: center; }
+    .seg-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--t-space-2); }
   </style>
 </head>
 <body>
-  <main class="t-page wide">
-    <header class="t-page-head">
-      <div class="t-toolbar">
-        <span class="t-tile" aria-hidden="true">{{LETTER}}</span>
-        <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
-      </div>
-      <button type="button" class="t-button primary" id="new-event">Novo evento</button>
-    </header>
-    <t-calendar id="calendar"></t-calendar>
-    <section class="t-card">
-      <div class="agenda-head"><h2 id="agenda-title">Hoje</h2><button type="button" class="t-button small" id="add-here">Adicionar aqui</button></div>
-      <div id="agenda"></div>
-    </section>
-  </main>
+  <t-app>
+    <t-nav label="Seções">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="calendar" data-icon="calendar">Calendário</button>
+      <button data-view="agenda" data-icon="list">Agenda</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Ajustes</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="calendar">
+        <div class="t-page wide">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+            <button type="button" class="t-button primary" id="new-event">Novo evento</button>
+          </header>
+          <t-sample-banner></t-sample-banner>
+          <div id="notice"></div>
+          <t-calendar id="calendar"></t-calendar>
+          <section class="t-card">
+            <div class="day-head"><h2 id="day-title">Hoje</h2><button type="button" class="t-button small" id="add-here">Adicionar aqui</button></div>
+            <div id="day-list"></div>
+          </section>
+        </div>
+      </t-view>
+
+      <t-view name="agenda">
+        <div class="t-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">Agenda</h1><p class="t-muted">Os próximos 30 dias.</p></div>
+            <button type="button" class="t-button primary" id="new-event-agenda">Novo evento</button>
+          </header>
+          <t-sample-banner></t-sample-banner>
+          <div id="agenda-list"></div>
+        </div>
+      </t-view>
+
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Ajustes</h1><p class="t-muted">Ajuste como o calendário aparece e funciona. Seus eventos não são alterados.</p></div></header>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Categorias</h2></div>
+            <p class="t-muted">Dê uma cor e um nome aos eventos. Apagar uma categoria mantém os eventos; eles só perdem a cor dela.</p>
+            <t-list-editor id="categories-editor" tones></t-list-editor>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Semana</h2></div>
+            <div class="seg-line"><span>A semana começa no</span><div class="t-segment" role="group" aria-label="A semana começa no" id="week-start"></div></div>
+            <label class="t-switch-line"><input type="checkbox" class="t-switch" id="show-weekends"><span>Mostrar sábado e domingo</span></label>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Dados</h2></div>
+            <p class="t-muted">Leve seus eventos para uma planilha ou traga uma planilha para cá. Colunas: Título, Data, Início, Fim, Categoria, Local, Notas.</p>
+            <div class="t-toolbar">
+              <button type="button" class="t-button" id="export-csv">Exportar CSV</button>
+              <button type="button" class="t-button" id="import-csv">Importar CSV</button>
+            </div>
+            <t-import id="importer"></t-import>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Exemplos</h2></div>
+            <p class="t-muted" id="samples-text"></p>
+            <div class="t-toolbar">
+              <button type="button" class="t-button" id="samples-load">Ver com exemplos</button>
+              <button type="button" class="t-button" id="samples-clear">Apagar exemplos</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Zona de perigo</h2></div>
+            <p class="t-muted">Remove todos os eventos, inclusive os que você digitou. Não dá para desfazer.</p>
+            <div class="t-toolbar"><button type="button" class="t-button danger" id="delete-all">Apagar todos os eventos</button></div>
+          </section>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-detail id="detail" title-field="title">
+    <button type="button" slot="actions" class="t-button" id="detail-edit">Editar</button>
+    <button type="button" slot="actions" class="t-button" id="detail-duplicate">Duplicar</button>
+    <button type="button" slot="actions" class="t-button danger" id="detail-delete">Apagar</button>
+  </t-detail>
 
   <t-modal id="editor" title="Evento">
     <form id="event-form" class="t-form">
       <label class="t-field"><span>Título</span><input name="title" type="text" required maxlength="120"></label>
       <div class="t-form-row">
         <label class="t-field"><span>Data</span><input name="date" type="date" required></label>
-        <label class="t-field"><span>Hora</span><input name="time" type="time"></label>
-        <label class="t-field"><span>Tipo</span>
-          <select name="tone"><option value="">Normal</option><option value="ok">Feito</option><option value="warn">Atenção</option><option value="danger">Urgente</option></select>
-        </label>
+        <label class="t-field"><span>Início</span><input name="time" type="time"></label>
+        <label class="t-field"><span>Fim</span><input name="end" type="time"></label>
+      </div>
+      <div class="t-form-row">
+        <label class="t-field"><span>Categoria</span><select name="category" id="category-select"></select></label>
+        <label class="t-field"><span>Local</span><input name="place" type="text" maxlength="120"></label>
       </div>
       <label class="t-field"><span>Notas</span><textarea name="notes" maxlength="2000"></textarea></label>
       <div class="t-actions">
@@ -49,71 +121,368 @@
   </t-modal>
 
   <script>
+    // PAGE MAP: strings (L) -> constants and default settings -> state -> helpers -> render (month, agenda,
+    // settings) -> detail -> editor -> settings, data and examples handlers -> start-up.
+    //
+    // Records: collection `events`, data { title, date 'YYYY-MM-DD', time 'HH:MM', end 'HH:MM', category (id from
+    // settings.categories), place, notes, tone (OLD events only: '' | ok | warn | danger), order unused }.
+    // Settings: tendly.data key `settings` = { v, categories: [{ id, label, tone }], weekStart, showWeekends }.
+
+    // ---- Strings (the pt-BR twin changes only this block, the markup text and the example data) ----
+    const L = {
+      today: 'Hoje', tomorrow: 'Amanhã', allDay: 'Dia todo', time: 'Hora',
+      noEventsTitle: 'Nenhum evento ainda', noEventsText: 'Adicione seu primeiro evento ou veja o calendário cheio de exemplos.',
+      newEvent: 'Novo evento', seeExamples: 'Ver com exemplos',
+      nothingDayTitle: 'Nada neste dia', nothingDayText: 'Adicione um evento com o botão acima.',
+      nothingAgendaTitle: 'Nada nos próximos 30 dias', nothingAgendaText: 'Os eventos de hoje em diante aparecem aqui.',
+      loadError: 'Não deu para carregar os eventos', retry: 'Tentar de novo',
+      editEvent: 'Editar evento', conflict: 'Alguém mudou este evento enquanto isso; recarreguei.',
+      endBeforeStart: 'O fim precisa ser depois do início.',
+      confirmDelete: title => 'Apagar "' + title + '"?', del: 'Apagar',
+      removedCategory: id => id + ' (removida)',
+      selection: (title, date) => 'Evento: ' + title + ', ' + date,
+      summaryMonth: (month, n, today) => 'Calendário de ' + month + ': ' + n + (n === 1 ? ' evento' : ' eventos') + '; hoje: ' + today,
+      summaryAgenda: n => 'Agenda: ' + n + (n === 1 ? ' evento' : ' eventos') + ' nos próximos 30 dias',
+      sunday: 'Domingo', monday: 'Segunda',
+      samplesNone: 'Encha o calendário com 9 eventos de mentirinha para ver como funciona. Dá para apagar tudo com um clique.',
+      samplesSome: n => (n === 1 ? n + ' exemplo está' : n + ' exemplos estão') + ' no calendário.',
+      samplesLoaded: 'Exemplos adicionados', samplesCleared: n => (n === 1 ? '1 exemplo apagado' : n + ' exemplos apagados'),
+      csvTitle: 'Título', csvDate: 'Data', csvStart: 'Início', csvEnd: 'Fim', csvCategory: 'Categoria', csvPlace: 'Local', csvNotes: 'Notas',
+      csvFile: name => name + ' - Eventos - ' + tkit.today() + '.csv',
+      nothingToExport: 'Não há eventos para exportar.', exported: n => 'Exportado: ' + n + (n === 1 ? ' linha' : ' linhas'),
+      importProgress: (done, total) => 'Importados ' + done + ' de ' + total + '…',
+      imported: n => (n === 1 ? '1 evento importado' : n + ' eventos importados'),
+      badTimes: n => (n === 1 ? '1 hora não pôde ser lida e ficou vazia.' : n + ' horas não puderam ser lidas e ficaram vazias.'),
+      deleteAllText: n => 'Apagar ' + (n === 1 ? 'o único evento' : 'todos os ' + n + ' eventos') + '? Não dá para desfazer.', deleteAll: 'Apagar tudo',
+      deletedAll: n => (n === 1 ? '1 evento apagado' : n + ' eventos apagados'),
+      notFound: 'Este evento não existe mais.',
+      addCategory: 'Adicionar categoria',
+    };
+
+    // ---- Constants and default settings ----
+    const DEFAULTS = {
+      v: 1,
+      categories: [
+        { id: 'meeting', label: 'Reunião', tone: 'accent' },
+        { id: 'deadline', label: 'Prazo', tone: 'warn' },
+        { id: 'personal', label: 'Pessoal', tone: 'ok' },
+      ],
+      weekStart: 0,        // 0 Sunday, 1 Monday
+      showWeekends: true,
+    };
+    const lang = document.documentElement.lang;
+    const APP_NAME = document.title;
+    const SAMPLES = [   // dias a partir de hoje; as datas são calculadas ao abrir, então nunca ficam velhas
+      { title: 'Reunião semanal da equipe', day: 0, time: '09:30', end: '10:00', category: 'meeting', place: 'Sala de reunião 2' },
+      { title: 'Consulta no dentista', day: 0, time: '16:00', end: '16:45', category: 'personal', place: 'Clínica do centro' },
+      { title: 'Enviar o relatório do mês', day: 1, category: 'deadline', notes: 'Os números estão na planilha compartilhada. Peça ao financeiro para revisar antes.' },
+      { title: 'Almoço com a Marina', day: 2, time: '12:30', end: '14:00', category: 'personal', place: 'Bistrô da esquina' },
+      { title: 'Chamada de início com o cliente', day: 3, time: '14:00', end: '15:00', category: 'meeting', notes: 'Pauta: objetivos, cronograma e quem faz o quê.' },
+      { title: 'Revisar o rascunho da proposta', day: 6, category: 'deadline' },
+      { title: 'Planejamento do trimestre', day: 9, time: '10:00', end: '12:00', category: 'meeting', place: 'Escritório principal' },
+      { title: 'Revisão do design', day: -4, time: '15:00', end: '16:00', category: 'meeting' },
+      { title: 'Festa de aniversário do Rafael', day: 19, time: '19:00', category: 'personal', place: 'Casa dele' },
+    ];
+
+    // ---- State ----
     const events = tendly.db.collection('events');
+    const app = document.querySelector('t-app');
     const calendar = document.getElementById('calendar');
-    const agenda = document.getElementById('agenda');
-    const agendaTitle = document.getElementById('agenda-title');
+    const dayList = document.getElementById('day-list');
+    const agendaList = document.getElementById('agenda-list');
+    const notice = document.getElementById('notice');
+    const detail = document.getElementById('detail');
     const editor = document.getElementById('editor');
     const form = document.getElementById('event-form');
+    const importer = document.getElementById('importer');
+    const categoriesEditor = document.getElementById('categories-editor');
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    let editing = null, store, selected = tkit.today();
+    let S;                                  // settings (tkit.settings)
+    let store = null, records = [], loaded = false;
+    let editing = null, selected = tkit.today(), month = tkit.today().slice(0, 7), wantedId = null;
 
-    function render(records) {
-      calendar.events = records.map(r => ({ id: r.id, date: r.data.date, title: (r.data.time ? r.data.time + ' ' : '') + r.data.title, tone: r.data.tone }));
-      drawAgenda();
+    // ---- Helpers ----
+    const categories = () => S.value.categories;
+    const categoryOf = id => categories().find(c => c.id === id);
+    // Display tone: the category's tone, else the tone old events carry.
+    const toneOf = d => { const c = d.category && categoryOf(d.category); return c ? c.tone : (d.tone || ''); };
+    const byTime = (a, b) => (a.data.date + ' ' + (a.data.time || '')).localeCompare(b.data.date + ' ' + (b.data.time || ''));
+    const addDays = (date, n) => { const [y, m, d] = date.split('-').map(Number); const x = new Date(y, m - 1, d + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+    const dayLabel = date => {
+      if (date === tkit.today()) return L.today;
+      if (date === addDays(tkit.today(), 1)) return L.tomorrow;
+      const [y, m, d] = date.split('-').map(Number);
+      return new Intl.DateTimeFormat(lang, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(y, m - 1, d));
+    };
+    function monthName(m) {
+      const [y, mo] = m.split('-').map(Number);
+      return new Intl.DateTimeFormat(lang, { month: 'long' }).format(new Date(y, mo - 1, 1));
     }
-    function drawAgenda() {
-      agendaTitle.textContent = tkit.date(selected, 'long');
-      tkit.clear(agenda);
-      const mine = (store ? store.records : []).filter(r => r.data.date === selected).sort((a, b) => (a.data.time || '').localeCompare(b.data.time || ''));
-      if (!mine.length) { agenda.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Nada neste dia', text: 'Adicione um evento com o botão acima.' })); return; }
+    // "9:30", "9h30", "09:30:00", "9" -> "09:30"; '' -> ''; anything else -> null.
+    function normTime(value) {
+      const s = String(value == null ? '' : value).trim();
+      if (!s) return '';
+      const m = /^(\d{1,2})(?:[:h.](\d{2}))?(?::\d{2})?\s*h?$/i.exec(s);
+      if (!m || +m[1] > 23 || +(m[2] || 0) > 59) return null;
+      return m[1].padStart(2, '0') + ':' + (m[2] || '00');
+    }
+    const timeText = d => d.time ? (d.end ? d.time + '–' + d.end : d.time) : '';
+
+    // The field list is the schema for detail, CSV and import. `time`/`end` are text because the kit has no time type.
+    function fields() {
+      return [
+        { id: 'title', label: L.csvTitle, type: 'text', required: true },
+        { id: 'date', label: L.csvDate, type: 'date', required: true },
+        { id: 'time', label: L.csvStart, type: 'text' },
+        { id: 'end', label: L.csvEnd, type: 'text' },
+        { id: 'category', label: L.csvCategory, type: 'choice', options: categories().map(c => ({ id: c.id, label: c.label, tone: c.tone })) },
+        { id: 'place', label: L.csvPlace, type: 'text' },
+        { id: 'notes', label: L.csvNotes, type: 'longtext' },
+      ];
+    }
+    function detailFields() {   // same, but start and end are shown together as "Time"
+      return fields().filter(f => f.id !== 'end').map(f => f.id === 'time' ? Object.assign({}, f, { label: L.time }) : f);
+    }
+    const detailRecord = r => Object.assign({}, r, { data: Object.assign({}, r.data, { time: timeText(r.data) }) });
+
+    function setSummary() {
+      const view = app.view;
+      if (view === 'calendar') {
+        const inMonth = records.filter(r => (r.data.date || '').slice(0, 7) === month);
+        tkit.context({ summary: L.summaryMonth(monthName(month), inMonth.length, records.filter(r => r.data.date === tkit.today()).length) });
+      } else if (view === 'agenda') {
+        tkit.context({ summary: L.summaryAgenda(upcoming().length) });
+      }
+    }
+    const upcoming = () => records.filter(r => r.data.date >= tkit.today() && r.data.date <= addDays(tkit.today(), 29)).sort(byTime);
+
+    // ---- Render: month view ----
+    function emptyState() {
+      return tkit.h('t-state', { kind: 'empty', title: L.noEventsTitle, text: L.noEventsText },
+        tkit.h('button', { type: 'button', class: 't-button primary', text: L.newEvent, onClick: () => openEditor(null) }),
+        tkit.h('button', { type: 'button', class: 't-button', text: L.seeExamples, onClick: loadSamples }));
+    }
+    function eventRow(r) {
+      const d = r.data, c = d.category && categoryOf(d.category);
+      return tkit.h('li', {}, tkit.h('button', { type: 'button', class: 't-row', onClick: () => showDetail(r) },
+        tkit.h('span', { class: 't-badge row-time ' + toneOf(d), text: d.time || L.allDay }),
+        tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: d.title }), (d.place || d.notes) ? tkit.h('small', { text: d.place || d.notes }) : null),
+        c ? tkit.h('span', { class: 't-badge ' + c.tone, text: c.label }) : null));
+    }
+    function renderMonth() {
+      calendar.setAttribute('week-start', String(S.value.weekStart));
+      calendar.events = records.map(r => ({ id: r.id, date: r.data.date, title: (r.data.time ? r.data.time + ' ' : '') + r.data.title, tone: toneOf(r.data) }));
+      trimWeekends();
+      tkit.clear(notice);
+      if (loaded && !records.length) notice.appendChild(emptyState());
+      document.getElementById('day-title').textContent = tkit.date(selected, 'long');
+      tkit.clear(dayList);
+      const mine = records.filter(r => r.data.date === selected).sort(byTime);
+      if (!mine.length) { dayList.appendChild(tkit.h('t-state', { kind: 'empty', title: L.nothingDayTitle, text: L.nothingDayText })); return; }
       const list = tkit.h('ul', { class: 't-list' });
-      mine.forEach(record => {
-        const d = record.data;
-        list.appendChild(tkit.h('li', {}, tkit.h('button', { type: 'button', class: 't-row', onClick: () => openEditor(record) },
-          tkit.h('span', { class: 't-badge ' + (d.tone || ''), text: d.time || '—' }),
-          tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: d.title }), d.notes ? tkit.h('small', { text: d.notes }) : null))));
-      });
-      agenda.appendChild(list);
+      mine.forEach(r => list.appendChild(eventRow(r)));
+      dayList.appendChild(list);
     }
-    calendar.addEventListener('t-day', event => { selected = event.detail.date; drawAgenda(); });
-    calendar.addEventListener('t-open', event => openEditor(store.records.find(r => r.id === event.detail.id)));
+    // KIT-CANDIDATE: <t-calendar> has no "hide weekends" option. This hides the Saturday/Sunday columns by
+    // hand after every draw (it redraws on month, day and data changes; all of them fire an event after drawing).
+    function trimWeekends() {
+      const grid = calendar.querySelector('.t-cal-grid');
+      if (!grid) return;
+      const show = S.value.showWeekends, start = S.value.weekStart;
+      grid.style.gridTemplateColumns = show ? '' : 'repeat(5, minmax(0, 1fr))';
+      grid.querySelectorAll('.t-cal-weekday').forEach((el, i) => { const dow = (i + start) % 7; el.style.display = !show && (dow === 0 || dow === 6) ? 'none' : ''; });
+      grid.querySelectorAll('.t-cal-day').forEach(el => { const [y, m, d] = el.dataset.date.split('-').map(Number); const dow = new Date(y, m - 1, d).getDay(); el.style.display = !show && (dow === 0 || dow === 6) ? 'none' : ''; });
+    }
 
-    function openEditor(record, date) {
+    // ---- Render: agenda view ----
+    function renderAgenda() {
+      tkit.clear(agendaList);
+      if (!loaded) { agendaList.appendChild(tkit.h('t-state', { kind: 'loading' })); return; }
+      const next = upcoming();
+      if (!next.length) {
+        agendaList.appendChild(records.length
+          ? tkit.h('t-state', { kind: 'empty', title: L.nothingAgendaTitle, text: L.nothingAgendaText }, tkit.h('button', { type: 'button', class: 't-button primary', text: L.newEvent, onClick: () => openEditor(null) }))
+          : emptyState());
+        return;
+      }
+      const groups = {};   // day -> [records], already in time order
+      next.forEach(r => { (groups[r.data.date] = groups[r.data.date] || []).push(r); });
+      Object.keys(groups).sort().forEach(day => {
+        const list = tkit.h('ul', { class: 't-list' });
+        groups[day].forEach(r => list.appendChild(eventRow(r)));
+        agendaList.appendChild(tkit.h('section', { class: 'agenda-day' }, tkit.h('h2', { text: dayLabel(day) }), list));
+      });
+    }
+
+    // ---- Render: settings view ----
+    function renderSettings() {
+      categoriesEditor.addLabel = L.addCategory;
+      categoriesEditor.items = categories();
+      const counts = {};
+      records.forEach(r => { if (r.data.category) counts[r.data.category] = (counts[r.data.category] || 0) + 1; });
+      categoriesEditor.inUse = counts;
+      const seg = document.getElementById('week-start');
+      tkit.clear(seg);
+      [[0, L.sunday], [1, L.monday]].forEach(([value, label]) => seg.appendChild(tkit.h('button', {
+        type: 'button', text: label, 'aria-pressed': String(S.value.weekStart === value),
+        onClick: () => S.save({ weekStart: value }).catch(fail),
+      })));
+      document.getElementById('show-weekends').checked = S.value.showWeekends;
+      const n = tkit.samples.count(records);
+      document.getElementById('samples-text').textContent = n ? L.samplesSome(n) : L.samplesNone;
+      document.getElementById('samples-load').hidden = n > 0;
+      document.getElementById('samples-clear').hidden = n === 0;
+    }
+
+    function render(list) {
+      records = list;
+      loaded = true;
+      detail.fields = detailFields();
+      detail.siblings = records.slice().sort(byTime).map(r => r.id);
+      document.querySelectorAll('t-sample-banner').forEach(b => { b.count = tkit.samples.count(records); });
+      renderMonth(); renderAgenda(); renderSettings(); setSummary();
+      // keep an open detail in step with the data (edited elsewhere, or gone)
+      if (detail.opened && detail.record) {
+        const fresh = records.find(r => r.id === detail.record.id);
+        if (fresh) detail.record = detailRecord(fresh); else detail.close();
+      }
+      if (wantedId) { const r = records.find(x => x.id === wantedId); wantedId = null; if (r) showDetail(r); else tkit.toast(L.notFound); }
+    }
+
+    calendar.addEventListener('t-day', event => { selected = event.detail.date; renderMonth(); });
+    calendar.addEventListener('t-open', event => { const r = records.find(x => x.id === event.detail.id); if (r) showDetail(r); });
+    calendar.addEventListener('t-month', event => { month = event.detail.month; trimWeekends(); setSummary(); });
+    app.addEventListener('t-view', () => setSummary());
+
+    // ---- Detail (drawer; the address becomes #view/<id>) ----
+    function showDetail(r) {
+      detail.settings = {};
+      detail.fields = detailFields();
+      detail.record = detailRecord(r);
+      detail.open();
+      tkit.context({ selection: L.selection(r.data.title, r.data.date) });
+    }
+    detail.addEventListener('t-nav', event => { const r = records.find(x => x.id === event.detail.id); if (r) detail.record = detailRecord(r); });
+    const openRecord = () => records.find(r => r.id === detail.record.id);
+    document.getElementById('detail-edit').addEventListener('click', () => { const r = openRecord(); if (!r) return; detail.close(); openEditor(r); });
+    document.getElementById('detail-duplicate').addEventListener('click', () => {
+      const r = openRecord(); if (!r) return;
+      const d = r.data;
+      detail.close();
+      openEditor(null, { title: d.title, date: addDays(d.date, 7), time: d.time || '', end: d.end || '', category: d.category || '', place: d.place || '', notes: d.notes || '', tone: d.tone || '' });
+    });
+    document.getElementById('detail-delete').addEventListener('click', () => { const r = openRecord(); if (r) removeEvent(r, () => detail.close()); });
+    tkit.route.on(({ id }) => {
+      if (!id) { if (detail.opened) detail.close(); return; }
+      if (detail.opened && detail.record && detail.record.id === id) return;
+      const r = records.find(x => x.id === id);
+      if (r) showDetail(r); else if (!loaded) wantedId = id; else tkit.toast(L.notFound);
+    });
+
+    async function removeEvent(r, done) {
+      if (!await tkit.confirm(L.confirmDelete(r.data.title), { confirm: L.del, tone: 'danger' })) return;
+      try { await events.remove(r.id); if (done) done(); } catch (error) { fail(error); }
+    }
+
+    // ---- Editor ----
+    function openEditor(record, prefill) {
       editing = record || null;
-      tkit.fill(form, record ? record.data : { date: date || selected, title: '', time: '', tone: '', notes: '' });
+      const select = document.getElementById('category-select');
+      tkit.clear(select);
+      select.appendChild(tkit.h('option', { value: '', text: '—' }));
+      categories().forEach(c => select.appendChild(tkit.h('option', { value: c.id, text: c.label })));
+      const values = record ? record.data : (prefill || { date: selected });
+      if (values.category && !categoryOf(values.category)) select.appendChild(tkit.h('option', { value: values.category, text: L.removedCategory(values.category) }));
+      tkit.fill(form, Object.assign({ title: '', date: selected, time: '', end: '', category: '', place: '', notes: '' }, values));
       document.getElementById('delete').hidden = !record;
-      editor.title = record ? 'Editar evento' : 'Novo evento';
+      editor.title = record ? L.editEvent : L.newEvent;
       editor.open();
     }
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const values = tkit.form(form);
+      if (values.time && values.end && values.end <= values.time) { tkit.toast(L.endBeforeStart, { tone: 'error' }); return; }
       try {
         if (editing) await events.update(editing.id, values, { rev: editing.rev });
         else await events.insert(values);
         selected = values.date;
         editor.close();
       } catch (error) {
-        if (error.code === 'conflict') { tkit.toast('Alguém mudou este evento enquanto isso; ele foi recarregado.', { tone: 'error' }); editing = error.current; tkit.fill(form, editing.data); }
+        if (error.code === 'conflict') { tkit.toast(L.conflict, { tone: 'error' }); editing = error.current; tkit.fill(form, editing.data); }
         else fail(error);
       }
     });
     document.getElementById('cancel').addEventListener('click', () => editor.close());
-    document.getElementById('delete').addEventListener('click', async () => {
-      if (!editing || !await tkit.confirm('Apagar "' + editing.data.title + '"?', { confirm: 'Apagar', tone: 'danger' })) return;
-      try { await events.remove(editing.id); editor.close(); } catch (error) { fail(error); }
-    });
+    document.getElementById('delete').addEventListener('click', () => { if (editing) removeEvent(editing, () => editor.close()); });
     document.getElementById('new-event').addEventListener('click', () => openEditor(null));
-    document.getElementById('add-here').addEventListener('click', () => openEditor(null, selected));
+    document.getElementById('new-event-agenda').addEventListener('click', () => openEditor(null, { date: tkit.today() }));
+    document.getElementById('add-here').addEventListener('click', () => openEditor(null));
     editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
     form.addEventListener('input', () => { tendly.host.holdReload(true); });
 
-    calendar.selected = selected;
-    store = tkit.live(events, render, { onError: error => {
-      tkit.clear(agenda);
-      agenda.appendChild(tkit.h('t-state', { kind: 'error', title: 'Não deu para carregar os eventos', text: error.message }));
-    } });
+    // ---- Settings, data and examples ----
+    categoriesEditor.addEventListener('t-change', event => S.save({ categories: event.detail.items }).catch(fail));
+    document.getElementById('show-weekends').addEventListener('change', event => S.save({ showWeekends: event.target.checked }).catch(fail));
+
+    async function loadSamples() {
+      try {
+        await tkit.samples.load(events, SAMPLES.map(s => {
+          const d = Object.assign({}, s, { date: tkit.daysFromToday(s.day) });
+          delete d.day;
+          return d;
+        }));
+        tkit.toast(L.samplesLoaded, { tone: 'success' });
+      } catch (error) { fail(error); }
+    }
+    document.getElementById('samples-load').addEventListener('click', loadSamples);
+    const clearSamples = async () => { try { tkit.toast(L.samplesCleared(await tkit.samples.clear(events))); } catch (error) { fail(error); } };
+    document.getElementById('samples-clear').addEventListener('click', clearSamples);
+    document.addEventListener('t-clear', clearSamples);
+
+    document.getElementById('export-csv').addEventListener('click', () => {
+      if (!records.length) { tkit.toast(L.nothingToExport); return; }
+      const f = fields();
+      const columns = f.map(field => ({ key: field.id, label: field.label, format: value => tkit.fieldText(field, value) }));
+      const text = tkit.csv.stringify(records.slice().sort(byTime).map(r => r.data), columns, { delimiter: tkit.csv.delimiter() });
+      tkit.csv.download(text, L.csvFile(APP_NAME));
+      tkit.toast(L.exported(records.length));
+    });
+    document.getElementById('import-csv').addEventListener('click', async () => {
+      importer.fields = fields();
+      const rows = await importer.open();
+      if (!rows || !rows.length) return;
+      let bad = 0, done = 0;
+      try {
+        for (const row of rows) {
+          const data = Object.assign({}, row);
+          ['time', 'end'].forEach(key => { const t = normTime(data[key]); if (t === null) { bad++; data[key] = ''; } else data[key] = t; });
+          await events.insert(data);
+          if (++done % 50 === 0 && done < rows.length) tkit.toast(L.importProgress(done, rows.length));
+        }
+        tkit.toast(L.imported(done) + (bad ? '. ' + L.badTimes(bad) : ''), { tone: 'success' });
+      } catch (error) { fail(error); }
+    });
+    document.getElementById('delete-all').addEventListener('click', async () => {
+      const all = await events.list({ limit: 5000 }).catch(() => records);
+      if (!all.length) return;
+      if (!await tkit.confirm(L.deleteAllText(all.length), { confirm: L.deleteAll, tone: 'danger' })) return;
+      try { for (const r of all) await events.remove(r.id); tkit.toast(L.deletedAll(all.length)); } catch (error) { fail(error); }
+    });
+
+    // ---- Start-up ----
+    (async () => {
+      agendaList.appendChild(tkit.h('t-state', { kind: 'loading' }));
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) fail(S.error);
+      S.on(() => { if (loaded) render(records); else { renderSettings(); } });
+      renderSettings();
+      store = tkit.live(events, render, { onError: error => {
+        tkit.clear(notice); tkit.clear(agendaList);
+        const retry = tkit.h('button', { type: 'button', class: 't-button', text: L.retry, onClick: () => store.reload() });
+        notice.appendChild(tkit.h('t-state', { kind: 'error', title: L.loadError, text: error.message }, retry));
+      } });
+      calendar.selected = selected;
+    })();
   </script>
 </body>
 </html>

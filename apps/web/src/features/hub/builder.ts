@@ -9,40 +9,47 @@ import type { AppColor } from "./app-tile";
 import { APP_COLORS } from "./app-tile";
 import { appConvention, type HubApp } from "./apps";
 
-export type TemplateId = "blank" | "kanban" | "table" | "calendar" | "dashboard" | "form" | "document";
+export type TemplateId = "base" | "blank" | "kanban" | "table" | "calendar" | "dashboard" | "form" | "knowledge";
+/** Where a template sits in the "Start from" list. */
+export type TemplateGroup = "featured" | "organize" | "schedule" | "track" | "collect" | "decide" | "content";
 
 export interface Template {
   id: TemplateId;
   /** Shown as `t(label)`. */
   label: string;
   hint: string;
+  group: TemplateGroup;
   color: AppColor;
   /** The collection the template keeps its records in, for the first message. */
   collection: string;
 }
 
 export const TEMPLATES: readonly Template[] = [
-  { id: "blank", label: "Blank", hint: "A page with a small list, to start from nothing.", color: "slate", collection: "items" },
-  { id: "kanban", label: "Kanban / CRM", hint: "Cards in columns you drag between, with a list view.", color: "violet", collection: "cards" },
-  { id: "table", label: "Table", hint: "Rows with a filter, categories and totals.", color: "blue", collection: "entries" },
-  { id: "calendar", label: "Calendar", hint: "A month with events and the day's agenda.", color: "teal", collection: "events" },
-  { id: "dashboard", label: "Dashboard with charts", hint: "Totals and two charts over the entries you add.", color: "amber", collection: "entries" },
-  { id: "form", label: "Form + list", hint: "A form people fill in, and the list of what came in.", color: "green", collection: "submissions" },
-  { id: "document", label: "Document editor", hint: "Documents with a list and an editor that saves as you type.", color: "orange", collection: "docs" },
+  { id: "base", label: "Flexible base", hint: "Your own fields, seen as a table, a board, a gallery or a calendar.", group: "featured", color: "teal", collection: "records" },
+  { id: "blank", label: "Blank", hint: "A page with a small list, to start from nothing.", group: "featured", color: "slate", collection: "items" },
+  { id: "kanban", label: "Kanban / CRM", hint: "Cards in columns you drag between, with a list view.", group: "organize", color: "violet", collection: "cards" },
+  { id: "table", label: "Table", hint: "Rows with a filter, categories and totals.", group: "organize", color: "blue", collection: "entries" },
+  { id: "calendar", label: "Calendar", hint: "A month with events and the day's agenda.", group: "schedule", color: "teal", collection: "events" },
+  { id: "dashboard", label: "Dashboard with charts", hint: "Totals and two charts over the entries you add.", group: "track", color: "amber", collection: "entries" },
+  { id: "form", label: "Form + list", hint: "A form people fill in, and the list of what came in.", group: "collect", color: "green", collection: "submissions" },
+  { id: "knowledge", label: "Knowledge base", hint: "Articles by topic, with search and links between them.", group: "content", color: "orange", collection: "articles" },
 ];
 
-export const templateById = (id: string): Template => TEMPLATES.find(template => template.id === id) ?? TEMPLATES[0];
+/** Old names still accepted: the document editor became the knowledge base. */
+const ALIASES: Record<string, TemplateId> = { document: "knowledge" };
+export const templateById = (id: string): Template => TEMPLATES.find(template => template.id === (ALIASES[id] ?? id)) ?? TEMPLATES[1];
 
 // ---------------------------------------------------------------- guessing from the sentence
 
 /** Words that point at a template, in Portuguese and English, as prefixes of the folded word. */
 const CLUES: Record<Exclude<TemplateId, "blank">, string[]> = {
+  base: ["database", "airtable", "notion", "colecao", "collection", "campos", "fields", "galeria", "gallery", "flexivel", "flexible"],
   kanban: ["kanban", "quadro", "funil", "pipeline", "crm", "lead", "etapa", "estagio", "stage", "board", "deal", "negocio", "oportunidade", "card", "cartao", "trello", "backlog", "sprint", "prospect"],
   table: ["tabela", "table", "planilha", "spreadsheet", "lista", "list", "inventario", "inventory", "estoque", "stock", "catalogo", "catalog", "cadastro", "registro", "record", "contato", "contact", "cliente", "customer", "produto", "product", "despesa", "expense", "gasto"],
   calendar: ["calendario", "calendar", "agenda", "schedule", "evento", "event", "compromisso", "appointment", "reuniao", "meeting", "escala", "shift", "prazo", "deadline", "aniversario", "birthday", "mes", "month", "semana", "week"],
   dashboard: ["painel", "dashboard", "grafico", "chart", "graph", "metrica", "metric", "indicador", "kpi", "relatorio", "report", "resumo", "summary", "acompanh", "track", "monitor", "medir", "measure", "vendas", "sales", "receita", "revenue", "estatistic", "statistic"],
   form: ["formulario", "form", "pesquisa", "survey", "inscri", "signup", "sign-up", "registration", "pedido", "order", "solicita", "request", "feedback", "questionario", "questionnaire", "enquete", "poll", "candidat", "applica", "chamado", "ticket", "coletar", "collect"],
-  document: ["documento", "document", "editor", "texto", "text", "nota", "note", "wiki", "artigo", "article", "manual", "roteiro", "script", "escrever", "write", "redigir", "rascunho", "draft", "ata", "minutes", "diario", "journal", "receita"],
+  knowledge: ["documento", "document", "editor", "texto", "text", "nota", "note", "wiki", "artigo", "article", "manual", "roteiro", "script", "escrever", "write", "redigir", "rascunho", "draft", "ata", "minutes", "diario", "journal", "conhecimento", "knowledge", "procedimento", "procedure", "faq", "pergunta", "politica", "policy", "tutorial", "guia", "guide"],
 };
 /** A clue that beats the others when present, since it names the shape of the app. */
 const STRONG: Partial<Record<Exclude<TemplateId, "blank">, string[]>> = {
@@ -50,7 +57,8 @@ const STRONG: Partial<Record<Exclude<TemplateId, "blank">, string[]>> = {
   calendar: ["calendario", "calendar", "agenda"],
   dashboard: ["painel", "dashboard", "grafico", "chart"],
   form: ["formulario", "form", "pesquisa", "survey", "enquete", "questionario"],
-  document: ["documento", "document", "editor", "wiki"],
+  knowledge: ["documento", "document", "editor", "wiki", "conhecimento", "knowledge", "faq", "manual"],
+  base: ["database", "airtable", "notion", "flexivel", "flexible"],
   table: ["tabela", "table", "planilha", "spreadsheet"],
 };
 
@@ -122,7 +130,7 @@ export function builderPrompt(input: { app: Pick<HubApp, "name" | "slug">; sente
     "",
     sentence || "(I have not described it yet: ask me what it should do before changing anything.)",
     "",
-    `Start by reading \`apps/${input.app.slug}/index.html\` and \`app.json\`: the page already works, uses the Tendly app kit (kit.css + kit.js: \`<t-app>\`, \`<t-kanban>\`, \`<t-table>\`, \`<t-calendar>\`, \`<t-chart>\`, \`<t-modal>\`, \`tkit.live\`, \`tkit.toast\`…) and keeps its records in the collection "${template.collection}" through \`tendly.db\`. Keep the kit and the collections, change the fields, screens and names to what I described, and write the app's text in the language I am writing in.`,
+    `Start by reading \`apps/${input.app.slug}/index.html\` and \`app.json\`: the page already works, uses the Tendly app kit v2 (kit.css + kit.js: \`<t-app>\`, \`<t-kanban>\`, \`<t-table>\`, \`<t-calendar>\`, \`<t-chart>\`, \`<t-modal>\`, \`<t-record-form>\`, \`<t-detail>\`, \`tkit.live\`, \`tkit.settings\`, \`tkit.formula\`, \`tkit.csv\`, \`tkit.samples\`…; the header comment of /api/hub/apps/kit.js lists all of it) and keeps its records in the collection "${template.collection}" through \`tendly.db\`. Keep the kit and the collections, change the fields, screens and names to what I described, and write the app's text in the language I am writing in. What a person changes on a normal day (columns, categories, fields, currency) belongs on its "Settings" (Ajustes) screen, kept in \`tendly.data\` key \`settings\`; keep that screen working.`,
     "",
     appConvention(input.app.slug),
     "",

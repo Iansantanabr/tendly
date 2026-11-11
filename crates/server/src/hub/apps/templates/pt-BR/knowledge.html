@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    mark { padding: 0 1px; border-radius: 2px; background: var(--t-warn-soft); color: inherit; }
+    .kb-narrow { max-width: 860px; }
+    .kb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--t-space-3); }
+    .kb-card { display: grid; gap: 4px; align-content: start; padding: var(--t-space-3) var(--t-space-4); border: 1px solid var(--t-line); border-radius: var(--t-radius-lg); background: var(--t-elevated); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .kb-card:hover { background: var(--t-fill); }
+    .kb-card > strong { font-weight: 600; }
+    .kb-card > small { color: var(--t-muted); font-size: var(--t-text-sm); }
+    .kb-stack { display: grid; gap: var(--t-space-5); }
+    .kb-section { display: grid; gap: var(--t-space-2); }
+    .kb-section > h2 { display: flex; align-items: center; gap: var(--t-space-2); font-size: var(--t-text-md); font-weight: 600; }
+    .kb-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .kb-article { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: var(--t-space-6); align-items: start; }
+    .kb-aside { position: sticky; top: var(--t-space-4); display: grid; gap: var(--t-space-4); }
+    .kb-aside h2 { font-size: var(--t-text-sm); font-weight: 600; color: var(--t-muted); margin-bottom: 4px; }
+    .kb-aside ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+    .kb-link { display: block; width: 100%; padding: 4px 0; border: 0; background: none; color: var(--t-accent-ink); font: inherit; font-size: var(--t-text-sm); text-align: left; cursor: pointer; }
+    .kb-link:hover { text-decoration: underline; }
+    .kb-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); color: var(--t-muted); font-size: var(--t-text-sm); }
+    .kb-lead { color: var(--t-ink-soft); font-size: var(--t-text-lg); }
+    .kb-title-input { font-size: var(--t-text-xl); font-weight: 600; }
+    .kb-body { height: clamp(280px, 55vh, 640px); resize: vertical; font-family: var(--t-mono); font-size: var(--t-text-md); line-height: 1.6; }
+    .kb-preview { min-height: 280px; padding: var(--t-space-3); border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-elevated); }
+    .kb-status { color: var(--t-muted); font-size: var(--t-text-sm); }
+    @container t-app (max-width: 900px) {
+      .kb-article { grid-template-columns: minmax(0, 1fr); }
+      .kb-aside { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Seções">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="home" data-icon="book">Início</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Ajustes</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="home">
+        <div class="t-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+            <button type="button" class="t-button primary" id="new-article">Novo artigo</button>
+          </header>
+          <t-sample-banner id="banner"></t-sample-banner>
+          <input id="search" class="t-input" type="search" placeholder="Buscar em títulos, tags e textos" aria-label="Buscar artigos" autocomplete="off" hidden>
+          <div id="home-body"></div>
+        </div>
+      </t-view>
+
+      <!-- Reached by #article/<id> (tkit.route), not from the nav. Drawn by drawArticle(). -->
+      <t-view name="article"><div class="t-page" id="article-body"></div></t-view>
+
+      <!-- Reached by #editor/<id> (or #editor for a new article). Autosaves; see the editor block in the script. -->
+      <t-view name="editor">
+        <div class="t-page kb-narrow">
+          <div class="t-toolbar">
+            <span class="kb-status" id="ed-status" role="status" aria-live="polite"></span>
+            <span class="t-spacer"></span>
+            <div class="t-segment" role="group" aria-label="Modo">
+              <button type="button" id="mode-write" aria-pressed="true">Escrever</button>
+              <button type="button" id="mode-preview" aria-pressed="false">Visualizar</button>
+            </div>
+            <button type="button" class="t-button primary" id="ed-done">Concluir</button>
+          </div>
+          <label class="t-field"><span>Título</span><input id="ed-title" class="t-input kb-title-input" type="text" maxlength="200"></label>
+          <div class="t-form-row">
+            <label class="t-field"><span>Tópico</span><select id="ed-topic"></select></label>
+            <label class="t-field"><span>Tags (separadas por vírgula)</span><input id="ed-tags" type="text" maxlength="300" autocomplete="off"></label>
+          </div>
+          <div class="kb-tags" id="ed-chips"></div>
+          <label class="t-field"><span>Resumo</span><input id="ed-summary" type="text" maxlength="200"></label>
+          <div class="t-toolbar" id="md-tools" role="toolbar" aria-label="Formatação">
+            <button type="button" class="t-button small" data-md="bold"><strong>Negrito</strong></button>
+            <button type="button" class="t-button small" data-md="italic"><em>Itálico</em></button>
+            <button type="button" class="t-button small" data-md="heading">Título</button>
+            <button type="button" class="t-button small" data-md="list">Lista</button>
+            <button type="button" class="t-button small" data-md="link">Link</button>
+            <button type="button" class="t-button small" data-md="wiki">Link para artigo</button>
+          </div>
+          <textarea id="ed-body" class="t-input kb-body" aria-label="Texto" spellcheck="true"></textarea>
+          <div id="ed-preview" class="t-md kb-preview" hidden></div>
+        </div>
+      </t-view>
+
+      <t-view name="settings">
+        <div class="t-page kb-narrow">
+          <header class="t-page-head"><h1 class="t-title">Ajustes</h1></header>
+          <section class="t-card">
+            <h2>Tópicos</h2>
+            <p class="t-muted">Os tópicos agrupam os artigos na página inicial. Ao remover um, perguntamos para onde mover os artigos dele.</p>
+            <t-list-editor id="topics-editor" tones></t-list-editor>
+          </section>
+          <section class="t-card">
+            <h2>Página inicial</h2>
+            <div class="t-segment" role="group" aria-label="Página inicial" id="home-mode">
+              <button type="button" data-home="topics" aria-pressed="true">Por tópico</button>
+              <button type="button" data-home="recent" aria-pressed="false">Atualizados recentemente</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <h2>Dados</h2>
+            <p class="t-muted">Título, tópico, tags, resumo e texto de cada artigo, em uma planilha.</p>
+            <div class="t-actions" style="justify-content:flex-start">
+              <button type="button" class="t-button" id="export-csv">Exportar CSV</button>
+              <button type="button" class="t-button" id="import-csv">Importar CSV</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <h2>Exemplos</h2>
+            <p class="t-muted" id="sample-text"></p>
+            <div class="t-actions" style="justify-content:flex-start">
+              <button type="button" class="t-button" id="samples-load">Ver com exemplos</button>
+              <button type="button" class="t-button" id="samples-clear">Apagar exemplos</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <h2>Zona de perigo</h2>
+            <p class="t-muted" id="danger-text"></p>
+            <div class="t-actions" style="justify-content:flex-start"><button type="button" class="t-button danger" id="delete-all">Apagar todos os artigos</button></div>
+          </section>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-import id="importer"></t-import>
+  <t-modal id="move-modal" title="Mover artigos">
+    <div class="t-form">
+      <p id="move-text"></p>
+      <label class="t-field"><span>Mover para</span><select id="move-select"></select></label>
+      <div class="t-actions">
+        <button type="button" class="t-button" id="move-cancel">Cancelar</button>
+        <button type="button" class="t-button primary" id="move-ok">Mover</button>
+      </div>
+    </div>
+  </t-modal>
+
+  <script>
+    // Article = { title, body (markdown), topic (option id), tags: [text], summary, pinned, order }, in the collection
+    // `articles`. Topics are a small setting (tendly.data key `settings`). A topic is only referenced by its id, so
+    // renaming one never touches the articles. Page order: constants -> state -> helpers -> screens -> events -> start-up.
+
+    // ---- Constants: every visible string the script builds (the markup above has the rest) ----------------------
+    const TEXT = {
+      untitled: 'Sem título', noTopic: 'Sem tópico', removedTopic: '(tópico removido)',
+      loadError: 'Não deu para carregar os artigos', retry: 'Tentar de novo',
+      emptyTitle: 'Nenhum artigo ainda', emptyText: 'Escreva o primeiro ou comece por alguns exemplos.', newArticle: 'Novo artigo', withExamples: 'Ver com exemplos',
+      pinned: 'Fixados', recent: 'Atualizados recentemente', resultsOne: '{n} resultado', resultsMany: '{n} resultados',
+      nothingFound: 'Nada encontrado', nothingText: 'Tente outras palavras.', clearSearch: 'Limpar busca',
+      articlesOne: '{n} artigo', articlesMany: '{n} artigos', topicsOne: '{n} tópico', topicsMany: '{n} tópicos',
+      summaryContext: 'Base de conhecimento: {articles} em {topics}', selection: 'Artigo: ',
+      notFoundTitle: 'Artigo não encontrado', notFoundText: 'Ele pode ter sido apagado.', goHome: 'Voltar ao início',
+      home: 'Início', updated: 'Atualizado', onThisPage: 'Neste artigo', related: 'Artigos relacionados', emptyBody: 'Este artigo está vazio.',
+      edit: 'Editar', pin: 'Fixar', unpin: 'Desafixar', del: 'Apagar', deleteQuestion: 'Apagar "{x}"?',
+      createQuestion: 'Criar o artigo "{x}"?', create: 'Criar',
+      changedMeanwhile: 'Alguém mudou isto enquanto isso; recarreguei.',
+      conflictKept: 'Alguém mudou isto enquanto isso. Sua versão foi mantida e salva por cima.',
+      removedMeanwhile: 'Este artigo foi apagado.',
+      statusNew: 'Ainda não salvo', statusTyping: 'Digitando…', statusSaving: 'Salvando…', statusSaved: 'Salvo', statusFailed: 'Não deu para salvar: {x}',
+      linkText: 'texto do link', articleTitle: 'Título do artigo',
+      addTopic: 'Adicionar tópico', keepOne: 'Mantenha pelo menos um tópico.', moveText: 'Nos tópicos que você removeu: {x}.',
+      csvName: 'Artigos', colTitle: 'Título', colTopic: 'Tópico', colTags: 'Tags', colSummary: 'Resumo', colBody: 'Texto',
+      exported: 'Exportado: {x}', importing: 'Importados {done} de {total}…', imported: 'Importado: {x}',
+      samplesNone: 'Encha o app com alguns artigos inventados para ver como fica. São fáceis de apagar.',
+      samplesSome: 'Exemplos no app: {x}. Apagá-los mantém os seus próprios artigos.',
+      samplesAdded: 'Adicionados: {x}', samplesRemoved: 'Apagados: {x}',
+      dangerText: 'Apaga {x} de vez. Isso não pode ser desfeito.', dangerNone: 'Não há nada para apagar.',
+      dangerQuestion: 'Apagar {x}? Isso não pode ser desfeito.', dangerConfirm: 'Apagar tudo', dangerDone: 'Apagados: {x}'
+    };
+    const DEFAULTS = {
+      v: 1,
+      home: 'topics', // 'topics' (sections by topic) | 'recent' (one list, newest first)
+      topics: [
+        { id: 'general', label: 'Geral', tone: '' }, { id: 'procedures', label: 'Procedimentos', tone: 'accent' },
+        { id: 'faq', label: 'Perguntas frequentes', tone: 'info' }, { id: 'policies', label: 'Políticas', tone: 'warn' }
+      ]
+    };
+    // Example articles. `topic` is a default topic id; if the person renamed or removed it, the first topic is used.
+    const EXAMPLES = [
+      { title: 'Como abrir um chamado', topic: 'procedures', tags: ['suporte', 'chamados'], pinned: true, summary: 'Onde pedir ajuda e o que informar.', body: [
+        '# Antes de começar', 'Veja primeiro os passos de [[Redefinição de senha]]: a maioria dos problemas de acesso se resolve ali.', '',
+        '# Abrindo o chamado', '1. Entre na central de ajuda e escolha **Novo chamado**.', '2. Descreva o problema em uma frase e conte o que você já tentou.', '3. Anexe uma captura de tela quando algo parecer errado.', '',
+        '# O que acontece depois', 'Você recebe uma resposta em até um dia útil. Dúvidas sobre dinheiro estão na [[Política de reembolso]].'].join('\n') },
+      { title: 'Redefinição de senha', topic: 'procedures', tags: ['acesso', 'suporte'], pinned: false, summary: 'Volte para a sua conta em três passos.', body: [
+        '# Faça você mesmo', '1. Abra a página de entrada e escolha **Esqueci a senha**.', '2. Digite seu e-mail de trabalho e espere a mensagem (pode levar 2 minutos).', '3. Siga o link e escolha uma senha nova com pelo menos 12 caracteres.', '',
+        '# Ainda sem acesso?', 'Abra um chamado: veja [[Como abrir um chamado]].'].join('\n') },
+      { title: 'Checklist de integração de novos colaboradores', topic: 'procedures', tags: ['pessoas', 'integração'], pinned: false, summary: 'O que fazer no primeiro dia e na primeira semana.', body: [
+        '# Primeiro dia', '- Retirar o notebook e o crachá', '- Conhecer o seu padrinho', '- Ler as [[Perguntas frequentes sobre férias]]', '',
+        '# Primeira semana', '- Concluir o treinamento de segurança', '- Configurar suas contas, com o guia de [[Redefinição de senha]] à mão'].join('\n') },
+      { title: 'Perguntas frequentes sobre férias', topic: 'faq', tags: ['pessoas', 'férias'], pinned: false, summary: 'Respostas rápidas sobre dias de folga.', body: [
+        '# Quantos dias eu tenho?', '30 dias por ano, tirados em blocos de pelo menos 5 dias.', '',
+        '# Quem aprova?', 'Seu gestor, com pelo menos 15 dias de antecedência.', '',
+        '# Quando começo a acumular dias?', 'A partir do primeiro mês. Veja o [[Checklist de integração de novos colaboradores]] para o resto das primeiras semanas.'].join('\n') },
+      { title: 'Política de reembolso', topic: 'policies', tags: ['clientes', 'dinheiro'], pinned: false, summary: 'Quando o cliente recebe o dinheiro de volta.', body: [
+        '> Vale para toda compra feita nos últimos 30 dias.', '',
+        '# Quando reembolsamos', '- O produto chegou danificado', '- O pedido foi cobrado duas vezes', '- O cliente cancela em até 7 dias após a compra', '',
+        '# Como pedir', 'Abra um chamado como em [[Como abrir um chamado]] e informe o número do pedido.'].join('\n') },
+      { title: 'Reembolso de despesas', topic: 'policies', tags: ['pessoas', 'dinheiro'], pinned: false, summary: 'O que a empresa devolve e como pedir.', body: [
+        '# O que cobrimos', 'Viagens, refeições em viagens a trabalho e ferramentas aprovadas pelo seu gestor.', '',
+        '# Como pedir', '1. Tire uma foto de cada comprovante.', '2. Envie tudo em um chamado: veja [[Como abrir um chamado]].', '3. O pagamento chega com a próxima folha.', '',
+        'Reembolso para clientes é outro assunto: veja a [[Política de reembolso]].'].join('\n') }
+    ];
+
+    // ---- State -------------------------------------------------------------------------------------------------
+    const articles = tendly.db.collection('articles');
+    const app = document.querySelector('t-app');
+    const el = id => document.getElementById(id);
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let S, store, loaded = false, query = '', route = { view: '', id: null }, shownArticle = null, lastView = '';
+    const ed = { current: null, dirty: false, saving: null, timer: null, mode: 'write' }; // current = the raw record being edited, null until first save
+
+    // ---- Small helpers ---------------------------------------------------------------------------------------------
+    const fill = (template, vars) => Object.keys(vars).reduce((out, key) => out.split('{' + key + '}').join(vars[key]), template);
+    const plural = (n, one, many) => fill(n === 1 ? one : many, { n });
+    const articlesText = n => plural(n, TEXT.articlesOne, TEXT.articlesMany);
+    function view(r) { // a record as the page uses it (tolerates records written by an agent or an import)
+      const d = r.data || {};
+      return { id: r.id, rev: r.rev, title: String(d.title || ''), body: String(d.body || ''), topic: String(d.topic || ''), summary: String(d.summary || ''),
+        tags: Array.isArray(d.tags) ? d.tags.map(String) : [], pinned: !!d.pinned, order: Number(d.order) || 0, sample: !!d._sample, updated_at: r.updated_at, created_at: r.created_at };
+    }
+    const all = () => (store ? store.records.map(view) : []);
+    const topics = () => S.value.topics || [];
+    const topicOf = id => topics().find(t => t.id === id) || null;
+    const byOrder = (a, b) => a.order - b.order || tkit.fold(a.title).localeCompare(tkit.fold(b.title));
+    const byNewest = (a, b) => String(b.updated_at).localeCompare(String(a.updated_at));
+    function badge(topicId) {
+      const tp = topicOf(topicId);
+      return tkit.h('span', { class: 't-badge ' + (tp ? tp.tone || '' : ''), text: tp ? tp.label : TEXT.noTopic });
+    }
+    function tagBadges(tags, words) { return tkit.h('div', { class: 'kb-tags' }, tags.map(tag => tkit.h('span', { class: 't-badge' }, highlight(tag, words || [])))); }
+    function openArticle(id) { location.hash = '#article/' + encodeURIComponent(id); } // tkit.route.on reacts to the change
+    function goHome() { app.view = 'home'; }
+    function linkArticle(title) { // [[Title]] -> address of the article with that title (case and accent blind), or null
+      const wanted = tkit.fold(title.trim()), found = all().find(a => tkit.fold(a.title.trim()) === wanted);
+      return found ? '#article/' + encodeURIComponent(found.id) : null;
+    }
+    function parseTags(text) {
+      const seen = new Set(), out = [];
+      String(text).split(/[,;\n]/).forEach(raw => { const tag = raw.trim().slice(0, 40), key = tkit.fold(tag); if (tag && !seen.has(key)) { seen.add(key); out.push(tag); } });
+      return out.slice(0, 20);
+    }
+
+    // ---- Search: matching, highlighting, snippets ------------------------------------------------------------
+    // KIT-CANDIDATE: highlight(text, words) -> nodes with <mark>, and snippet(text, words). Search over a list of records could be
+    // a shared kit helper, used by Catalog, Base and Knowledge base.
+    function foldWithMap(text) { // tkit.fold can change the length of odd strings: keep a map from folded index back to the original
+      const f = tkit.fold(text);
+      if (f.length === text.length) return { f, map: null };
+      let out = '';
+      const map = [];
+      for (let i = 0; i < text.length; i++) { const piece = tkit.fold(text[i]); for (let k = 0; k < piece.length; k++) { out += piece[k]; map.push(i); } }
+      return { f: out, map };
+    }
+    function ranges(text, words) { // [[start, end)] of every word in text, accent and case blind, merged
+      const { f, map } = foldWithMap(text), found = [];
+      words.forEach(word => {
+        for (let at = f.indexOf(word); at >= 0; at = f.indexOf(word, at + word.length)) {
+          found.push([map ? map[at] : at, (map ? map[at + word.length - 1] : at + word.length - 1) + 1]);
+        }
+      });
+      found.sort((a, b) => a[0] - b[0]);
+      const merged = [];
+      found.forEach(r => { const last = merged[merged.length - 1]; if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]); else merged.push(r.slice()); });
+      return merged;
+    }
+    function highlight(text, words) { // an array of text nodes and <mark> elements, built with DOM nodes only
+      text = String(text || '');
+      if (!words.length) return [text];
+      const out = [];
+      let at = 0;
+      ranges(text, words).forEach(([start, end]) => { if (start > at) out.push(text.slice(at, start)); out.push(tkit.h('mark', { text: text.slice(start, end) })); at = end; });
+      if (at < text.length) out.push(text.slice(at));
+      return out;
+    }
+    function snippet(text, words) { // about 160 characters around the first match, '' when the text has none
+      const hits = ranges(text, words);
+      if (!hits.length) return '';
+      let start = Math.max(0, hits[0][0] - 50);
+      if (start > 0) { const space = text.indexOf(' ', start); if (space >= 0 && space < hits[0][0]) start = space + 1; }
+      const end = Math.min(text.length, start + 160);
+      return (start > 0 ? '…' : '') + text.slice(start, end).trim() + (end < text.length ? '…' : '');
+    }
+    function plainText(markdown) { // markdown without its marks, so snippets read as sentences
+      return markdown.replace(/```[\s\S]*?```/g, ' ').replace(/\[\[([^\]]+)\]\]/g, '$1').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/^\s{0,3}(#{1,3}|>|[-*]|\d+\.)\s+/gm, '').replace(/[*`_]/g, '').replace(/\s+/g, ' ').trim();
+    }
+    const foldedCache = new Map(); // article id -> folded fields, rebuilt when its rev changes
+    function folded(a) {
+      let c = foldedCache.get(a.id);
+      if (!c || c.rev !== a.rev) { const body = plainText(a.body); c = { rev: a.rev, body, title: tkit.fold(a.title), summary: tkit.fold(a.summary), tags: tkit.fold(a.tags.join(' ')), text: tkit.fold(body) }; foldedCache.set(a.id, c); }
+      return c;
+    }
+    function search(list, words) { // every word must appear somewhere; title counts most, then tags and summary, then the text
+      const hits = [];
+      list.forEach(a => {
+        const c = folded(a);
+        let score = 0;
+        for (const word of words) {
+          const s = (c.title.includes(word) ? 3 : 0) + (c.tags.includes(word) ? 2 : 0) + (c.summary.includes(word) ? 2 : 0) + (c.text.includes(word) ? 1 : 0);
+          if (!s) return;
+          score += s;
+        }
+        hits.push({ a, score });
+      });
+      return hits.sort((x, y) => y.score - x.score || byNewest(x.a, y.a));
+    }
+
+    // ---- Home --------------------------------------------------------------------------------------------------------
+    function articleRow(a, words, showTopic) {
+      const c = words.length ? folded(a) : null;
+      const lines = [];
+      if (words.length) {
+        const summaryHit = words.some(w => c.summary.includes(w)), bodyHit = words.some(w => c.text.includes(w));
+        if (summaryHit) lines.push(tkit.h('small', {}, highlight(a.summary, words)));
+        else if (bodyHit) lines.push(tkit.h('small', {}, highlight(snippet(c.body, words), words)));
+        else if (a.summary) lines.push(tkit.h('small', { text: a.summary }));
+        if (words.some(w => c.tags.includes(w))) lines.push(tkit.h('small', {}, highlight(a.tags.map(tag => '#' + tag).join('  '), words)));
+      } else if (a.summary) lines.push(tkit.h('small', { text: a.summary }));
+      return tkit.h('li', {}, tkit.h('button', { type: 'button', class: 't-row', onClick: () => openArticle(a.id) },
+        tkit.icon('doc', 16),
+        tkit.h('div', { class: 't-row-text' }, tkit.h('span', {}, highlight(a.title || TEXT.untitled, words)), lines),
+        showTopic ? badge(a.topic) : null));
+    }
+    function section(title, content) { return tkit.h('section', { class: 'kb-section' }, tkit.h('h2', { text: title }), content); }
+    function drawHome() {
+      const root = el('home-body'), list = all();
+      tkit.clear(root);
+      el('banner').count = tkit.samples.count(store.records);
+      el('search').hidden = !list.length;
+      const words = tkit.fold(query).split(/\s+/).filter(Boolean);
+      const stack = tkit.h('div', { class: 'kb-stack' });
+      if (!list.length) {
+        root.appendChild(stateBox('empty', TEXT.emptyTitle, TEXT.emptyText,
+          tkit.h('button', { type: 'button', class: 't-button primary', text: TEXT.newArticle, onClick: newArticle }),
+          tkit.h('button', { type: 'button', class: 't-button', text: TEXT.withExamples, onClick: loadExamples })));
+        return;
+      }
+      if (words.length) {
+        const hits = search(list, words);
+        if (!hits.length) {
+          root.appendChild(stateBox('empty', TEXT.nothingFound, TEXT.nothingText,
+            tkit.h('button', { type: 'button', class: 't-button', text: TEXT.clearSearch, onClick: () => { query = ''; el('search').value = ''; drawHome(); } })));
+          return;
+        }
+        stack.appendChild(tkit.h('p', { class: 't-muted', text: plural(hits.length, TEXT.resultsOne, TEXT.resultsMany) }));
+        stack.appendChild(tkit.h('ul', { class: 't-list' }, hits.map(hit => articleRow(hit.a, words, true))));
+        root.appendChild(stack);
+        return;
+      }
+      const pinned = list.filter(a => a.pinned).sort(byOrder);
+      if (pinned.length) {
+        stack.appendChild(section(TEXT.pinned, tkit.h('div', { class: 'kb-grid' }, pinned.map(a => tkit.h('button', { type: 'button', class: 'kb-card', onClick: () => openArticle(a.id) },
+          tkit.h('strong', { text: a.title || TEXT.untitled }), a.summary ? tkit.h('small', { text: a.summary }) : null, badge(a.topic))))));
+      }
+      if (S.value.home === 'recent') {
+        stack.appendChild(section(TEXT.recent, tkit.h('ul', { class: 't-list' }, list.slice().sort(byNewest).map(a => articleRow(a, [], true)))));
+      } else {
+        const known = new Set(topics().map(tp => tp.id));
+        const groups = topics().map(tp => ({ title: tp.label, items: list.filter(a => a.topic === tp.id) }));
+        groups.push({ title: TEXT.noTopic, items: list.filter(a => !known.has(a.topic)) });
+        groups.filter(g => g.items.length).forEach(g => stack.appendChild(section(g.title + ' · ' + g.items.length, tkit.h('ul', { class: 't-list' }, g.items.sort(byOrder).map(a => articleRow(a, [], false))))));
+      }
+      root.appendChild(stack);
+    }
+    function homeContext() {
+      tkit.context({ selection: null, summary: fill(TEXT.summaryContext, { articles: articlesText(store.records.length), topics: plural(topics().length, TEXT.topicsOne, TEXT.topicsMany) }) });
+    }
+
+    // ---- Article -----------------------------------------------------------------------------------------------------
+    function stateBox(kind, title, text, ...actions) { // <t-state> reads its text from an attribute (tkit.h would turn `text` into textContent)
+      const box = tkit.h('t-state', { kind, title }, actions);
+      if (text) box.setAttribute('text', text);
+      return box;
+    }
+    function drawArticle() {
+      const root = el('article-body'), main = document.querySelector('.t-app-main'), top = main.scrollTop;
+      tkit.clear(root);
+      if (!loaded) { root.appendChild(tkit.h('t-state', { kind: 'loading' })); return; }
+      const a = all().find(x => x.id === route.id);
+      if (!a) {
+        root.appendChild(stateBox('empty', TEXT.notFoundTitle, TEXT.notFoundText, tkit.h('button', { type: 'button', class: 't-button', text: TEXT.goHome, onClick: goHome })));
+        return;
+      }
+      const raw = store.records.find(r => r.id === a.id);
+      const md = tkit.h('div', { class: 't-md' });
+      if (a.body.trim()) md.appendChild(tkit.markdown(a.body, { linkArticle }));
+      else md.appendChild(tkit.h('p', { class: 't-muted', text: TEXT.emptyBody }));
+      md.addEventListener('t-wikilink', event => createFromLink(event.detail.title, a));
+      // "In this article": scrollIntoView, never #anchor links (the hash belongs to tkit.route)
+      const outline = tkit.markdownOutline(a.body), headings = () => Array.from(md.querySelectorAll('[data-anchor]'));
+      const related = all().filter(x => x.id !== a.id && x.topic === a.topic).sort(byOrder).slice(0, 5);
+      const aside = tkit.h('aside', { class: 'kb-aside' },
+        outline.length ? tkit.h('nav', { 'aria-label': TEXT.onThisPage }, tkit.h('h2', { text: TEXT.onThisPage }), tkit.h('ul', {}, outline.map(item => tkit.h('li', {}, tkit.h('button', {
+          type: 'button', class: 'kb-link', style: { paddingLeft: (item.level - 1) * 12 + 'px' }, text: item.text,
+          onClick: () => { const target = headings().find(node => node.dataset.anchor === item.anchor); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        }))))) : null,
+        related.length ? tkit.h('nav', { 'aria-label': TEXT.related }, tkit.h('h2', { text: TEXT.related }), tkit.h('ul', {}, related.map(x => tkit.h('li', {}, tkit.h('button', { type: 'button', class: 'kb-link', text: x.title || TEXT.untitled, onClick: () => openArticle(x.id) }))))) : null);
+      root.appendChild(tkit.h('nav', { class: 'kb-meta', 'aria-label': 'Trilha de navegação' },
+        tkit.h('button', { type: 'button', class: 't-button ghost small', text: TEXT.home, onClick: goHome }), tkit.h('span', { 'aria-hidden': 'true', text: '›' }), tkit.h('span', { text: (topicOf(a.topic) || { label: TEXT.noTopic }).label })));
+      root.appendChild(tkit.h('header', { class: 't-page-head' },
+        tkit.h('div', {}, tkit.h('h1', { class: 't-title', text: a.title || TEXT.untitled }),
+          tkit.h('div', { class: 'kb-meta' }, badge(a.topic), a.pinned ? tkit.icon('star', 14) : null, a.tags.length ? tagBadges(a.tags) : null, tkit.h('span', { text: TEXT.updated + ' ' + tkit.ago(a.updated_at) }))),
+        tkit.h('button', { type: 'button', class: 't-button', text: TEXT.edit, onClick: () => editArticle(raw) }),
+        tkit.h('button', { type: 'button', class: 't-button', text: a.pinned ? TEXT.unpin : TEXT.pin, onClick: () => update(raw, { pinned: !a.pinned }) }),
+        tkit.h('button', { type: 'button', class: 't-button danger', text: TEXT.del, onClick: () => removeArticle(a) })));
+      if (a.summary) root.appendChild(tkit.h('p', { class: 'kb-lead', text: a.summary }));
+      root.appendChild(tkit.h('div', { class: 'kb-article' }, md, aside));
+      main.scrollTop = shownArticle === a.id ? top : 0;
+      shownArticle = a.id;
+    }
+    async function update(raw, patch) { // one-field changes from the article page; a conflict means the live copy already won
+      try { await articles.update(raw.id, patch, { rev: raw.rev }); } catch (error) {
+        if (error.code === 'conflict') { tkit.toast(TEXT.changedMeanwhile, { tone: 'error' }); store.reload(); } else fail(error);
+      }
+    }
+    async function removeArticle(a) {
+      if (!await tkit.confirm(fill(TEXT.deleteQuestion, { x: a.title || TEXT.untitled }), { confirm: TEXT.del, tone: 'danger' })) return;
+      try { await articles.remove(a.id); goHome(); } catch (error) { fail(error); }
+    }
+    async function createFromLink(title, from) { // a click on an unresolved [[Title]]
+      if (!await tkit.confirm(fill(TEXT.createQuestion, { x: title }), { confirm: TEXT.create })) return;
+      try {
+        const record = await articles.insert({ title, body: '', topic: from.topic || topics()[0].id, tags: [], summary: '', pinned: false, order: Date.now() });
+        editArticle(record);
+      } catch (error) { fail(error); }
+    }
+    function articleContext() {
+      const a = all().find(x => x.id === route.id);
+      tkit.context({ selection: a ? TEXT.selection + (a.title || TEXT.untitled) : null, summary: null });
+    }
+
+    // ---- Editor: autosave with rev conflicts ------------------------------------------------------------------
+    // KIT-CANDIDATE: autosave(getData, { insert, update }) with status text, holdReload and conflict handling. The same loop
+    // is needed by any template with a long text editor (Document, Notes).
+    function setStatus(kind, detail) {
+      el('ed-status').textContent = kind === 'failed' ? fill(TEXT.statusFailed, { x: detail }) : { new: TEXT.statusNew, typing: TEXT.statusTyping, saving: TEXT.statusSaving, saved: TEXT.statusSaved }[kind];
+    }
+    function fillTopicSelect(selected) {
+      const select = el('ed-topic');
+      tkit.clear(select);
+      topics().forEach(tp => select.appendChild(tkit.h('option', { value: tp.id, text: tp.label })));
+      if (selected && !topicOf(selected)) select.appendChild(tkit.h('option', { value: selected, text: TEXT.removedTopic }));
+      select.value = selected || topics()[0].id;
+    }
+    function drawChips() { const box = el('ed-chips'); tkit.clear(box); parseTags(el('ed-tags').value).forEach(tag => box.appendChild(tkit.h('span', { class: 't-badge', text: tag }))); }
+    function showEditor(raw, preset) { // fill the form from a record (or from a preset for a new article)
+      const a = raw ? view(raw) : Object.assign({ title: '', body: '', topic: '', summary: '', tags: [] }, preset || {});
+      ed.current = raw || null; ed.dirty = false; clearTimeout(ed.timer);
+      el('ed-title').value = a.title; el('ed-body').value = a.body; el('ed-summary').value = a.summary; el('ed-tags').value = a.tags.join(', ');
+      fillTopicSelect(a.topic); drawChips(); setMode('write');
+      setStatus(raw ? 'saved' : 'new');
+      tendly.host.holdReload(false);
+    }
+    function collect() { return { title: el('ed-title').value.trim(), topic: el('ed-topic').value, tags: parseTags(el('ed-tags').value), summary: el('ed-summary').value.trim(), body: el('ed-body').value }; }
+    function typed() {
+      ed.dirty = true; tendly.host.holdReload(true); setStatus('typing'); drawChips();
+      clearTimeout(ed.timer);
+      ed.timer = setTimeout(save, 800);
+    }
+    function save() { // one save at a time; typing during a save schedules the next one
+      clearTimeout(ed.timer);
+      if (ed.saving) return ed.saving;
+      const data = collect();
+      if (!ed.current && !data.title && !data.body.trim() && !data.summary && !data.tags.length) { ed.dirty = false; tendly.host.holdReload(false); setStatus('new'); return Promise.resolve(); }
+      ed.dirty = false; // typing from now on sets it again
+      setStatus('saving');
+      ed.saving = (async () => {
+        let saved = false, retry = false;
+        try {
+          if (!ed.current) { ed.current = await articles.insert(Object.assign(data, { pinned: false, order: Date.now() })); tkit.route.open(ed.current.id); }
+          else ed.current = await articles.update(ed.current.id, data, { rev: ed.current.rev });
+          saved = true;
+        } catch (error) {
+          if (error.code === 'conflict') { ed.current = error.current; retry = true; tkit.toast(TEXT.conflictKept, { tone: 'error' }); } // keep what was typed, save it over
+          else setStatus('failed', error.message);
+        } finally { ed.saving = null; }
+        if (retry || (saved && ed.dirty)) ed.timer = setTimeout(save, retry ? 0 : 300);
+        else if (!saved) ed.dirty = true; // failed: the text is still unsaved
+        if (saved && !ed.dirty) setStatus('saved');
+        if (!ed.dirty && !retry) tendly.host.holdReload(false);
+      })();
+      return ed.saving;
+    }
+    async function flush() { for (let i = 0; i < 3 && (ed.dirty || ed.saving); i++) await save(); }
+    function newArticle() { showEditor(null, { topic: topics()[0].id }); app.view = 'editor'; el('ed-title').focus(); }
+    function editArticle(raw) { showEditor(raw); app.view = 'editor'; tkit.route.open(raw.id); }
+    function syncEditor() { // someone else changed the open article (another pane, an agent): show it unless there is unsaved typing
+      if (route.view !== 'editor' || !ed.current || ed.dirty || ed.saving) return;
+      const fresh = store.records.find(r => r.id === ed.current.id);
+      if (!fresh) { ed.current = null; tkit.toast(TEXT.removedMeanwhile, { tone: 'error' }); goHome(); }
+      else if (fresh.rev !== ed.current.rev) showEditor(fresh);
+    }
+    function setMode(mode) {
+      ed.mode = mode;
+      el('mode-write').setAttribute('aria-pressed', String(mode === 'write')); el('mode-preview').setAttribute('aria-pressed', String(mode === 'preview'));
+      el('ed-body').hidden = mode !== 'write'; el('md-tools').hidden = mode !== 'write'; el('ed-preview').hidden = mode !== 'preview';
+      if (mode === 'preview') { const box = el('ed-preview'); tkit.clear(box); box.appendChild(tkit.markdown(el('ed-body').value, { linkArticle })); }
+    }
+    // KIT-CANDIDATE: markdown toolbar for a <textarea> (wrap selection, prefix lines); useful to any template with a markdown field.
+    function replaceRange(from, to, insert, selFrom, selTo) { // keeps the browser's undo history when it can
+      const area = el('ed-body'), before = area.value;
+      area.focus(); area.setSelectionRange(from, to);
+      let ok = false;
+      try { ok = document.execCommand('insertText', false, insert); } catch (_) { /* not available */ }
+      if (!ok || (area.value === before && insert !== before.slice(from, to))) { area.setRangeText(insert, from, to, 'end'); area.dispatchEvent(new Event('input', { bubbles: true })); }
+      area.setSelectionRange(selFrom, selTo);
+    }
+    function wrapSelection(open, close, placeholder) {
+      const area = el('ed-body'), s = area.selectionStart, e = area.selectionEnd, chosen = area.value.slice(s, e) || placeholder;
+      replaceRange(s, e, open + chosen + close, s + open.length, s + open.length + chosen.length);
+    }
+    function prefixLines(prefix) { // toggles a prefix on every selected line
+      const area = el('ed-body'), v = area.value;
+      const s = area.selectionStart === 0 ? 0 : v.lastIndexOf('\n', area.selectionStart - 1) + 1;
+      const stop = area.selectionEnd > area.selectionStart && v[area.selectionEnd - 1] === '\n' ? area.selectionEnd - 1 : area.selectionEnd;
+      let e = v.indexOf('\n', stop);
+      if (e < 0) e = v.length;
+      const out = v.slice(s, e).split('\n').map(line => (line.startsWith(prefix) ? line.slice(prefix.length) : prefix + line)).join('\n');
+      replaceRange(s, e, out, s, s + out.length);
+    }
+    const TOOLS = {
+      bold: () => wrapSelection('**', '**', 'text'), italic: () => wrapSelection('*', '*', 'text'),
+      heading: () => prefixLines('# '), list: () => prefixLines('- '),
+      wiki: () => wrapSelection('[[', ']]', TEXT.articleTitle),
+      link: () => {
+        const area = el('ed-body'), s = area.selectionStart, e = area.selectionEnd, chosen = area.value.slice(s, e) || TEXT.linkText;
+        replaceRange(s, e, '[' + chosen + '](https://)', s + chosen.length + 3, s + chosen.length + 11);
+      }
+    };
+
+    // ---- Settings ----------------------------------------------------------------------------------------------------
+    let moveSettle = null;
+    function askMove(count, items) { // resolves with the topic id chosen to receive the articles, or null (cancelled)
+      return new Promise(resolve => {
+        const select = el('move-select');
+        tkit.clear(select);
+        items.forEach(tp => select.appendChild(tkit.h('option', { value: tp.id, text: tp.label })));
+        el('move-text').textContent = fill(TEXT.moveText, { x: articlesText(count) });
+        moveSettle = value => { moveSettle = null; resolve(value); };
+        el('move-modal').open();
+      });
+    }
+    async function topicsChanged(items) {
+      const before = topics(), editor = el('topics-editor');
+      const removed = before.filter(tp => !items.some(item => item.id === tp.id));
+      if (!items.length) { tkit.toast(TEXT.keepOne, { tone: 'error' }); editor.items = before.map(tp => Object.assign({}, tp)); return; }
+      const moving = all().filter(a => removed.some(tp => tp.id === a.topic));
+      try {
+        if (moving.length) {
+          const target = await askMove(moving.length, items);
+          if (!target) { editor.items = before.map(tp => Object.assign({}, tp)); return; } // cancelled: the topic comes back
+          for (const a of moving) await articles.update(a.id, { topic: target });
+        }
+        await S.save({ topics: items });
+      } catch (error) { fail(error); editor.items = topics().map(tp => Object.assign({}, tp)); }
+    }
+    function drawSettings() {
+      const list = all(), samples = tkit.samples.count(store.records);
+      Array.from(el('home-mode').children).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.home === S.value.home)));
+      el('sample-text').textContent = samples ? fill(TEXT.samplesSome, { x: articlesText(samples) }) : TEXT.samplesNone;
+      el('samples-load').hidden = samples > 0; el('samples-clear').hidden = samples === 0;
+      el('danger-text').textContent = list.length ? fill(TEXT.dangerText, { x: articlesText(list.length) }) : TEXT.dangerNone;
+      el('delete-all').disabled = !list.length;
+    }
+    function exportCsv() {
+      const columns = [{ key: 'title', label: TEXT.colTitle }, { key: 'topic', label: TEXT.colTopic, format: id => (topicOf(id) || { label: '' }).label },
+        { key: 'tags', label: TEXT.colTags, format: tags => tags.join(', ') }, { key: 'summary', label: TEXT.colSummary }, { key: 'body', label: TEXT.colBody }];
+      const rows = all().sort(byOrder);
+      tkit.csv.download(tkit.csv.stringify(rows, columns, { delimiter: tkit.csv.delimiter() }), document.title + ' - ' + TEXT.csvName + ' - ' + tkit.today() + '.csv');
+      tkit.toast(fill(TEXT.exported, { x: articlesText(rows.length) }));
+    }
+    async function importCsv() {
+      const importer = el('importer');
+      importer.fields = [{ id: 'title', label: TEXT.colTitle, type: 'text', required: true }, { id: 'topic', label: TEXT.colTopic, type: 'text' },
+        { id: 'tags', label: TEXT.colTags, type: 'text' }, { id: 'summary', label: TEXT.colSummary, type: 'text' }, { id: 'body', label: TEXT.colBody, type: 'longtext' }];
+      const rows = await importer.open();
+      if (!rows || !rows.length) return;
+      try {
+        let known = topics().slice(), added = false;
+        const topicId = label => { // a topic label from the file: the matching topic, else a new one
+          const wanted = tkit.fold(String(label || '').trim());
+          if (!wanted) return known[0].id;
+          let found = known.find(tp => tkit.fold(tp.label) === wanted);
+          if (!found) { found = { id: tkit.slug(String(label).trim(), known.map(tp => tp.id)), label: String(label).trim(), tone: '' }; known.push(found); added = true; }
+          return found.id;
+        };
+        const docs = rows.map((row, i) => ({ title: String(row.title || ''), topic: topicId(row.topic), tags: parseTags(row.tags || ''), summary: String(row.summary || ''), body: String(row.body || ''), pinned: false, order: Date.now() + i }));
+        if (added) await S.save({ topics: known });
+        for (let i = 0; i < docs.length; i++) {
+          await articles.insert(docs[i]);
+          if ((i + 1) % 50 === 0) tkit.toast(fill(TEXT.importing, { done: i + 1, total: docs.length }));
+        }
+        tkit.toast(fill(TEXT.imported, { x: articlesText(docs.length) }));
+      } catch (error) { fail(error); }
+    }
+    async function loadExamples() {
+      try {
+        const first = topics()[0].id;
+        const docs = EXAMPLES.map((ex, i) => ({ title: ex.title, topic: topicOf(ex.topic) ? ex.topic : first, tags: ex.tags, summary: ex.summary, body: ex.body, pinned: ex.pinned, order: i + 1 }));
+        const n = await tkit.samples.load(articles, docs);
+        tkit.toast(fill(TEXT.samplesAdded, { x: articlesText(n) }));
+      } catch (error) { fail(error); }
+    }
+    async function clearExamples() {
+      try { const n = await tkit.samples.clear(articles); tkit.toast(fill(TEXT.samplesRemoved, { x: articlesText(n) })); } catch (error) { fail(error); }
+    }
+    async function deleteAll() {
+      const list = store.records.slice(), count = articlesText(list.length);
+      if (!list.length || !await tkit.confirm(fill(TEXT.dangerQuestion, { x: count }), { confirm: TEXT.dangerConfirm, tone: 'danger' })) return;
+      try { for (const r of list) await articles.remove(r.id); tkit.toast(fill(TEXT.dangerDone, { x: count })); } catch (error) { fail(error); }
+    }
+
+    // ---- Wiring ------------------------------------------------------------------------------------------------------
+    function render() { // every change of the collection or the settings
+      drawHome(); drawSettings(); syncEditor();
+      if (route.view === 'article') { drawArticle(); articleContext(); } else if (app.view === 'home') homeContext();
+    }
+    function applyRoute() { // #home, #article/<id>, #editor/<id>, #settings
+      if (!loaded) return;
+      if (route.view === 'article') { if (!route.id) goHome(); else { drawArticle(); articleContext(); } }
+      else if (route.view === 'editor' && route.id && (!ed.current || ed.current.id !== route.id)) {
+        const raw = store.records.find(r => r.id === route.id);
+        if (raw) showEditor(raw); else { tkit.toast(TEXT.removedMeanwhile, { tone: 'error' }); goHome(); }
+      }
+    }
+    app.addEventListener('t-view', event => {
+      const next = event.detail.view;
+      if (lastView === 'editor' && next !== 'editor' && ed.dirty) save();
+      lastView = next;
+      if (next === 'article') document.querySelector('t-nav > button[data-view="home"]').setAttribute('aria-current', 'page'); // an article belongs to Home
+      if (!loaded) return;
+      if (next === 'home') homeContext(); else if (next === 'article') articleContext();
+      else if (next === 'editor' && ed.current) tkit.context({ selection: TEXT.selection + (ed.current.data.title || TEXT.untitled) });
+    });
+    el('new-article').addEventListener('click', newArticle);
+    el('search').addEventListener('input', event => { query = event.target.value; drawHome(); });
+    el('banner').addEventListener('t-clear', clearExamples);
+    ['ed-title', 'ed-body', 'ed-summary', 'ed-tags'].forEach(id => el(id).addEventListener('input', typed));
+    el('ed-topic').addEventListener('change', typed);
+    el('mode-write').addEventListener('click', () => setMode('write'));
+    el('mode-preview').addEventListener('click', () => setMode('preview'));
+    el('md-tools').addEventListener('click', event => { const button = event.target.closest('button[data-md]'); if (button) TOOLS[button.dataset.md](); });
+    el('ed-body').addEventListener('keydown', event => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
+      if (event.key === 'b') { event.preventDefault(); TOOLS.bold(); } else if (event.key === 'i') { event.preventDefault(); TOOLS.italic(); }
+    });
+    el('ed-done').addEventListener('click', async () => { await flush(); if (ed.current) openArticle(ed.current.id); else goHome(); });
+    el('topics-editor').addEventListener('t-change', event => topicsChanged(event.detail.items));
+    el('home-mode').addEventListener('click', event => { const button = event.target.closest('button[data-home]'); if (button) S.save({ home: button.dataset.home }).catch(fail); });
+    el('export-csv').addEventListener('click', exportCsv);
+    el('import-csv').addEventListener('click', importCsv);
+    el('samples-load').addEventListener('click', loadExamples);
+    el('samples-clear').addEventListener('click', clearExamples);
+    el('delete-all').addEventListener('click', deleteAll);
+    el('move-ok').addEventListener('click', () => { const value = el('move-select').value; if (moveSettle) moveSettle(value); el('move-modal').close(); });
+    el('move-cancel').addEventListener('click', () => el('move-modal').close());
+    el('move-modal').addEventListener('t-close', () => { if (moveSettle) moveSettle(null); });
+
+    // ---- Start-up ----------------------------------------------------------------------------------------------------
+    (async () => {
+      el('home-body').appendChild(tkit.h('t-state', { kind: 'loading' }));
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) tkit.toast(S.error.message, { tone: 'error' });
+      const editor = el('topics-editor');
+      editor.addLabel = TEXT.addTopic;
+      editor.items = topics().map(tp => Object.assign({}, tp));
+      S.on(() => { editor.items = topics().map(tp => Object.assign({}, tp)); if (loaded) render(); });
+      store = tkit.live(articles, () => { if (loaded) render(); }, { onError: error => {
+        tkit.clear(el('home-body'));
+        el('home-body').appendChild(stateBox('error', TEXT.loadError, error.message, tkit.h('button', { type: 'button', class: 't-button', text: TEXT.retry, onClick: () => store.reload().catch(() => {}) })));
+      } });
+      tkit.route.on(next => { route = next; applyRoute(); });
+      await store.ready;
+      loaded = true;
+      render(); applyRoute();
+    })();
+  </script>
+</body>
+</html>

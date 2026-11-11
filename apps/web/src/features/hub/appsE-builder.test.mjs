@@ -32,8 +32,10 @@ test('the template follows the words of the sentence, in Portuguese and English'
   assert.equal(guessTemplate('a dashboard tracking revenue'), 'dashboard');
   assert.equal(guessTemplate('formulário de inscrição para o curso'), 'form');
   assert.equal(guessTemplate('a survey for customer feedback'), 'form');
-  assert.equal(guessTemplate('editor de documentos para as atas'), 'document');
-  assert.equal(guessTemplate('a wiki for the team'), 'document');
+  assert.equal(guessTemplate('editor de documentos para as atas'), 'knowledge');
+  assert.equal(guessTemplate('a wiki for the team'), 'knowledge');
+  assert.equal(guessTemplate('base de conhecimento com os procedimentos'), 'knowledge');
+  assert.equal(guessTemplate('uma galeria com campos meus'), 'base');
   assert.equal(guessTemplate('something nobody can name'), 'blank');
   assert.equal(guessTemplate(''), 'blank');
   // A strong clue wins over many weak ones.
@@ -59,7 +61,7 @@ test('the name is two or three telling words, title-cased, and the letter and co
 });
 
 test('the seven templates match the server\'s, and the first message says what was made', () => {
-  assert.deepEqual(TEMPLATES.map(template => template.id), ['blank', 'kanban', 'table', 'calendar', 'dashboard', 'form', 'document']);
+  assert.deepEqual(TEMPLATES.map(template => template.id), ['base', 'blank', 'kanban', 'table', 'calendar', 'dashboard', 'form', 'knowledge']);
   const prompt = builderPrompt({ app: { name: 'Vendas', slug: 'vendas' }, sentence: 'quadro de vendas por etapa', template: 'kanban' });
   assert.match(prompt, /I just created the app "Vendas" in `apps\/vendas\/` from the "Kanban \/ CRM" template/);
   assert.match(prompt, /quadro de vendas por etapa/);
@@ -155,10 +157,10 @@ test.after(async () => { await server?.close(); });
 const WORKSPACES = [{ id: 'w1', name: 'Site', root_path: '/tmp/site' }];
 const APP = { workspace_id: 'w1', workspace_name: 'Site', slug: 'pipeline', name: 'Pipeline', letter: 'P', color: 'blue', description: 'Deals', entry: 'index.html', permissions: [], url: '/api/hub/apps/w1/pipeline/files/index.html', code_path: 'apps/pipeline/', updated_at: new Date(Date.now() - 5 * 60000).toISOString(), errors: 2, errors_at: new Date().toISOString() };
 
-test('the create panel offers the seven templates and never a model call; creating is the only submit', async () => {
+test('the create panel offers every template and never a model call; creating is the only submit', async () => {
   const html = await render('CreateAppPanel.vue', { projects: WORKSPACES, selectedWorkspaceId: 'w1' });
   assert.match(html, /<form class="create-app" aria-label="Create with the agent"/);
-  assert.equal((html.match(/role="radio"/g) ?? []).length, 7 + 8, 'seven templates and eight colours');
+  assert.equal((html.match(/role="radio"/g) ?? []).length, TEMPLATES.length + 8, 'every template and eight colours');
   for (const template of TEMPLATES) assert.match(html, new RegExp(`<strong[^>]*>${template.label.replace(/[/+]/g, '\\$&')}</strong>`), template.label);
   assert.match(html, /aria-checked="true"[^>]*class="create-app-template chosen"[\s\S]*?<strong[^>]*>Blank<\/strong>/, 'blank is chosen with no sentence');
   assert.match(html, /What should the app do\? One sentence\./);

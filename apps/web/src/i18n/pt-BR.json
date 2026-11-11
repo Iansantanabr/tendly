@@ -3011,5 +3011,9 @@
  "The full sidebar with names, on every page.": "A barra lateral completa, com os nomes, em todas as páginas.",
  "Show the full sidebar": "Mostrar a barra lateral completa",
  "Options": "Ajustes",
- "Automatic": "Automático"
+ "Automatic": "Automático",
+ "Flexible base": "Base flexível",
+ "Your own fields, seen as a table, a board, a gallery or a calendar.": "Seus próprios campos, vistos como tabela, quadro, galeria ou calendário.",
+ "Knowledge base": "Base de conhecimento",
+ "Articles by topic, with search and links between them.": "Artigos por assunto, com busca e links entre eles."
 }

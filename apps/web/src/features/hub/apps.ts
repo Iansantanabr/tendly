@@ -82,7 +82,8 @@ export function colorFor(name: string): AppColor {
 }
 
 /** The pages a new app can start from (`builder.ts` describes them); `issues` is the list "Report a problem" makes. */
-export type ScaffoldTemplate = "blank" | "kanban" | "table" | "calendar" | "dashboard" | "form" | "document" | "issues";
+/** The page a new app starts from: a template of the list (`builder.ts`), `document` (now `knowledge`) or the report list. */
+export type ScaffoldTemplate = import("./builder").TemplateId | "document" | "issues";
 /** A new app (app.json + index.html) made by the host from a template. */
 export async function scaffoldApp(workspaceId: string, body: { slug: string; name: string; description?: string; color?: AppColor; letter?: string; template?: ScaffoldTemplate; locale?: string }): Promise<HubApp> {
   const app = await request<HubApp>(`/hub/apps/${encodeURIComponent(workspaceId)}/scaffold`, json("POST", body));

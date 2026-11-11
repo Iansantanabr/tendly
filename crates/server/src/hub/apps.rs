@@ -67,12 +67,14 @@ const KIT_DEMO: &str = include_str!("apps/kit-demo.html");
 /// `issues` is the list "Report a problem" makes (`report.ts`).
 pub(crate) const TEMPLATES: &[(&str, &str)] = &[
     ("blank", include_str!("apps/templates/blank.html")),
+    ("base", include_str!("apps/templates/base.html")),
     ("kanban", include_str!("apps/templates/kanban.html")),
     ("table", include_str!("apps/templates/table.html")),
     ("calendar", include_str!("apps/templates/calendar.html")),
     ("dashboard", include_str!("apps/templates/dashboard.html")),
     ("form", include_str!("apps/templates/form.html")),
     ("document", include_str!("apps/templates/document.html")),
+    ("knowledge", include_str!("apps/templates/knowledge.html")),
     ("issues", include_str!("apps/templates/issues.html")),
 ];
 
@@ -80,13 +82,24 @@ pub(crate) const TEMPLATES: &[(&str, &str)] = &[
 /// GCore is in Portuguese (`locale` on the scaffold). `issues` stays as it is.
 pub(crate) const TEMPLATES_PT_BR: &[(&str, &str)] = &[
     ("blank", include_str!("apps/templates/pt-BR/blank.html")),
+    ("base", include_str!("apps/templates/pt-BR/base.html")),
     ("kanban", include_str!("apps/templates/pt-BR/kanban.html")),
     ("table", include_str!("apps/templates/pt-BR/table.html")),
     ("calendar", include_str!("apps/templates/pt-BR/calendar.html")),
     ("dashboard", include_str!("apps/templates/pt-BR/dashboard.html")),
     ("form", include_str!("apps/templates/pt-BR/form.html")),
     ("document", include_str!("apps/templates/pt-BR/document.html")),
+    ("knowledge", include_str!("apps/templates/pt-BR/knowledge.html")),
 ];
+
+/// Fork: template names that now mean another page. The document editor grew
+/// into the knowledge base; an old `document` request gets the new page.
+const TEMPLATE_ALIASES: &[(&str, &str)] = &[("document", "knowledge")];
+
+/// The template a name means today (`document` → `knowledge`).
+pub(crate) fn template_name(template: &str) -> &str {
+    TEMPLATE_ALIASES.iter().find(|(old, _)| *old == template).map(|(_, new)| *new).unwrap_or(template)
+}
 
 /// The colors an app may ask for, with the accent the blank app uses for each.
 pub(crate) const COLORS: &[(&str, &str)] = &[
@@ -922,6 +935,7 @@ pub(crate) fn template_page(template: &str, manifest: &Manifest) -> Option<Strin
 /// `template_page` in the person's language: Portuguese for a `pt…` locale, English otherwise.
 pub(crate) fn template_page_in(template: &str, manifest: &Manifest, locale: Option<&str>) -> Option<String> {
     let portuguese = locale.is_some_and(|l| l.to_ascii_lowercase().starts_with("pt"));
+    let template = template_name(template);
     let localized = if portuguese { TEMPLATES_PT_BR.iter().find(|(name, _)| *name == template) } else { None };
     let page = localized.or_else(|| TEMPLATES.iter().find(|(name, _)| *name == template)).map(|(_, page)| *page)?;
     let description = match (manifest.description.is_empty(), template, portuguese) {

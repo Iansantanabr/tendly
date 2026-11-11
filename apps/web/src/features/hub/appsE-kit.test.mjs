@@ -14,6 +14,8 @@ const KIT_JS = readFileSync(new URL('kit.js', server), 'utf8');
 const KIT_CSS = readFileSync(new URL('kit.css', server), 'utf8');
 const DEMO = readFileSync(new URL('kit-demo.html', server), 'utf8');
 const templates = Object.fromEntries(readdirSync(new URL('templates/', server)).filter(name => name.endsWith('.html')).map(name => [name.replace('.html', ''), readFileSync(new URL(`templates/${name}`, server), 'utf8')]));
+/** Fork: the Brazilian Portuguese twins, checked the same way (`pt-BR/<name>`). */
+const templatesPt = Object.fromEntries(readdirSync(new URL('templates/pt-BR/', server)).filter(name => name.endsWith('.html')).map(name => [`pt-BR/${name.replace('.html', '')}`, readFileSync(new URL(`templates/pt-BR/${name}`, server), 'utf8')]));
 const tokens = JSON.parse(readFileSync(new URL('../../../../../replica/design/tokens.json', here), 'utf8'));
 const dark = JSON.parse(readFileSync(new URL('../../../../../replica/design/tokens.dark.json', here), 'utf8'));
 
@@ -186,7 +188,7 @@ test('kit.js defines every element the stylesheet and the templates expect', () 
   assert.match(KIT_CSS, /\.t-badge\.violet/);
 });
 
-for (const [name, html] of [...Object.entries(templates), ['kit-demo', DEMO]]) {
+for (const [name, html] of [...Object.entries(templates), ...Object.entries(templatesPt), ['kit-demo', DEMO]]) {
   test(`template ${name}: uses only what the kit has, and its scripts compile`, () => {
     if (name !== 'issues') {
       assert.ok(html.includes('/api/hub/apps/kit.css') && html.includes('/api/hub/apps/kit.js'), 'uses the kit');
@@ -214,6 +216,12 @@ for (const [name, html] of [...Object.entries(templates), ['kit-demo', DEMO]]) {
   });
 }
 
-test('templates: the seven the builder offers exist, plus the issues list', () => {
-  assert.deepEqual(Object.keys(templates).sort(), ['blank', 'calendar', 'dashboard', 'document', 'form', 'issues', 'kanban', 'table']);
+test('templates: every one the builder offers exists in both languages, plus document (kept for old apps) and the issues list', async () => {
+  const { TEMPLATES } = await import('./builder.ts');
+  for (const { id } of TEMPLATES) {
+    assert.ok(templates[id], `templates/${id}.html`);
+    assert.ok(templatesPt[`pt-BR/${id}`], `templates/pt-BR/${id}.html`);
+    assert.match(templatesPt[`pt-BR/${id}`], /<html lang="pt-BR"/, id);
+  }
+  assert.ok(templates.document && templates.issues);
 });

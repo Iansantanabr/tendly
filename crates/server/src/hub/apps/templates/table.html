@@ -7,108 +7,403 @@
   <link rel="stylesheet" href="/api/hub/apps/kit.css">
   <script src="/api/hub/apps/sdk.js"></script>
   <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .table-body { display: grid; gap: var(--t-space-4); min-width: 0; }
+    .table-body[hidden] { display: none; }
+    .t-table tfoot td { border-top: 1px solid var(--t-line); background: var(--t-surface); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
+  </style>
 </head>
 <body>
-  <main class="t-page wide">
-    <header class="t-page-head">
-      <div class="t-toolbar">
-        <span class="t-tile" aria-hidden="true">{{LETTER}}</span>
-        <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
-      </div>
-      <button type="button" class="t-button primary" id="new-row">New entry</button>
-    </header>
-    <div class="t-grid" id="stats"></div>
-    <t-pills id="category-filter"></t-pills>
-    <t-table id="table" searchable empty-text="No entries yet. Add the first one."></t-table>
-  </main>
+  <t-app>
+    <t-nav label="Sections">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="table" data-icon="table">Table</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Settings</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="table">
+        <div class="t-page wide">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+            <button type="button" class="t-button primary" id="new-row">New entry</button>
+          </header>
+          <t-sample-banner id="banner"></t-sample-banner>
+          <div id="status"><t-state kind="loading"></t-state></div>
+          <div class="table-body" id="body" hidden>
+            <div class="t-grid" id="stats"></div>
+            <t-pills id="category-filter"></t-pills>
+            <t-table id="table" searchable empty-text="Nothing matches this filter"></t-table>
+          </div>
+        </div>
+      </t-view>
+
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Settings</h1><p class="t-muted">Everything here can be changed at any time. Your entries are kept.</p></div></header>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Categories</h2></div>
+            <p class="t-muted">The list you pick from when you add an entry. Renaming a category offers to update the entries that use it.</p>
+            <t-list-editor id="cat-editor" tones></t-list-editor>
+            <div id="orphans"></div>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Currency</h2></div>
+            <label class="t-field"><span>Currency of the amounts</span><select id="currency"></select></label>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Name of the amount column</h2></div>
+            <label class="t-field"><span>Amount, Cost, Hours...</span><input type="text" id="amount-label" maxlength="30"></label>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Data</h2></div>
+            <div class="t-actions" style="justify-content: flex-start">
+              <button type="button" class="t-button" id="export-csv">Export CSV</button>
+              <button type="button" class="t-button" id="import-csv">Import CSV</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Examples</h2></div>
+            <p class="t-muted" id="sample-text"></p>
+            <div class="t-actions" style="justify-content: flex-start">
+              <button type="button" class="t-button" id="sample-load">See with examples</button>
+              <button type="button" class="t-button" id="sample-clear">Delete examples</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Danger zone</h2></div>
+            <p class="t-muted" id="danger-text"></p>
+            <div class="t-actions" style="justify-content: flex-start"><button type="button" class="t-button danger" id="delete-all">Delete all entries</button></div>
+          </section>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
 
   <t-modal id="editor" title="Entry">
-    <form id="row-form" class="t-form">
-      <label class="t-field"><span>Name</span><input name="name" type="text" required maxlength="120"></label>
-      <div class="t-form-row">
-        <label class="t-field"><span>Category</span><input name="category" type="text" list="categories" maxlength="60"></label>
-        <label class="t-field"><span>Amount</span><input name="amount" type="number" step="0.01"></label>
-        <label class="t-field"><span>Date</span><input name="date" type="date"></label>
-      </div>
-      <datalist id="categories"></datalist>
-      <label class="t-field"><span>Notes</span><textarea name="notes" maxlength="2000"></textarea></label>
+    <form id="row-form" class="t-form" novalidate>
+      <t-record-form id="record-form"></t-record-form>
       <div class="t-actions">
-        <button type="button" class="t-button danger" id="delete" hidden>Delete</button>
-        <span class="t-spacer"></span>
         <button type="button" class="t-button" id="cancel">Cancel</button>
         <button type="submit" class="t-button primary">Save</button>
       </div>
     </form>
   </t-modal>
+  <t-import id="importer"></t-import>
+  <t-detail id="detail" title-field="name">
+    <button type="button" slot="actions" class="t-button" id="detail-edit">Edit</button>
+    <button type="button" slot="actions" class="t-button danger" id="detail-delete">Delete</button>
+  </t-detail>
 
   <script>
-    const entries = tendly.db.collection('entries');
-    const table = document.getElementById('table');
-    const pills = document.getElementById('category-filter');
-    const stats = document.getElementById('stats');
-    const editor = document.getElementById('editor');
-    const form = document.getElementById('row-form');
-    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    let editing = null, store;
+    // Records live in the collection `entries`: { name, category, amount, date, notes }. `category` holds the
+    // category's LABEL (text), never an id, so entries made by older versions of this page keep working.
+    // Settings (categories, currency, the amount column's name) are one value in tendly.data, key "settings".
 
-    table.columns = [
-      { key: 'name', label: 'Name' },
-      { key: 'category', label: 'Category', type: 'badge' },
-      { key: 'amount', label: 'Amount', type: 'number' },
-      { key: 'date', label: 'Date', type: 'date' },
-      { key: 'notes', label: 'Notes' }
+    // ---- Text (the only strings in the script) -------------------------------------------------------------
+    const TXT = {
+      view: 'Table', entry: 'Entry', newEntry: 'New entry', editEntry: 'Edit entry', name: 'Name', category: 'Category', date: 'Date', notes: 'Notes',
+      categoryHelp: 'Manage the list in Settings.', all: 'All', total: 'total', thisMonth: 'this month', entries: 'Entries', sum: 'Total',
+      count: n => n + (n === 1 ? ' entry' : ' entries'), rows: n => n + (n === 1 ? ' row' : ' rows'),
+      summary: (n, total, filter) => 'Table: ' + n + (n === 1 ? ' entry' : ' entries') + ', total ' + total + (filter ? ' (filter: ' + filter + ')' : ''),
+      summaryEmpty: 'Table: no entries yet',
+      emptyTitle: 'No entries yet', emptyText: 'Add the first one, or look around with a few examples.', seeExamples: 'See with examples',
+      loadError: 'Could not load the entries', retry: 'Try again', noCurrency: 'No currency (plain number)',
+      conflict: 'Someone changed this entry meanwhile; it was reloaded.',
+      deleteAsk: name => 'Delete "' + name + '"?', delete: 'Delete',
+      renameAsk: (n, from, to) => n + (n === 1 ? ' entry uses' : ' entries use') + ' "' + from + '". Change ' + (n === 1 ? 'it' : 'them') + ' to "' + to + '"?',
+      renameYes: n => 'Update ' + n + (n === 1 ? ' entry' : ' entries'), renameNo: 'Keep as is',
+      newCategory: 'Add category', outside: 'In entries, not in the list:', addToList: 'Add to list',
+      sampleNone: 'No examples loaded.', sampleSome: n => n + (n === 1 ? ' example is' : ' examples are') + ' in your table.',
+      dangerText: n => n === 0 ? 'There is nothing to delete.' : 'This removes all ' + n + (n === 1 ? ' entry' : ' entries') + ', examples included. It cannot be undone.',
+      deleteAllAsk: n => 'Delete all ' + n + (n === 1 ? ' entry' : ' entries') + '? This cannot be undone.', deleteAll: 'Delete all entries',
+      exported: n => 'Exported: ' + n + (n === 1 ? ' row' : ' rows'), importing: n => 'Imported ' + n + ' so far...', imported: n => 'Imported ' + n + (n === 1 ? ' row' : ' rows'),
+      deleted: n => 'Deleted ' + n + (n === 1 ? ' entry' : ' entries')
+    };
+    // Example data: [name, category index, amount, days ago, notes]. Dates are relative to today.
+    const EXAMPLE_CATEGORIES = [['Supplies', 'accent'], ['Software', 'info'], ['Travel', 'warn'], ['Services', 'ok']];
+    const EXAMPLES = [
+      ['Printer paper and toner', 0, 86.4, 2, ''], ['Design tool subscription', 1, 54, 5, 'Annual plan, billed monthly'],
+      ['Train tickets to a client visit', 2, 132.8, 8, ''], ['Accounting software', 1, 39.9, 12, ''],
+      ['Packaging boxes', 0, 214.5, 16, 'Order for the November launch'], ['Freelance copywriting', 3, 450, 19, ''],
+      ['Hotel for the trade fair', 2, 389, 24, ''], ['Photography session', 3, 600, 29, 'Product photos for the catalog'],
+      ['Cloud hosting', 1, 72.3, 33, ''], ['Shipping labels', 0, 48.6, 38, '']
     ];
+    const DEFAULTS = { v: 1, categories: [], currency: 'USD', amountLabel: 'Amount' };
+    const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP', 'ARS', 'MXN', 'CLP', 'COP', 'PEN', 'UYU'];
 
+    // ---- State ---------------------------------------------------------------------------------------------------
+    const entries = tendly.db.collection('entries');
+    const $ = id => document.getElementById(id);
+    const app = document.querySelector('t-app');
+    const [status, body, stats, pills, table, banner, editor, form, recordForm, importer, detail, catEditor] =
+      ['status', 'body', 'stats', 'category-filter', 'table', 'banner', 'editor', 'row-form', 'record-form', 'importer', 'detail', 'cat-editor'].map($);
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let S, settings, store, editing = null, filterCategory = '', pendingId = null, loaded = false, columnsKey = '';
+
+    // ---- Schema (rebuilt from settings: the amount's name and kind, the category options) ------------------------
+    function categoryOptions() {
+      const options = settings.categories.map(c => ({ id: c.label, label: c.label, tone: c.tone || '' }));
+      const seen = new Set(options.map(o => o.id));
+      (store ? store.records : []).forEach(r => { const c = r.data.category; if (c && !seen.has(c)) { seen.add(c); options.push({ id: c, label: c, tone: '' }); } });
+      return options; // option ids ARE the labels, so the stored value stays the label text
+    }
+    function fields() {
+      return [
+        { id: 'name', label: TXT.name, type: 'text', required: true },
+        { id: 'category', label: TXT.category, type: 'choice', options: categoryOptions(), help: TXT.categoryHelp },
+        { id: 'amount', label: settings.amountLabel, type: settings.currency ? 'money' : 'number' },
+        { id: 'date', label: TXT.date, type: 'date' },
+        { id: 'notes', label: TXT.notes, type: 'longtext' }
+      ];
+    }
+    const fmt = value => settings.currency ? tkit.money(value, settings.currency) : tkit.number(value);
+    const sum = list => list.reduce((total, r) => total + (Number(r.amount) || 0), 0);
+    const appName = () => document.querySelector('.t-nav-title span:last-child').textContent.trim();
+
+    // ---- Render --------------------------------------------------------------------------------------------------
+    function applyColumns() {
+      const tones = {};
+      settings.categories.forEach(c => { if (c.tone) tones[c.label] = c.tone; });
+      const key = JSON.stringify([settings.amountLabel, settings.currency, tones]);
+      if (key === columnsKey) return;
+      columnsKey = key;
+      table.columns = [
+        { key: 'name', label: TXT.name },
+        { key: 'category', label: TXT.category, type: 'badge', tones },
+        { key: 'amount', label: settings.amountLabel, type: settings.currency ? 'money' : 'number', currency: settings.currency || undefined },
+        { key: 'date', label: TXT.date, type: 'date' },
+        { key: 'notes', label: TXT.notes }
+      ];
+    }
     function render(records) {
-      const rows = records.map(r => Object.assign({ id: r.id }, r.data));
-      table.rows = rows;
-      const categories = Object.keys(tkit.groupBy(rows, 'category')).filter(Boolean).sort();
-      pills.options = [{ value: '', label: 'All', count: rows.length }].concat(categories.map(c => ({ value: c, label: c, count: rows.filter(r => r.category === c).length })));
-      const list = document.getElementById('categories');
-      tkit.clear(list);
-      categories.forEach(c => list.appendChild(tkit.h('option', { value: c })));
-      const total = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      if (!settings) return;
+      loaded = true;
+      applyColumns();
+      const sorted = records.slice().sort((a, b) => String(b.data.date || '').localeCompare(String(a.data.date || '')) || String(b.created_at).localeCompare(String(a.created_at)));
+      const rows = sorted.map(r => Object.assign({ id: r.id }, r.data));
+      banner.count = tkit.samples.count(records);
+      tkit.clear(status);
+      body.hidden = !records.length;
+      if (!records.length) showEmpty();
+      else { drawStats(rows); drawPills(rows); table.rows = rows; }
+      updateFoot();
+      drawSettings(records);
+      if (detail.opened) { const fresh = records.find(r => detail.record && r.id === detail.record.id); if (fresh) { detail.fields = fields(); detail.record = fresh; } else detail.close(); }
+      openPending();
+      summarize();
+    }
+    function showEmpty() {
+      status.appendChild(tkit.h('t-state', { kind: 'empty', title: TXT.emptyTitle, text: TXT.emptyText },
+        tkit.h('button', { type: 'button', class: 't-button primary', text: TXT.newEntry, onClick: () => openEditor(null) }),
+        tkit.h('button', { type: 'button', class: 't-button', text: TXT.seeExamples, onClick: loadExamples })));
+    }
+    function drawStats(rows) {
+      const month = tkit.today().slice(0, 7);
+      const cards = [[TXT.entries, tkit.number(rows.length, 0)], [settings.amountLabel + ' (' + TXT.total + ')', fmt(sum(rows))], [settings.amountLabel + ' (' + TXT.thisMonth + ')', fmt(sum(rows.filter(r => String(r.date || '').slice(0, 7) === month)))]];
       tkit.clear(stats);
-      [['Entries', tkit.number(rows.length, 0)], ['Total', tkit.number(total)], ['Categories', tkit.number(categories.length, 0)]].forEach(([label, value]) => {
-        stats.appendChild(tkit.h('div', { class: 't-card t-stat' }, tkit.h('strong', { text: value }), tkit.h('span', { text: label })));
-      });
+      cards.forEach(([label, value]) => stats.appendChild(tkit.h('div', { class: 't-card t-stat' }, tkit.h('strong', { text: value }), tkit.h('span', { text: label }))));
+    }
+    function drawPills(rows) {
+      const counts = {};
+      rows.forEach(r => { if (r.category) counts[r.category] = (counts[r.category] || 0) + 1; });
+      const known = settings.categories.map(c => c.label);
+      const labels = known.concat(Object.keys(counts).filter(c => !known.includes(c)).sort()).filter(c => counts[c]);
+      if (filterCategory && !counts[filterCategory]) filterCategory = '';
+      pills.options = [{ value: '', label: TXT.all, count: rows.length }].concat(labels.map(c => ({ value: c, label: c, count: counts[c] })));
+      pills.value = filterCategory;
+      table.filter = filterCategory ? row => row.category === filterCategory : null;
     }
 
+    // KIT-CANDIDATE: <t-table> footer row. The kit's table has no footer, so this adds a <tfoot> with the sum of the rows
+    // that are visible (category filter and search box included). Sorting redraws the table, hence the listeners below.
+    function updateFoot() {
+      const inner = table.querySelector('table');
+      if (!inner || !body || body.hidden) return;
+      const rows = table.visible();
+      let foot = inner.querySelector('tfoot');
+      if (!foot) { foot = tkit.h('tfoot'); inner.appendChild(foot); }
+      tkit.clear(foot);
+      foot.appendChild(tkit.h('tr', {}, tkit.h('td', { text: TXT.sum + ' · ' + TXT.count(rows.length) }), tkit.h('td'), tkit.h('td', { class: 'num', text: fmt(sum(rows)) }), tkit.h('td', { colspan: '2' })));
+      summarize();
+    }
+    table.addEventListener('input', updateFoot);
+    table.addEventListener('click', updateFoot);
+    pills.addEventListener('t-change', event => { filterCategory = event.detail.value || ''; table.filter = filterCategory ? row => row.category === filterCategory : null; updateFoot(); });
+
+    function summarize() {
+      if (!loaded || app.view !== 'table') return;
+      if (!store.records.length) { tkit.context({ summary: TXT.summaryEmpty }); return; }
+      const rows = table.visible();
+      tkit.context({ summary: TXT.summary(rows.length, fmt(sum(rows)), filterCategory) });
+    }
+    app.addEventListener('t-view', () => { summarize(); });
+
+    // ---- Add and edit --------------------------------------------------------------------------------------------
     function openEditor(record) {
       editing = record || null;
-      tkit.fill(form, record ? record.data : { date: tkit.today() });
-      document.getElementById('delete').hidden = !record;
-      editor.title = record ? 'Edit entry' : 'New entry';
+      recordForm.fields = fields();
+      recordForm.settings = { currency: settings.currency || undefined };
+      recordForm.value = record ? record.data : { date: tkit.today() };
+      editor.title = record ? TXT.editEntry : TXT.newEntry;
       editor.open();
+      setTimeout(() => recordForm.focus(), 0);
     }
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      const values = tkit.form(form);
+      let data;
+      try { data = await recordForm.submit(); } catch (error) { if (error.code !== 'invalid') fail(error); return; }
       try {
-        if (editing) await entries.update(editing.id, values, { rev: editing.rev });
-        else await entries.insert(values);
+        if (editing) await entries.update(editing.id, data, { rev: editing.rev });
+        else await entries.insert(data);
         editor.close();
       } catch (error) {
-        if (error.code === 'conflict') { tkit.toast('Someone changed this entry meanwhile; it was reloaded.', { tone: 'error' }); editing = error.current; tkit.fill(form, editing.data); }
+        if (error.code === 'conflict') { tkit.toast(TXT.conflict, { tone: 'error' }); editing = error.current; recordForm.value = editing.data; }
         else fail(error);
       }
     });
-    document.getElementById('cancel').addEventListener('click', () => editor.close());
-    document.getElementById('delete').addEventListener('click', async () => {
-      if (!editing || !await tkit.confirm('Delete "' + editing.data.name + '"?', { confirm: 'Delete', tone: 'danger' })) return;
-      try { await entries.remove(editing.id); editor.close(); } catch (error) { fail(error); }
-    });
-    document.getElementById('new-row').addEventListener('click', () => openEditor(null));
+    $('cancel').addEventListener('click', () => editor.close());
+    $('new-row').addEventListener('click', () => openEditor(null));
+    recordForm.addEventListener('t-input', () => { tendly.host.holdReload(true); });
     editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
-    form.addEventListener('input', () => { tendly.host.holdReload(true); });
-    table.addEventListener('t-open', event => openEditor(store.records.find(r => r.id === event.detail.id)));
-    pills.value = '';
-    pills.addEventListener('t-change', event => { const category = event.detail.value; table.filter = category ? row => row.category === category : null; });
 
-    store = tkit.live(entries, render, { order: '-created_at', onError: error => {
-      tkit.clear(stats);
-      stats.appendChild(tkit.h('t-state', { kind: 'error', title: 'Could not load the entries', text: error.message }));
-    } });
+    // ---- Detail (#table/<id> reopens it) -------------------------------------------------------------------------
+    function showDetail(record) {
+      detail.fields = fields();
+      detail.settings = { currency: settings.currency || undefined };
+      detail.siblings = table.visible().map(r => r.id);
+      detail.record = record;
+      detail.open();
+      tkit.context({ selection: TXT.entry + ': ' + record.data.name });
+    }
+    function openPending() {
+      if (!pendingId || !loaded) return;
+      const id = pendingId;
+      pendingId = null;
+      if (detail.opened && detail.record && detail.record.id === id) return;
+      const record = store.records.find(r => r.id === id);
+      if (record) showDetail(record); else tkit.route.close();
+    }
+    tkit.route.on(route => {
+      if (route.view === 'table' && route.id) { pendingId = route.id; openPending(); }
+      else if (detail.opened) detail.close();
+    });
+    table.addEventListener('t-open', event => { const record = store.records.find(r => r.id === event.detail.id); if (record) showDetail(record); });
+    detail.addEventListener('t-nav', event => { const record = store.records.find(r => r.id === event.detail.id); if (record) showDetail(record); });
+    $('detail-edit').addEventListener('click', () => { const record = detail.record; detail.close(); openEditor(record); });
+    $('detail-delete').addEventListener('click', async () => {
+      const record = detail.record;
+      if (!record || !await tkit.confirm(TXT.deleteAsk(record.data.name), { confirm: TXT.delete, tone: 'danger' })) return;
+      try { await entries.remove(record.id); detail.close(); } catch (error) { fail(error); }
+    });
+
+    // ---- Settings screen -----------------------------------------------------------------------------------------
+    function drawSettings(records) {
+      catEditor.items = settings.categories;
+      const inUse = {};
+      settings.categories.forEach(c => { inUse[c.id] = records.filter(r => r.data.category === c.label).length; });
+      catEditor.inUse = inUse;
+      // Categories typed freely (older versions, CSV imports) still show as plain badges; offer to adopt them.
+      const known = settings.categories.map(c => c.label), outside = {};
+      records.forEach(r => { const c = r.data.category; if (c && !known.includes(c)) outside[c] = (outside[c] || 0) + 1; });
+      const box = $('orphans');
+      tkit.clear(box);
+      if (Object.keys(outside).length) {
+        const row = tkit.h('div', { class: 'chip-row' }, tkit.h('span', { class: 't-muted', text: TXT.outside }));
+        Object.keys(outside).sort().forEach(label => row.appendChild(tkit.h('button', { type: 'button', class: 't-button small', title: TXT.addToList, text: label + ' (' + outside[label] + ') +', onClick: () => addToList(label) })));
+        box.appendChild(row);
+      }
+      const select = $('currency');
+      if (settings.currency && !CURRENCIES.includes(settings.currency) && !select.querySelector('option[value="' + settings.currency + '"]')) select.appendChild(tkit.h('option', { value: settings.currency, text: settings.currency }));
+      select.value = settings.currency;
+      if (document.activeElement !== $('amount-label')) $('amount-label').value = settings.amountLabel;
+      const samples = tkit.samples.count(records);
+      $('sample-text').textContent = samples ? TXT.sampleSome(samples) : TXT.sampleNone;
+      $('sample-clear').disabled = !samples;
+      $('danger-text').textContent = TXT.dangerText(records.length);
+      $('delete-all').disabled = !records.length;
+    }
+    function addToList(label, tone) {
+      const taken = settings.categories.map(c => c.id);
+      return S.save({ categories: settings.categories.concat([{ id: tkit.slug(label, taken), label, tone: tone || '' }]) }).catch(fail);
+    }
+    catEditor.addEventListener('t-change', async event => {
+      const before = settings.categories, items = event.detail.items;
+      try { await S.save({ categories: items }); } catch (error) { fail(error); return; }
+      for (const item of items) {
+        const old = before.find(c => c.id === item.id);
+        if (!old || old.label === item.label) continue;
+        const affected = store.records.filter(r => r.data.category === old.label);
+        if (!affected.length || !await tkit.confirm(TXT.renameAsk(affected.length, old.label, item.label), { confirm: TXT.renameYes(affected.length), cancel: TXT.renameNo })) continue;
+        try { for (const r of affected) await entries.update(r.id, { category: item.label }); } catch (error) { fail(error); }
+      }
+    });
+    $('currency').addEventListener('change', () => { S.save({ currency: $('currency').value }).catch(fail); });
+    $('amount-label').addEventListener('change', () => { S.save({ amountLabel: $('amount-label').value.trim() || DEFAULTS.amountLabel }).catch(fail); });
+
+    // Currency names in the page's language (falls back to the bare code).
+    (function fillCurrencies() {
+      let names = null;
+      try { names = new Intl.DisplayNames([document.documentElement.lang], { type: 'currency' }); } catch (error) { /* codes only */ }
+      const select = $('currency');
+      select.appendChild(tkit.h('option', { value: '', text: TXT.noCurrency }));
+      CURRENCIES.forEach(code => select.appendChild(tkit.h('option', { value: code, text: code + (names && names.of(code) !== code ? ' - ' + names.of(code) : '') })));
+    })();
+
+    // ---- Data: CSV, examples, delete all --------------------------------------------------------------------------
+    function exportCsv() {
+      const list = store.records.slice().sort((a, b) => String(b.data.date || '').localeCompare(String(a.data.date || ''))).map(r => r.data);
+      const cols = [{ key: 'name', label: TXT.name }, { key: 'category', label: TXT.category }, { key: 'amount', label: settings.amountLabel, format: v => v === null || v === undefined || v === '' ? '' : String(v) },
+        { key: 'date', label: TXT.date }, { key: 'notes', label: TXT.notes }];
+      tkit.csv.download(tkit.csv.stringify(list, cols, { delimiter: tkit.csv.delimiter() }), (appName() + ' - ' + TXT.view + ' - ' + tkit.today()).replace(/[\\/:*?"<>|]/g, '-') + '.csv');
+      tkit.toast(TXT.exported(list.length));
+    }
+    async function importCsv() {
+      importer.fields = fields();
+      const rows = await importer.open();
+      if (!rows || !rows.length) return;
+      let done = 0;
+      try {
+        for (const row of rows) {
+          await entries.insert(row);
+          if (++done % 50 === 0 && done < rows.length) tkit.toast(TXT.importing(done));
+        }
+        tkit.toast(TXT.imported(done));
+      } catch (error) { fail(error); }
+    }
+    async function loadExamples() {
+      try {
+        if (!settings.categories.length) {
+          const taken = [];
+          await S.save({ categories: EXAMPLE_CATEGORIES.map(([label, tone]) => { const id = tkit.slug(label, taken); taken.push(id); return { id, label, tone }; }) });
+        }
+        await tkit.samples.load(entries, EXAMPLES.map(([name, category, amount, ago, notes]) => ({ name, category: EXAMPLE_CATEGORIES[category][0], amount, date: tkit.daysFromToday(-ago), notes })));
+      } catch (error) { fail(error); }
+    }
+    async function deleteAll() {
+      const list = store.records.slice();
+      if (!list.length || !await tkit.confirm(TXT.deleteAllAsk(list.length), { confirm: TXT.deleteAll, tone: 'danger' })) return;
+      try { for (const r of list) await entries.remove(r.id); tkit.toast(TXT.deleted(list.length)); } catch (error) { fail(error); }
+    }
+    $('export-csv').addEventListener('click', exportCsv);
+    $('import-csv').addEventListener('click', importCsv);
+    $('sample-load').addEventListener('click', loadExamples);
+    $('sample-clear').addEventListener('click', () => { tkit.samples.clear(entries).catch(fail); });
+    banner.addEventListener('t-clear', () => { tkit.samples.clear(entries).catch(fail); });
+    $('delete-all').addEventListener('click', deleteAll);
+
+    // ---- Start ---------------------------------------------------------------------------------------------------
+    (async () => {
+      catEditor.addLabel = TXT.newCategory;
+      S = await tkit.settings('settings', DEFAULTS);
+      settings = S.value;
+      if (S.error) fail(S.error);
+      S.on(value => { settings = value; if (loaded) render(store.records); });
+      store = tkit.live(entries, render, { onError: error => {
+        tkit.clear(status);
+        status.appendChild(tkit.h('t-state', { kind: 'error', title: TXT.loadError, text: error.message }, tkit.h('button', { type: 'button', class: 't-button', text: TXT.retry, onClick: () => store.reload().catch(() => {}) })));
+      } });
+    })();
   </script>
 </body>
 </html>

@@ -412,6 +412,13 @@ t-fields-editor { display: grid; gap: var(--t-space-2); min-width: 0; }
 .t-fe-chips > small { color: var(--t-muted); }
 .t-fe-formula { font-family: var(--t-mono); font-size: var(--t-text-sm); }
 .t-fe-add { position: relative; display: grid; gap: var(--t-space-2); justify-items: start; }
+/* Phones: the name takes the first line; type, required, details and delete share the second.
+   "Required" keeps its words for screen readers but shows only the switch. */
+@container t-app (max-width: 640px) {
+  .t-fe-label { flex: 1 1 calc(100% - 96px); }
+  .t-fe-type { flex: 1 1 0; }
+  .t-fe-req > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .t-fe-menu { display: flex; flex-wrap: wrap; gap: 6px; padding: var(--t-space-2); border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-surface); }
 
 /* ---- t-detail: a drawer from the right, a full-screen sheet on a phone ------------------------ */

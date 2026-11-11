@@ -9,6 +9,8 @@
   <script src="/api/hub/apps/kit.js"></script>
   <style>
     .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--t-space-3); }
+    .stack { display: grid; gap: var(--t-space-4); min-width: 0; }
+    .note { display: flex; align-items: center; flex-wrap: wrap; gap: var(--t-space-2); }
   </style>
 </head>
 <body>
@@ -17,6 +19,7 @@
       <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
       <button data-view="overview" data-icon="chart">Visão geral</button>
       <button data-view="entries" data-icon="table">Lançamentos</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Ajustes</button>
     </t-nav>
     <main class="t-app-main">
       <t-view name="overview">
@@ -25,114 +28,441 @@
             <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
             <button type="button" class="t-button primary" id="new-entry">Novo lançamento</button>
           </header>
-          <div class="t-grid" id="stats"></div>
-          <div class="charts">
-            <section class="t-card"><h2>Por mês</h2><t-chart id="by-month" type="line" label="Valor por mês"></t-chart></section>
-            <section class="t-card"><h2>Por categoria</h2><t-chart id="by-category" type="bar" label="Valor por categoria"></t-chart></section>
+          <t-sample-banner id="banner-overview"></t-sample-banner>
+          <div id="overview-state"><t-state kind="loading"></t-state></div>
+          <div class="stack" id="overview-content" hidden>
+            <div class="t-toolbar"><div class="t-segment" id="period" role="group" aria-label="Período"></div></div>
+            <div class="t-grid" id="stats"></div>
+            <div class="charts">
+              <section class="t-card"><h2 id="by-time-title">Por mês</h2><t-chart id="by-time" type="bar" label="Valor por mês"></t-chart></section>
+              <section class="t-card"><h2>Por categoria</h2><t-chart id="by-category" type="bar" label="Valor por categoria"></t-chart></section>
+            </div>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Últimos lançamentos</h2><button type="button" class="t-button small ghost" id="see-all">Ver todos</button></div>
+              <div class="t-list" id="latest"></div>
+            </section>
           </div>
-          <div id="overview-state"></div>
         </div>
       </t-view>
       <t-view name="entries">
         <div class="t-page wide">
           <header class="t-page-head"><h1 class="t-title">Lançamentos</h1><button type="button" class="t-button primary" id="new-entry-2">Novo lançamento</button></header>
+          <t-sample-banner id="banner-entries"></t-sample-banner>
           <t-table id="table" searchable empty-text="Nenhum lançamento ainda. Adicione o primeiro."></t-table>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Ajustes</h1><p class="t-muted">As mudanças são salvas na hora.</p></div></header>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Métrica</h2></div>
+            <label class="t-field"><span>Nome do valor</span><input type="text" id="set-label" maxlength="40"></label>
+            <div class="t-field"><span>Tipo de valor</span><div class="t-segment" id="set-unit" role="group" aria-label="Tipo de valor"></div></div>
+            <label class="t-field" id="set-currency-field"><span>Moeda</span><select id="set-currency"></select></label>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Meta</h2></div>
+            <label class="t-field"><span>Meta por mês (opcional)</span><input type="number" id="set-goal" min="0" step="any" inputmode="decimal"></label>
+            <p class="t-muted">A visão geral compara o período com ela: um trimestre conta 3 meses, um ano 12. Deixe vazio para não ter meta.</p>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Categorias</h2></div>
+            <t-list-editor id="categories" tones></t-list-editor>
+            <div id="category-notes"></div>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Dados</h2></div>
+            <div class="t-toolbar">
+              <button type="button" class="t-button" id="export-csv">Exportar CSV</button>
+              <button type="button" class="t-button" id="import-csv">Importar CSV</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Exemplos</h2></div>
+            <p class="t-muted" id="samples-text"></p>
+            <div class="t-toolbar">
+              <button type="button" class="t-button" id="samples-load">Ver com exemplos</button>
+              <button type="button" class="t-button" id="samples-clear">Apagar exemplos</button>
+            </div>
+          </section>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Zona de perigo</h2></div>
+            <p class="t-muted">Apaga todos os lançamentos, exemplos inclusos. Não dá para desfazer.</p>
+            <div class="t-toolbar"><button type="button" class="t-button danger" id="delete-all">Apagar todos os lançamentos</button></div>
+          </section>
         </div>
       </t-view>
     </main>
   </t-app>
 
   <t-modal id="editor" title="Lançamento">
-    <form id="entry-form" class="t-form">
-      <div class="t-form-row">
-        <label class="t-field"><span>Data</span><input name="date" type="date" required></label>
-        <label class="t-field"><span>Valor</span><input name="amount" type="number" step="0.01" required></label>
-      </div>
-      <label class="t-field"><span>Categoria</span><input name="category" type="text" list="categories" required maxlength="60"></label>
-      <datalist id="categories"></datalist>
-      <label class="t-field"><span>Notas</span><input name="notes" type="text" maxlength="300"></label>
-      <div class="t-actions">
-        <button type="button" class="t-button danger" id="delete" hidden>Apagar</button>
-        <span class="t-spacer"></span>
-        <button type="button" class="t-button" id="cancel">Cancelar</button>
-        <button type="submit" class="t-button primary">Salvar</button>
-      </div>
-    </form>
+    <t-record-form id="entry-form"></t-record-form>
+    <div class="t-actions">
+      <button type="button" class="t-button danger" id="delete" hidden>Apagar</button>
+      <span class="t-spacer"></span>
+      <button type="button" class="t-button" id="cancel">Cancelar</button>
+      <button type="button" class="t-button primary" id="save">Salvar</button>
+    </div>
   </t-modal>
+  <t-detail id="detail" title-field="category">
+    <button type="button" slot="actions" class="t-button" id="detail-edit">Editar</button>
+    <button type="button" slot="actions" class="t-button danger" id="detail-delete">Apagar</button>
+  </t-detail>
+  <t-import id="importer"></t-import>
 
   <script>
+    // ---- Constants and default settings ---------------------------------------------------------------
+    // Records live in the collection `entries`: { date, amount, category (the LABEL text), notes }.
+    // Settings live in tendly.data under `settings`. Categories are stored by label, so a category that is
+    // not in the list (old data, typed by hand) still shows; Settings offers to add it.
+    const DEFAULTS = { v: 1, metricLabel: 'Valor', unit: 'money', currency: 'BRL', categories: [], goal: null, period: 'quarter' };
+    const PERIODS = [['month', 'Mês'], ['quarter', 'Trimestre'], ['year', 'Ano'], ['all', 'Tudo']];
+    const PERIOD_NAMES = { month: 'mês', quarter: 'trimestre', year: 'ano', all: 'tudo' };
+    const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP', 'MXN', 'ARS', 'CLP', 'COP'];
+    const NO_CATEGORY = 'Sem categoria';
+    const SAMPLE_CATEGORIES = [{ label: 'Vendas online', tone: 'accent' }, { label: 'Loja', tone: 'ok' }, { label: 'Serviços', tone: 'info' }, { label: 'Assinaturas', tone: 'violet' }];
+    const SAMPLE_NOTES = ['', 'Cliente recorrente', 'Promoção de temporada', '', 'Primeiro pedido', 'Pago adiantado'];
+
     const entries = tendly.db.collection('entries');
-    const table = document.getElementById('table');
-    const stats = document.getElementById('stats');
-    const editor = document.getElementById('editor');
-    const form = document.getElementById('entry-form');
+    const $ = id => document.getElementById(id);
+    const app = document.querySelector('t-app');
+    const appName = (document.querySelector('h1') || {}).textContent || 'App';
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    let editing = null, store;
+    function stateEl(kind, title, text, ...actions) {   // tkit.h would turn `text` into a text node; <t-state> wants the attribute
+      const el = tkit.h('t-state', { kind, title }, ...actions);
+      if (text) el.setAttribute('text', text);
+      return el;
+    }
+    const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+    const pad = n => String(n).padStart(2, '0');
+    const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    let settings, store, editing = null, detailId = null;
+    const renames = {};                  // category id -> { from, to }: renamed in Settings, records not updated yet
+    const cfg = () => settings.value;
+    const fmt = value => cfg().unit === 'money' ? tkit.money(value, cfg().currency) : tkit.number(value);
 
-    table.columns = [
-      { key: 'date', label: 'Data', type: 'date' },
-      { key: 'category', label: 'Categoria', type: 'badge' },
-      { key: 'amount', label: 'Valor', type: 'number' },
-      { key: 'notes', label: 'Notas' }
-    ];
+    // ---- Data helpers ----------------------------------------------------------------------------------
+    const rowsOf = records => records.map(r => Object.assign({ id: r.id }, r.data));
+    const catOf = row => String(row.category || '').trim();
+    const amountOf = row => Number(row.amount) || 0;
+    const newestFirst = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
+    const sum = rows => rows.reduce((s, r) => s + amountOf(r), 0);
 
-    function render(records) {
-      const rows = records.map(r => Object.assign({ id: r.id }, r.data));
-      table.rows = rows;
-      const thisMonth = tkit.today().slice(0, 7);
-      const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      const month = rows.filter(r => String(r.date || '').slice(0, 7) === thisMonth).reduce((s, r) => s + (Number(r.amount) || 0), 0);
-      tkit.clear(stats);
-      [['Total', tkit.number(total)], ['Este mês', tkit.number(month)], ['Lançamentos', tkit.number(rows.length, 0)]].forEach(([label, value]) => {
-        stats.appendChild(tkit.h('div', { class: 't-card t-stat' }, tkit.h('strong', { text: value }), tkit.h('span', { text: label })));
-      });
-      const months = tkit.groupBy(rows, r => String(r.date || '').slice(0, 7));
-      document.getElementById('by-month').data = Object.keys(months).filter(Boolean).sort().slice(-12).map(m => ({ label: m.slice(5) + '/' + m.slice(2, 4), value: months[m].reduce((s, r) => s + (Number(r.amount) || 0), 0) }));
-      const categories = tkit.groupBy(rows, 'category');
-      document.getElementById('by-category').data = Object.keys(categories).filter(Boolean).map(c => ({ label: c, value: categories[c].reduce((s, r) => s + (Number(r.amount) || 0), 0) })).sort((a, b) => b.value - a.value).slice(0, 8);
-      const list = document.getElementById('categories');
-      tkit.clear(list);
-      Object.keys(categories).filter(Boolean).sort().forEach(c => list.appendChild(tkit.h('option', { value: c })));
-      const state = document.getElementById('overview-state');
-      tkit.clear(state);
-      if (!rows.length) state.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Nenhum lançamento ainda', text: 'Os gráficos se preenchem conforme você adiciona lançamentos.' }));
+    function range(period) {             // first and last day of the period, as YYYY-MM-DD
+      const now = new Date(), y = now.getFullYear(), m = now.getMonth(), q = m - m % 3;
+      if (period === 'month') return [iso(new Date(y, m, 1)), iso(new Date(y, m + 1, 0))];
+      if (period === 'quarter') return [iso(new Date(y, q, 1)), iso(new Date(y, q + 3, 0))];
+      if (period === 'year') return [y + '-01-01', y + '-12-31'];
+      return ['0000-01-01', '9999-12-31'];
+    }
+    function monthKeys(from, to) {       // ['2026-09', '2026-10', ...] from the month of `from` to the month of `to`
+      const keys = [], end = to.slice(0, 7);
+      for (let d = new Date(+from.slice(0, 4), +from.slice(5, 7) - 1, 1); iso(d).slice(0, 7) <= end && keys.length < 120; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) keys.push(iso(d).slice(0, 7));
+      return keys;
+    }
+    const monthLabel = (key, withYear) => new Date(+key.slice(0, 4), +key.slice(5, 7) - 1, 1).toLocaleDateString(document.documentElement.lang, withYear ? { month: 'short', year: '2-digit' } : { month: 'short' });
+    function goalFor(period, rows) {     // the goal is per month; other periods count their months
+      const goal = Number(cfg().goal) || 0;
+      if (!goal) return 0;
+      if (period !== 'all') return goal * { month: 1, quarter: 3, year: 12 }[period];
+      const dates = rows.map(r => String(r.date || '')).filter(Boolean).sort();
+      return dates.length ? goal * monthKeys(dates[0], iso(new Date())).length : goal;
+    }
+    function categoryOptions() {         // the listed categories, then any other label the records use. id = label (that is what is stored)
+      const listed = cfg().categories.map(c => ({ id: c.label, label: c.label, tone: c.tone || '' }));
+      const extra = [...new Set(rowsOf(store ? store.records : []).map(catOf).filter(Boolean))].filter(l => !listed.some(o => o.id === l)).sort();
+      return listed.concat(extra.map(l => ({ id: l, label: l, tone: '' })));
+    }
+    function fieldsFor() {               // the schema shared by the form, the detail and the CSV import
+      const options = categoryOptions(), help = 'Gerencie as categorias em Ajustes.';
+      return [
+        { id: 'date', label: 'Data', type: 'date', required: true },
+        { id: 'amount', label: cfg().metricLabel, type: cfg().unit === 'money' ? 'money' : 'number', currency: cfg().currency, required: true },
+        options.length ? { id: 'category', label: 'Categoria', type: 'choice', options, required: true, help } : { id: 'category', label: 'Categoria', type: 'text', required: true, help },
+        { id: 'notes', label: 'Notas', type: 'text' }
+      ];
     }
 
+    // ---- Overview ----------------------------------------------------------------------------------------
+    function segment(el, options, value, onPick) {
+      tkit.clear(el);
+      options.forEach(([id, label]) => el.appendChild(tkit.h('button', { type: 'button', 'aria-pressed': String(id === value), text: label, onClick: () => onPick(id) })));
+    }
+    function statCard(label, value, extra) {
+      return tkit.h('div', { class: 't-card t-stat' }, tkit.h('strong', { text: value }), tkit.h('span', { text: label }), extra || null);
+    }
+    function renderOverview(records) {
+      const all = rowsOf(records), state = $('overview-state'), content = $('overview-content');
+      tkit.clear(state);
+      content.hidden = true;
+      if (!all.length) {
+        state.appendChild(stateEl('empty', 'Nenhum lançamento ainda', 'Adicione o primeiro lançamento para ver totais e gráficos, ou dê uma olhada com exemplos antes.',
+          tkit.h('button', { type: 'button', class: 't-button primary', onClick: () => openEditor(null), text: 'Novo lançamento' }),
+          tkit.h('button', { type: 'button', class: 't-button', onClick: loadSamples, text: 'Ver com exemplos' })));
+        tkit.context({ summary: 'Painel: nenhum lançamento ainda' });
+        return;
+      }
+      const period = cfg().period, [from, to] = range(period);
+      segment($('period'), PERIODS, period, id => settings.save({ period: id }).catch(fail));
+      const rows = all.filter(r => r.date >= from && r.date <= to);
+      if (!rows.length) {
+        state.appendChild(stateEl('empty', 'Nada encontrado', 'Nenhum lançamento neste período.',
+          tkit.h('button', { type: 'button', class: 't-button', onClick: () => settings.save({ period: 'all' }).catch(fail), text: 'Limpar filtro' })));
+        content.hidden = false;
+        $('stats').hidden = $('latest').parentNode.hidden = true;
+        document.querySelector('.charts').hidden = true;
+        tkit.context({ summary: 'Painel (' + PERIOD_NAMES[period] + '): nenhum lançamento no período' });
+        return;
+      }
+      content.hidden = false;
+      $('stats').hidden = $('latest').parentNode.hidden = document.querySelector('.charts').hidden = false;
+      const total = sum(rows), byCat = tkit.groupBy(rows, r => catOf(r) || NO_CATEGORY);
+      const cats = Object.keys(byCat).map(c => ({ label: c, value: sum(byCat[c]) })).sort((a, b) => b.value - a.value);
+      const goal = goalFor(period, all), percent = goal ? Math.round(total / goal * 100) : 0;
+
+      const stats = $('stats');
+      tkit.clear(stats);
+      stats.appendChild(statCard('Total no período', fmt(total)));
+      stats.appendChild(statCard('Média por lançamento', fmt(total / rows.length)));
+      stats.appendChild(statCard('Maior categoria: ' + fmt(cats[0].value), cats[0].label));
+      if (goal) stats.appendChild(statCard('Meta atingida', percent + '%', tkit.h('t-progress', { value: String(Math.round(total)), max: String(Math.round(goal)), label: 'Meta' })));
+
+      const byTime = $('by-time'), daily = period === 'month';
+      $('by-time-title').textContent = daily ? 'Por dia' : 'Por mês';
+      byTime.setAttribute('label', cfg().metricLabel + (daily ? ' por dia' : ' por mês'));
+      if (daily) {
+        byTime.data = Array.from({ length: +to.slice(8) }, (_, i) => ({ label: String(i + 1), value: sum(rows.filter(r => +r.date.slice(8) === i + 1)) }));
+      } else {
+        const dates = all.map(r => r.date).filter(Boolean).sort();
+        const keys = monthKeys(period === 'all' ? dates[0] : from, period === 'all' ? iso(new Date()) : to).slice(-36);
+        const months = tkit.groupBy(rows, r => String(r.date).slice(0, 7));
+        byTime.data = keys.map(k => ({ label: monthLabel(k, period === 'all'), value: sum(months[k] || []) }));
+      }
+      $('by-category').setAttribute('label', cfg().metricLabel + ' por categoria');
+      $('by-category').data = cats.slice(0, 8);
+
+      const latest = $('latest');
+      tkit.clear(latest);
+      rows.slice().sort(newestFirst).slice(0, 5).forEach(r => latest.appendChild(tkit.h('button', { type: 'button', class: 't-row', onClick: () => showDetail(r.id) },
+        tkit.h('span', { class: 't-row-text' }, tkit.h('span', { text: catOf(r) || NO_CATEGORY }), tkit.h('small', { text: tkit.date(r.date) + (r.notes ? ' · ' + r.notes : '') })),
+        tkit.h('strong', { text: fmt(amountOf(r)) }))));
+      tkit.context({ summary: 'Painel (' + PERIOD_NAMES[period] + '): total ' + fmt(total) + ' em ' + plural(rows.length, 'lançamento', 'lançamentos') + (goal ? '; meta ' + percent + '%' : '') });
+    }
+
+    // ---- Entries table -----------------------------------------------------------------------------------
+    function renderTable(records) {
+      const table = $('table'), tones = {};
+      categoryOptions().forEach(o => { tones[o.label] = o.tone; });
+      table.columns = [
+        { key: 'date', label: 'Data', type: 'date' },
+        { key: 'category', label: 'Categoria', type: 'badge', tones },
+        { key: 'amount', label: cfg().metricLabel, type: cfg().unit === 'money' ? 'money' : 'number', currency: cfg().currency },
+        { key: 'notes', label: 'Notas' }
+      ];
+      table.rows = rowsOf(records).sort(newestFirst);
+    }
+
+    // ---- Detail and editor ---------------------------------------------------------------------------------
+    function showDetail(id) {
+      const record = store.records.find(r => r.id === id);
+      if (!record) return;
+      detailId = id;
+      const detail = $('detail');
+      detail.fields = fieldsFor();
+      detail.settings = { currency: cfg().currency };
+      detail.siblings = store.records.slice().sort((a, b) => newestFirst(a.data, b.data)).map(r => r.id);
+      detail.record = record;
+      detail.open();
+      tkit.context({ selection: 'Lançamento: ' + (record.data.category || NO_CATEGORY) + ', ' + fmt(record.data.amount) + ', ' + tkit.date(record.data.date) });
+    }
+    function applyRoute(route) {         // a link like #entries/<id> opens that entry
+      const detail = $('detail');
+      if (!route.id) { if (detail.opened) detail.close(); return; }
+      if (!detail.opened || detailId !== route.id) showDetail(route.id);
+    }
     function openEditor(record) {
       editing = record || null;
-      tkit.fill(form, record ? record.data : { date: tkit.today() });
-      document.getElementById('delete').hidden = !record;
-      editor.title = record ? 'Editar lançamento' : 'Novo lançamento';
-      editor.open();
+      const form = $('entry-form');
+      form.fields = fieldsFor();
+      form.settings = { currency: cfg().currency };
+      form.value = record ? record.data : { date: tkit.today() };
+      $('delete').hidden = !record;
+      $('editor').title = record ? 'Editar lançamento' : 'Novo lançamento';
+      $('editor').open();
     }
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      const values = tkit.form(form);
+    async function saveEntry() {
+      let data;
+      try { data = await $('entry-form').submit(); } catch (error) { if (error.code !== 'invalid') fail(error); return; }
       try {
-        if (editing) await entries.update(editing.id, values, { rev: editing.rev });
-        else await entries.insert(values);
-        editor.close();
+        if (editing) await entries.update(editing.id, data, { rev: editing.rev });
+        else await entries.insert(data);
+        $('editor').close();
       } catch (error) {
-        if (error.code === 'conflict') { tkit.toast('Alguém mudou este lançamento enquanto isso; ele foi recarregado.', { tone: 'error' }); editing = error.current; tkit.fill(form, editing.data); }
+        if (error.code === 'conflict') { tkit.toast('Alguém mudou este lançamento enquanto isso; recarreguei.', { tone: 'error' }); editing = error.current; $('entry-form').value = editing.data; }
         else fail(error);
       }
-    });
-    document.getElementById('cancel').addEventListener('click', () => editor.close());
-    document.getElementById('delete').addEventListener('click', async () => {
-      if (!editing || !await tkit.confirm('Apagar este lançamento?', { confirm: 'Apagar', tone: 'danger' })) return;
-      try { await entries.remove(editing.id); editor.close(); } catch (error) { fail(error); }
-    });
-    document.getElementById('new-entry').addEventListener('click', () => openEditor(null));
-    document.getElementById('new-entry-2').addEventListener('click', () => openEditor(null));
-    editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
-    form.addEventListener('input', () => { tendly.host.holdReload(true); });
-    table.addEventListener('t-open', event => openEditor(store.records.find(r => r.id === event.detail.id)));
+    }
+    async function deleteEntry(record) {
+      if (!record || !await tkit.confirm('Apagar este lançamento?', { confirm: 'Apagar', tone: 'danger' })) return;
+      try { $('detail').close(); $('editor').close(); await entries.remove(record.id); } catch (error) { fail(error); }
+    }
 
-    store = tkit.live(entries, render, { order: '-created_at', onError: error => {
-      const state = document.getElementById('overview-state');
-      tkit.clear(state);
-      state.appendChild(tkit.h('t-state', { kind: 'error', title: 'Não deu para carregar os lançamentos', text: error.message }));
-    } });
+    // ---- Settings screen -------------------------------------------------------------------------------------
+    function renderSettings(records) {
+      const rows = rowsOf(records), c = cfg();
+      const set = (el, value) => { if (document.activeElement !== el) el.value = value; };
+      set($('set-label'), c.metricLabel);
+      set($('set-goal'), c.goal === null ? '' : c.goal);
+      segment($('set-unit'), [['money', 'Dinheiro'], ['number', 'Número']], c.unit, id => settings.save({ unit: id }).catch(fail));
+      $('set-currency-field').hidden = c.unit !== 'money';
+      const currency = $('set-currency');
+      tkit.clear(currency);
+      (CURRENCIES.includes(c.currency) ? CURRENCIES : CURRENCIES.concat(c.currency)).forEach(code => currency.appendChild(tkit.h('option', { value: code, text: code })));
+      currency.value = c.currency;
+
+      const list = $('categories'), used = {};
+      rows.forEach(r => { used[catOf(r)] = (used[catOf(r)] || 0) + 1; });
+      list.addLabel = 'Adicionar categoria';
+      list.inUse = Object.fromEntries(c.categories.map(cat => [cat.id, used[cat.label] || 0]));
+      list.items = c.categories;
+
+      const notes = $('category-notes');
+      tkit.clear(notes);
+      Object.keys(renames).forEach(id => {
+        const { from, to } = renames[id], n = used[from] || 0;
+        if (!n) return;
+        notes.appendChild(tkit.h('div', { class: 'note' }, tkit.h('span', { class: 't-muted', text: '"' + from + '" agora é "' + to + '", mas ' + plural(n, 'lançamento ainda usa', 'lançamentos ainda usam') + ' o nome antigo.' }),
+          tkit.h('button', { type: 'button', class: 't-button small', text: 'Atualizar ' + plural(n, 'lançamento', 'lançamentos'), onClick: () => renameRecords(id, from, to) })));
+      });
+      const renamedFrom = Object.keys(renames).map(id => renames[id].from);
+      const unlisted = Object.keys(used).filter(l => l && !c.categories.some(cat => cat.label === l) && !renamedFrom.includes(l));
+      if (unlisted.length) notes.appendChild(tkit.h('div', { class: 'note' }, tkit.h('span', { class: 't-muted', text: 'Usadas em lançamentos, mas fora da lista: ' + unlisted.join(', ') + '.' }),
+        tkit.h('button', { type: 'button', class: 't-button small', text: 'Adicionar à lista', onClick: () => addToList(unlisted) })));
+
+      const examples = tkit.samples.count(records);
+      $('samples-text').textContent = examples ? 'Você tem ' + plural(examples, 'exemplo', 'exemplos') + ' misturados aos seus lançamentos.' : 'Preencha o app com lançamentos de mentira para ver como fica. Dá para apagar tudo com um clique.';
+      $('samples-load').hidden = examples > 0;
+      $('samples-clear').hidden = !examples;
+      $('delete-all').disabled = !records.length;
+    }
+    function saveCategories(items) {
+      const before = cfg().categories;
+      items.forEach(item => {
+        const old = before.find(b => b.id === item.id);
+        if (!old || old.label === item.label) return;
+        const pending = renames[item.id] || (renames[item.id] = { from: old.label });
+        pending.to = item.label;
+        if (pending.to === pending.from) delete renames[item.id];
+      });
+      Object.keys(renames).forEach(id => { if (!items.some(i => i.id === id)) delete renames[id]; });
+      settings.save({ categories: items }).catch(fail);
+    }
+    function addToList(labels) {
+      const items = cfg().categories.slice();
+      labels.forEach(label => items.push({ id: tkit.slug(label, items.map(i => i.id)), label, tone: '' }));
+      settings.save({ categories: items }).catch(fail);
+    }
+    async function renameRecords(id, from, to) {
+      const targets = store.records.filter(r => r.data.category === from);
+      try { for (const r of targets) await entries.update(r.id, { category: to }); delete renames[id]; tkit.toast('Atualizados: ' + plural(targets.length, 'lançamento', 'lançamentos')); } catch (error) { fail(error); }
+      renderSettings(store.records);
+    }
+
+    // ---- Examples, CSV, danger zone ---------------------------------------------------------------------
+    function sampleDocs() {              // 30 entries over ~6 months, 4 categories, amounts trending up
+      return Array.from({ length: 30 }, (_, i) => ({
+        date: tkit.daysFromToday(-(179 - i * 6)),
+        amount: 600 + i * 45 + ((i * 7) % 5) * 60,
+        category: SAMPLE_CATEGORIES[i % 4].label,
+        notes: SAMPLE_NOTES[i % 6]
+      }));
+    }
+    async function loadSamples() {
+      try {
+        await tkit.samples.load(entries, sampleDocs());
+        if (!cfg().categories.length) await settings.save({ categories: SAMPLE_CATEGORIES.map(c => ({ id: tkit.slug(c.label), label: c.label, tone: c.tone })) });
+      } catch (error) { fail(error); }
+    }
+    function exportCsv() {
+      const rows = store.records.map(r => r.data).sort(newestFirst);
+      const columns = [{ key: 'date', label: 'Data' }, { key: 'category', label: 'Categoria' }, { key: 'amount', label: cfg().metricLabel, format: v => v === null || v === undefined ? '' : String(v) }, { key: 'notes', label: 'Notas' }];
+      tkit.csv.download(tkit.csv.stringify(rows, columns, { delimiter: tkit.csv.delimiter() }), appName + ' - Lançamentos - ' + tkit.today() + '.csv');
+      tkit.toast('Exportado: ' + plural(rows.length, 'linha', 'linhas'));
+    }
+    async function importCsv() {
+      const importer = $('importer');
+      importer.fields = fieldsFor();
+      const docs = await importer.open();
+      if (!docs || !docs.length) return;
+      try {
+        for (let i = 0; i < docs.length; i++) {
+          await entries.insert(docs[i]);
+          if ((i + 1) % 50 === 0) tkit.toast('Importados ' + (i + 1) + ' de ' + docs.length + '…');
+        }
+        tkit.toast('Importado: ' + plural(docs.length, 'lançamento', 'lançamentos'));
+      } catch (error) { fail(error); }
+    }
+    async function deleteAll() {
+      const records = store.records.slice();
+      if (!records.length || !await tkit.confirm('Apagar ' + plural(records.length, 'lançamento', 'lançamentos') + '? Não dá para desfazer.', { confirm: 'Apagar tudo', tone: 'danger' })) return;
+      try {
+        for (let i = 0; i < records.length; i++) {
+          await entries.remove(records[i].id);
+          if ((i + 1) % 50 === 0) tkit.toast('Apagados ' + (i + 1) + ' de ' + records.length + '…');
+        }
+      } catch (error) { fail(error); }
+    }
+
+    // ---- Render and events ---------------------------------------------------------------------------------
+    function render() {
+      const records = store ? store.records : [];
+      const examples = tkit.samples.count(records);
+      $('banner-overview').count = $('banner-entries').count = examples;
+      renderOverview(records);
+      renderTable(records);
+      renderSettings(records);
+      if (store) applyRoute(tkit.route.get());   // a link may have been waiting for the records
+    }
+    $('new-entry').addEventListener('click', () => openEditor(null));
+    $('new-entry-2').addEventListener('click', () => openEditor(null));
+    $('see-all').addEventListener('click', () => { app.view = 'entries'; });
+    $('save').addEventListener('click', saveEntry);
+    $('cancel').addEventListener('click', () => $('editor').close());
+    $('delete').addEventListener('click', () => deleteEntry(editing));
+    $('editor').addEventListener('t-close', () => tendly.host.holdReload(false));
+    $('entry-form').addEventListener('t-input', () => tendly.host.holdReload(true));
+    $('table').addEventListener('t-open', event => showDetail(event.detail.id));
+    $('detail').addEventListener('t-nav', event => showDetail(event.detail.id));
+    $('detail').addEventListener('t-close', () => { detailId = null; });
+    $('detail-edit').addEventListener('click', () => { const record = store.records.find(r => r.id === detailId); $('detail').close(); if (record) openEditor(record); });
+    $('detail-delete').addEventListener('click', () => deleteEntry(store.records.find(r => r.id === detailId)));
+    $('set-label').addEventListener('change', event => settings.save({ metricLabel: event.target.value.trim() || DEFAULTS.metricLabel }).catch(fail));
+    $('set-goal').addEventListener('change', event => { const goal = Number(event.target.value); settings.save({ goal: goal > 0 ? goal : null }).catch(fail); });
+    $('set-currency').addEventListener('change', event => settings.save({ currency: event.target.value }).catch(fail));
+    $('categories').addEventListener('t-change', event => saveCategories(event.detail.items));
+    $('export-csv').addEventListener('click', exportCsv);
+    $('import-csv').addEventListener('click', importCsv);
+    $('samples-load').addEventListener('click', loadSamples);
+    $('samples-clear').addEventListener('click', () => tkit.samples.clear(entries).catch(fail));
+    $('banner-overview').addEventListener('t-clear', () => tkit.samples.clear(entries).catch(fail));
+    $('banner-entries').addEventListener('t-clear', () => tkit.samples.clear(entries).catch(fail));
+    $('delete-all').addEventListener('click', deleteAll);
+    app.addEventListener('t-view', () => { if (store) render(); });   // the kit clears the summary on a view switch
+
+    // ---- Start-up ----------------------------------------------------------------------------------------------
+    (async () => {
+      settings = await tkit.settings('settings', DEFAULTS);
+      if (settings.error) tkit.toast('Não consegui ler os ajustes; usando os padrões.', { tone: 'error' });
+      settings.on(() => render());
+      store = tkit.live(entries, render, { onError: error => {
+        const state = $('overview-state');
+        tkit.clear(state);
+        $('overview-content').hidden = true;
+        state.appendChild(stateEl('error', 'Não deu para carregar os lançamentos', error.message,
+          tkit.h('button', { type: 'button', class: 't-button', text: 'Tentar de novo', onClick: () => store.reload().catch(() => {}) })));
+      } });
+      tkit.route.on(applyRoute);
+    })();
   </script>
 </body>
 </html>

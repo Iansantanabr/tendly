@@ -577,7 +577,9 @@ async fn hub_apps_scaffold_every_template_is_a_working_kit_page() {
     let f = fixture();
     let url = format!("/api/hub/apps/{}/scaffold", f.workspace);
     for (template, collection) in [
-        ("kanban", "cards"), ("table", "entries"), ("calendar", "events"), ("dashboard", "entries"), ("form", "submissions"), ("document", "docs"),
+        ("base", "records"), ("kanban", "cards"), ("table", "entries"), ("calendar", "events"), ("dashboard", "entries"), ("form", "submissions"), ("knowledge", "articles"),
+        // Fork: `document` grew into the knowledge base; the old name gets the new page.
+        ("document", "articles"),
     ] {
         let body = json!({ "slug": template, "name": format!("My {template}"), "letter": "Z", "color": "violet", "template": template, "description": "What it <does>" });
         let created = f.send("POST", &url, body.to_string(), true).await;
