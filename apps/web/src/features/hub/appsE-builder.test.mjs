@@ -10,7 +10,7 @@ import { createServer } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { createSSRApp } from 'vue';
 import { renderToString } from 'vue/server-renderer';
-import { TEMPLATES, brokenAppPrompt, builderPrompt, guessName, guessTemplate, suggest, updatedAgo } from './builder.ts';
+import { TEMPLATES, TEMPLATE_GROUPS, brokenAppPrompt, builderPrompt, guessName, guessTemplate, suggest, updatedAgo } from './builder.ts';
 import { shortcutHost, shortcutOpening, shortcutPane, verdictFresh } from './shortcuts.ts';
 import { authorLabel, filesTitle, restoreSummary, versionTitle } from './app-versions.ts';
 import { appPaneKey, openAppKeys } from './rail.ts';
@@ -175,6 +175,22 @@ test('the create panel offers every template and never a model call; creating is
   assert.match(source, /emit\("created", app, prompt\)/);
   assert.match(source, /border: 1px solid var\(--line-input\)/, 'field borders');
   assert.match(source, /@media \(pointer: coarse\)/);
+});
+
+test('the template list is grouped: featured first, then the headings in order, still one radiogroup', async () => {
+  const html = await render('CreateAppPanel.vue', { projects: WORKSPACES, selectedWorkspaceId: 'w1' });
+  const names = { organize: 'Organize', schedule: 'Agenda', track: 'Track', collect: 'Collect', decide: 'Decide', content: 'Content' };
+  const headings = [...html.matchAll(/<h3[^>]*class="create-app-group-title"[^>]*>([^<]*)<\/h3>/g)].map(match => match[1]);
+  assert.deepEqual(headings, TEMPLATE_GROUPS.filter(group => TEMPLATES.some(template => template.group === group.id)).map(group => names[group.id]), 'headings in group order');
+  assert.equal((html.match(/role="radiogroup"/g) ?? []).length, 2, 'one for the templates, one for the colours');
+  const list = html.slice(html.indexOf('create-app-template-list'), html.indexOf('create-app-row'));
+  assert.equal((list.match(/role="radio"/g) ?? []).length, TEMPLATES.length, 'one radio per template');
+  const shown = [...list.matchAll(/data-template="(\w+)"/g)].map(match => match[1]);
+  const expected = ['featured', ...TEMPLATE_GROUPS.map(group => group.id)].flatMap(group => TEMPLATES.filter(template => template.group === group).map(template => template.id));
+  assert.deepEqual(shown, expected, 'visual order is featured first, then group by group, in TEMPLATES order');
+  assert.deepEqual(shown.slice(0, 2), ['base', 'blank']);
+  assert.equal((list.match(/tabindex="0"/g) ?? []).length, 1, 'the chosen card is the only tab stop');
+  assert.doesNotMatch(html, /create-app-suggested/, 'nothing suggested without a sentence');
 });
 
 test('the catalog cards say the route, when the app changed, and errors with "Ask for a fix"; broken apps too', async () => {

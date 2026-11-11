@@ -13,6 +13,7 @@
     .swatch { display: grid; gap: 2px; width: 92px; font-size: var(--t-text-xs); color: var(--t-muted); }
     .swatch > i { display: block; height: 28px; border-radius: var(--t-radius-sm); border: 1px solid var(--t-line); }
     .demo-out { margin: 0; padding: var(--t-space-3); overflow: auto; max-height: 220px; border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-surface); color: var(--t-ink-soft); font: 12px/1.5 var(--t-mono); white-space: pre-wrap; }
+    #cells td { white-space: nowrap; }
     .demo-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--t-space-4); align-items: start; }
   </style>
 </head>
@@ -29,6 +30,7 @@
       <button data-view="records" data-icon="grid">Records</button>
       <button data-view="more" data-icon="check-square">More</button>
       <button data-view="tools" data-icon="clipboard">Kit 2.1</button>
+      <button data-view="v22" data-icon="move">Kit 2.2</button>
       <button data-view="settings" data-icon="settings" class="t-nav-end">Settings</button>
     </t-nav>
     <main class="t-app-main">
@@ -225,6 +227,56 @@ Select two lines, then press List twice.</textarea></label>
               <pre class="demo-out" id="csv-cols-out"></pre>
             </section>
           </div>
+        </div>
+      </t-view>
+      <t-view name="v22">
+        <div class="t-page">
+          <button type="button" class="t-back" id="back-demo"></button>
+          <header class="t-page-head"><div><h1 class="t-title">Kit 2.2</h1><p class="t-muted">What the stage-2 templates kept hand-rolling. Everything here runs without the SDK; saves are faked with a short delay.</p></div></header>
+          <div class="t-filters">
+            <input type="search" class="t-input" placeholder="A search box: a whole line on a phone" aria-label="Search">
+            <select class="t-input" aria-label="Sort" style="width:auto"><option>Newest</option><option>Name</option></select>
+          </div>
+          <h2>&lt;t-row-editor&gt;</h2>
+          <section class="t-card">
+            <p class="t-muted">Rows whose cells the page builds. Drag the dots or use the arrows; the first row cannot be removed, "Fees" asks before it goes.</p>
+            <t-row-editor id="rows"></t-row-editor>
+            <pre class="demo-out" id="rows-out" aria-live="polite"></pre>
+          </section>
+          <h2>&lt;t-menu&gt; and tkit.editCell</h2>
+          <section class="t-card">
+            <p class="t-muted">Click a value to edit it in place (Enter saves, Esc cancels). Type "fail" in the text cell to see a failed save. The "…" menu sits inside a clickable row: the row does not open.</p>
+            <div class="t-table-scroll"><table class="t-table">
+              <thead><tr><th><button type="button">Option</button></th><th><button type="button">Price</button></th><th><button type="button">Qty</button></th><th><button type="button">Score</button></th><th><button type="button">Ships</button></th><th><button type="button">Status</button></th><th><button type="button">Note</button></th><th></th></tr></thead>
+              <tbody id="cells"></tbody>
+            </table></div>
+            <pre class="demo-out" id="cell-out" aria-live="polite">Nothing yet.</pre>
+          </section>
+          <h2>&lt;t-gallery&gt;</h2>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Letter tiles, badges, muted, reorder mode</h2><div class="t-segment" role="group" aria-label="Mode"><button type="button" aria-pressed="false" id="gal-sort">Reorder</button></div></div>
+            <t-gallery id="gal22" placeholder="letter"></t-gallery>
+            <pre class="demo-out" id="gal-out" aria-live="polite">Open a card, or switch to Reorder.</pre>
+          </section>
+          <div class="demo-two">
+            <section class="t-card">
+              <div class="t-card-head"><h2>tkit.chooseMove</h2></div>
+              <p class="t-muted">Delete "Drinks" in the list: its items are moved first. The page runs <code>chooseMove</code> in <code>beforeRemove</code>.</p>
+              <t-list-editor id="cats22" tones></t-list-editor>
+              <pre class="demo-out" id="move-out" aria-live="polite">Nothing moved.</pre>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>&lt;t-fields-editor hide-required&gt;</h2></div>
+              <t-fields-editor id="fe22" hide-required types="text,number,money,choice"></t-fields-editor>
+            </section>
+          </div>
+          <h2>&lt;t-action-bar&gt;</h2>
+          <p class="t-muted">Make the frame narrower than 640px: this bar sticks to the bottom of the screen, above the nav.</p>
+          <t-action-bar aria-label="Screen actions">
+            <span slot="summary"><strong>R$ 1.240,00</strong> <span class="t-muted">total</span></span>
+            <button type="button" class="t-button" id="ab-draft">Save draft</button>
+            <button type="button" class="t-button primary" id="ab-go">Finish</button>
+          </t-action-bar>
         </div>
       </t-view>
       <t-view name="settings">
@@ -557,6 +609,103 @@ Select two lines, then press List twice.</textarea></label>
       tkit.clear(slot);
       slot.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Built with tkit.h', text: 'The title and text are attributes on a t-* tag, so this reads correctly.' }));
     });
+
+    // ---- Version 2.2 -----------------------------------------------------------------------------
+    var backDemo = document.getElementById('back-demo');
+    backDemo.appendChild(tkit.icon('arrow-left', 16)); backDemo.appendChild(tkit.h('span', { text: 'Back' }));
+    backDemo.addEventListener('click', function () { tkit.toast('Back (a compact button, never full width)'); });
+    var sleepFor = function (ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); };
+
+    // <t-row-editor>
+    var rowsEl = document.getElementById('rows'), rowsOut = document.getElementById('rows-out');
+    var rowData = [{ id: 'sales', label: 'Sales', kind: 'money', weight: 5 }, { id: 'fees', label: 'Fees', kind: 'money', weight: 2 }, { id: 'units', label: 'Units sold', kind: 'number', weight: 3 }];
+    rowsEl.rows = rowData;
+    rowsEl.addLabel = 'Add a result';
+    rowsEl.newRow = function () { return { label: '', kind: 'number', weight: 1 }; };
+    rowsEl.canRemove = function (row) { return row.id === 'sales' ? 'The first result is always kept' : true; };
+    rowsEl.confirmRemove = function (row) { return row.id === 'fees' ? tkit.confirm('"Fees" is used by 3 outputs. Remove it anyway?', { confirm: 'Remove', tone: 'danger' }) : Promise.resolve(true); };
+    rowsEl.cells = function (row, change) {
+      var label = tkit.h('input', { class: 't-input', type: 'text', value: row.label, 'aria-label': 'Label', placeholder: 'Label', onChange: function (event) { change({ label: event.target.value.trim() }); } });
+      var kind = tkit.h('select', { class: 't-input', 'aria-label': 'Kind', style: { flex: '0 1 130px' }, onChange: function (event) { change({ kind: event.target.value }); } },
+        tkit.h('option', { value: 'number', text: 'Number' }), tkit.h('option', { value: 'money', text: 'Money' }));
+      kind.value = row.kind;
+      var weight = tkit.h('input', { class: 't-input', type: 'number', min: '0', max: '10', value: String(row.weight), 'aria-label': 'Weight', style: { flex: '0 1 80px' }, onChange: function (event) { change({ weight: Number(event.target.value) || 0 }); } });
+      return [label, kind, weight];
+    };
+    rowsEl.addEventListener('t-change', function (event) { rowsOut.textContent = 't-change ' + JSON.stringify(event.detail.rows.map(function (r) { return r.id + ':' + r.label + ':' + r.kind + ':' + r.weight; })); });
+
+    // <t-menu> and tkit.editCell
+    var cellBody = document.getElementById('cells'), cellOut = document.getElementById('cell-out');
+    var cellRows = [
+      { id: 'a', name: 'Plan Basic', price: 49.9, qty: 3, score: 3, ships: true, status: 'open', note: 'Good value' },
+      { id: 'b', name: 'Plan Plus', price: 89, qty: null, score: null, ships: false, status: 'won', note: '' }
+    ];
+    var STATUS = [{ id: 'open', label: 'Open' }, { id: 'won', label: 'Won' }, { id: 'lost', label: 'Lost' }];
+    function cellButton(row, key, spec) {
+      var button = tkit.h('button', { type: 'button', class: 't-cell', 'aria-label': spec.label + ': ' + tkit.cellText(spec, row[key]) }, tkit.h('span', { 'data-cell-value': '', text: tkit.cellText(spec, row[key]) }));
+      button.classList.toggle('empty', row[key] === null || row[key] === '' || row[key] === undefined);
+      spec.value = row[key];
+      spec.save = function (value) {
+        return sleepFor(600).then(function () {
+          if (value === 'fail') throw new Error('The server said no. Try again.');
+          row[key] = value;
+          cellOut.textContent = 'saved ' + key + ' = ' + JSON.stringify(value);
+        });
+      };
+      tkit.editCell(button, spec);
+      return button;
+    }
+    function drawCells() {
+      tkit.clear(cellBody);
+      cellRows.forEach(function (row) {
+        var menu = tkit.h('t-menu', { label: 'Actions for ' + row.name });
+        menu.items = [{ id: 'edit', label: 'Edit', icon: 'edit' }, { id: 'copy', label: 'Copy name', icon: 'copy' }, '-', { id: 'archive', label: 'Archive', disabled: true }, { id: 'delete', label: 'Delete', icon: 'trash', tone: 'danger' }];
+        menu.addEventListener('t-select', function (event) { cellOut.textContent = 't-select ' + event.detail.id + ' on ' + row.name; if (event.detail.id === 'copy') tkit.copy(row.name); });
+        var tr = tkit.h('tr', { tabindex: '0', onClick: function (event) { if (!event.target.closest('button, t-menu, input, select')) tkit.toast('Row opened: ' + row.name); } },
+          tkit.h('td', { text: row.name }),
+          tkit.h('td', {}, cellButton(row, 'price', { type: 'money', currency: 'BRL', min: 0, label: 'Price' })),
+          tkit.h('td', {}, cellButton(row, 'qty', { type: 'number', min: 0, max: 999, label: 'Quantity' })),
+          tkit.h('td', {}, cellButton(row, 'score', { type: 'score', label: 'Score' })),
+          tkit.h('td', {}, cellButton(row, 'ships', { type: 'yesno', label: 'Ships' })),
+          tkit.h('td', {}, cellButton(row, 'status', { type: 'choice', options: STATUS, label: 'Status' })),
+          tkit.h('td', {}, cellButton(row, 'note', { type: 'text', label: 'Note' })),
+          tkit.h('td', {}, menu));
+        cellBody.appendChild(tr);
+      });
+    }
+    drawCells();
+
+    // <t-gallery>: letters, badges, muted, sortable
+    var gal22 = document.getElementById('gal22'), galOut = document.getElementById('gal-out'), galSort = document.getElementById('gal-sort');
+    gal22.items = [
+      { id: 'g1', title: 'Cappuccino', subtitle: 'Hot drinks', tone: 'warn', badges: [{ text: 'Popular', tone: 'ok' }, { text: 'New', tone: 'info' }], meta: 'R$ 12,00' },
+      { id: 'g2', title: 'Iced tea', subtitle: 'Cold drinks', tone: 'info', badge: 'Seasonal', meta: 'R$ 9,00' },
+      { id: 'g3', title: 'Brownie', subtitle: 'Sweets', tone: 'violet', meta: 'R$ 8,50' },
+      { id: 'g4', title: 'Étoile cake', subtitle: 'Sweets (sold out)', tone: 'danger', muted: true, badges: [{ text: 'Sold out', tone: 'danger' }] },
+      { id: 'g5', title: 'Plain item', subtitle: 'No tone: neutral tile' }
+    ];
+    gal22.addEventListener('t-open', function (event) { galOut.textContent = 't-open ' + event.detail.id; });
+    gal22.addEventListener('t-reorder', function (event) { galOut.textContent = 't-reorder ' + JSON.stringify(event.detail.ids); });
+    galSort.addEventListener('click', function () { gal22.sortable = !gal22.sortable; galSort.setAttribute('aria-pressed', gal22.sortable ? 'true' : 'false'); });
+
+    // tkit.chooseMove + <t-list-editor>.beforeRemove
+    var cats22 = document.getElementById('cats22'), moveOut = document.getElementById('move-out');
+    cats22.items = [{ id: 'drinks', label: 'Drinks', tone: 'info' }, { id: 'sweets', label: 'Sweets', tone: 'violet' }, { id: 'other', label: 'Other', tone: '' }];
+    cats22.inUse = { drinks: 4, sweets: 2 };
+    cats22.addLabel = 'Add a category';
+    cats22.beforeRemove = function (item, inUse) {
+      if (!inUse) return Promise.resolve(true);
+      var others = cats22.items.filter(function (c) { return c.id !== item.id; });
+      return tkit.chooseMove({ title: 'Delete "' + item.label + '"', text: inUse + ' items are in this category. Where should they go?', options: others, confirm: 'Move and delete' }).then(function (to) {
+        moveOut.textContent = to ? inUse + ' items moved from ' + item.id + ' to ' + to : 'Cancelled: nothing deleted';
+        return !!to;
+      });
+    };
+    var fe22 = document.getElementById('fe22');
+    fe22.fields = [{ id: 'name', label: 'Name', type: 'text' }, { id: 'price', label: 'Price', type: 'money' }];
+
+    document.getElementById('ab-draft').addEventListener('click', function () { tkit.toast('Draft saved'); });
+    document.getElementById('ab-go').addEventListener('click', function () { tkit.toast('Finished', { tone: 'success' }); });
     tkit.context({ summary: 'Kit demo' }); // outside Tendly nothing is sent
   </script>
 </body>

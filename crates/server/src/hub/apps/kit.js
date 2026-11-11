@@ -86,7 +86,7 @@
  *   tkit.monthGrid(year, month, weekStart), tkit.today()    pure helpers (kit.test.mjs covers them)
  *   tkit.t(key)                      the kit's own few strings, in the page's language (en, pt)
  *
- * HELPERS, version 2 (tkit.version is 2, tkit.minor 1; kit-v2.test.mjs covers every pure one)
+ * HELPERS, version 2 (tkit.version is 2, tkit.minor 2; kit-v2.test.mjs covers every pure one)
  *   tkit.parseRoute(hash)            '#board/a%20b' -> { view: 'board', id: 'a b' }; '' -> { view: '', id: null }
  *   tkit.route.get()                 { view, id } now.            tkit.route.close()   sets "#<view>"
  *   tkit.route.open(id)              sets "#<view>/<id>" (the view does not change)
@@ -188,6 +188,46 @@
  *
  * CSS classes added in kit.css: t-nav-end, t-card-head, t-kv, t-segment (buttons with aria-pressed), t-switch (a checkbox),
  * t-drawer, t-chip, t-input-group, t-pre, t-md, t-badge.info and .violet; see kit-demo.html for every element working.
+ *
+ * KIT v2.2 (tkit.minor is 2; tkit.version stays 2; kit-v2.test.mjs covers every pure part)
+ *   <t-row-editor>                   an ordered list of rows whose cells the page builds. .rows = [{ id, … }], .cells = fn(row, change) -> Node |
+ *                                    Node[] (change(patch) merges into that row and tells the page, undefined removes a key; change(patch,
+ *                                    { redraw: true }) also draws the cells again), .addLabel, .newRow = fn() -> row (an id is made if
+ *                                    missing), .canRemove = fn(row) -> true | 'reason' (anything else keeps the row and toasts the
+ *                                    reason), .confirmRemove = async fn(row) -> boolean. Each row: drag handle, the cells, up/down and remove
+ *                                    buttons. Event "t-change" {rows} once per commit (a cell's own change/blur/Enter, reorder, add,
+ *                                    remove), never per keystroke; setting .rows to what it just emitted is a no-op; .refresh() draws
+ *                                    the cells again. Focus survives a redraw.
+ *   <t-menu label="Actions">         the "…" button. .items = [{ id, label, icon?, tone?: 'danger', disabled? } | '-'] opens a popover under the
+ *                                    button (above it near the bottom; inside the app), role="menu": arrows, Home, End, a letter, Enter,
+ *                                    Esc (focus goes back to the button), Tab or a click outside close it. Event "t-select" {id}. .open(),
+ *                                    .close(), .opened. Clicks and keys inside do not reach a clickable row around it.
+ *   tkit.editCell(button, spec)      makes a <button class="t-cell"> editable in place; returns { open(), cancel(), spec }. Click/Enter swaps
+ *                                    in the input, Enter or leaving it saves, Esc cancels (focus back on the button). spec = { type: 'number' |
+ *                                    'money' | 'score' (1-5 radio stars, min/max) | 'yesno' | 'text' | 'choice' (options), value, options?,
+ *                                    currency?, min?, max?, label, format?(value), save: async fn(value) }. While save() runs the cell is busy;
+ *                                    on success the button shows the new text (in its [data-cell-value] element if it has one, else all of it);
+ *                                    on failure the editor stays with the error. tkit.cellValue(spec, raw) -> { ok, value } | { ok: false, error }
+ *                                    is the parsing ("12,5" -> 12.5, min/max, y/n -> true/false, a choice label -> its id, empty -> null) and
+ *                                    tkit.cellText(spec, value) the shown text (money, stars, Yes/No, label, "—").
+ *   <t-gallery placeholder="letter" sortable>   placeholder="letter": an item with no picture shows a tile with the first letter of its title
+ *                                    in the item's tone (accent ok warn danger info violet; tkit.letterOf is the pure part). items[].badges =
+ *                                    [{ text, tone }] (several; badge still works), items[].muted dims a card. sortable (attribute or property)
+ *                                    is the reorder mode: each card gets a handle (drag) and up/down buttons (Alt + arrows on a focused card
+ *                                    too), cards do not open; event "t-reorder" {ids} with the whole new order (the gallery already shows it).
+ *   tkit.moveId(ids, id, to)         a copy of ids with id moved to index `to`;  tkit.dropIndex(rects, x, y, axis) where a drag lands ('y' list, 'xy' grid).
+ *   tkit.chooseMove({ title, text?, options: [{ id, label }], confirm? })   Promise of the chosen id or null: a small <t-modal> with a select
+ *                                    ("Move to"), for moving records before the thing that holds them is deleted. null at once if options is empty.
+ *   <t-list-editor>.beforeRemove = async fn(item, inUse) -> boolean   runs when a row's delete is pressed, in place of the built-in "N records use
+ *                                    this" question (so a page can run chooseMove and move records); true removes the row, false keeps it.
+ *   <t-action-bar>                   a screen's main actions: a right-aligned row; under 640px it sticks to the bottom of .t-app-main above the nav
+ *                                    (safe-area padding). Children with slot="summary" (a total, say) sit on the left and take the free room.
+ *   <t-fields-editor hide-required>  hides the "required" switch of every row.
+ *   tkit.menuIndex(items, current, key) / tkit.menuPosition(anchor, size, bound, gap)   the pure parts of <t-menu> (keyboard, placement).
+ *   Icons: chevron-up arrow-up arrow-down more move (star was there).
+ *   CSS: .t-back (a compact ghost button with the arrow-left icon for an in-app sub-screen's "Back": a catalog item page, a checklist run, an
+ *   article; never full width), .t-cell (+ .empty .saving .error, the in-place cell button), .t-filters (a filter row); under 640px every
+ *   .t-input / select.t-input in .t-toolbar, .t-filters, .t-table-tools or a *-tools row takes the full width.
  */
 (function () {
   'use strict';
@@ -232,7 +272,9 @@
     exportCsv: 'Export CSV', importCsv: 'Import CSV', exported: 'Exported: {x}', imported: 'Imported: {x}', importing: 'Importing… {n} of {m}',
     importFailed: 'Could not save {n}', examplesTitle: 'Examples', examplesText: 'Fill the app with sample data to see how it works. You can delete it any time.',
     seeExamples: 'See with examples', dangerTitle: 'Danger zone', dangerText: 'Delete all the data in this app at once. This cannot be undone.',
-    deleteAll: 'Delete all records', deleteAllOne: 'Delete {n} {x}? This cannot be undone.', deleteAllMany: 'Delete all {n} {x}? This cannot be undone.' },
+    deleteAll: 'Delete all records', deleteAllOne: 'Delete {n} {x}? This cannot be undone.', deleteAllMany: 'Delete all {n} {x}? This cannot be undone.',
+    actions: 'Actions', saving: 'Saving…', rangeBetween: 'Between {min} and {max}', rangeMin: 'At least {min}', rangeMax: 'At most {max}',
+    notAnOption: 'Not one of the options', scoreOf: '{n} of {m}', clearValue: 'Clear', moveTo: 'Move to' },
     pt: { filter: 'Filtrar', noResults: 'Nada encontrado', of: 'de', close: 'Fechar', cancel: 'Cancelar', ok: 'OK', today: 'Hoje', prev: 'Mês anterior', next: 'Mês seguinte', empty: 'Nada por aqui ainda', loading: 'Carregando…', error: 'Algo deu errado', add: 'Adicionar', more: 'mais', moved: 'Movido para', items: 'itens',
     yes: 'Sim', no: 'Não', required: 'Obrigatório', notNumber: 'Não é um número', badEmail: 'E-mail inválido',
     badUrl: 'Deve começar com http:// ou https://', badDate: 'Data inválida', delete: 'Apagar', change: 'Mudar', back: 'Voltar',
@@ -271,7 +313,9 @@
     exportCsv: 'Exportar CSV', importCsv: 'Importar CSV', exported: 'Exportado: {x}', imported: 'Importado: {x}', importing: 'Importando… {n} de {m}',
     importFailed: 'Não consegui salvar {n}', examplesTitle: 'Exemplos', examplesText: 'Preencha o app com dados de exemplo para ver como funciona. Você pode apagá-los quando quiser.',
     seeExamples: 'Ver com exemplos', dangerTitle: 'Zona de perigo', dangerText: 'Apaga de uma vez todos os dados deste app. Isso não pode ser desfeito.',
-    deleteAll: 'Apagar todos os registros', deleteAllOne: 'Apagar {n} {x}? Isso não pode ser desfeito.', deleteAllMany: 'Apagar {n} {x}? Isso não pode ser desfeito.' }
+    deleteAll: 'Apagar todos os registros', deleteAllOne: 'Apagar {n} {x}? Isso não pode ser desfeito.', deleteAllMany: 'Apagar {n} {x}? Isso não pode ser desfeito.',
+    actions: 'Ações', saving: 'Salvando…', rangeBetween: 'Entre {min} e {max}', rangeMin: 'No mínimo {min}', rangeMax: 'No máximo {max}',
+    notAnOption: 'Não é uma das opções', scoreOf: '{n} de {m}', clearValue: 'Limpar', moveTo: 'Mover para' }
   };
   function language() {
     var lang = '';
@@ -1379,6 +1423,159 @@
     });
   }
 
+  // ==== v2.2: pure helpers ============================================================
+
+  // ---- Reordering: tkit.moveId and tkit.dropIndex --------------------------------------------------------
+  /** A copy of `ids` with `id` moved to position `to` (counted in the list as it is now, kept inside it). Unknown id or a
+   *  `to` that is not a number: an unchanged copy. */
+  function moveId(ids, id, to) {
+    var list = (ids || []).slice(), from = -1, target = Math.round(Number(to));
+    list.forEach(function (x, n) { if (text(x) === text(id)) from = n; });
+    if (from < 0 || isNaN(target)) return list;
+    target = Math.max(0, Math.min(list.length - 1, target));
+    var item = list.splice(from, 1)[0];
+    list.splice(target, 0, item);
+    return list;
+  }
+  /** Where a dragged item lands: `rects` are the boxes ({ left, top, width, height }) of the OTHER items in order and the answer is
+   *  an index into that list (0 = before the first, rects.length = after the last). axis 'y' is a column of rows (the pointer's
+   *  height decides); 'xy' is a grid (the nearest box decides, before it or after it by which half of it the pointer is over). */
+  function dropIndex(rects, x, y, axis) {
+    var n = (rects || []).length, i;
+    if (!n) return 0;
+    if (axis !== 'xy') {
+      for (i = 0; i < n; i++) if (y < rects[i].top + rects[i].height / 2) return i;
+      return n;
+    }
+    var best = 0, bestDistance = Infinity;
+    for (i = 0; i < n; i++) {
+      var dx = x - (rects[i].left + rects[i].width / 2), dy = y - (rects[i].top + rects[i].height / 2), d = dx * dx + dy * dy;
+      if (d < bestDistance) { bestDistance = d; best = i; }
+    }
+    var r = rects[best], sameRow = y >= r.top && y <= r.top + r.height;
+    var before = sameRow ? x < r.left + r.width / 2 : y < r.top + r.height / 2;
+    return before ? best : best + 1;
+  }
+
+  // ---- The letter tile of a gallery card -------------------------------------------------------------------
+  /** The first letter or digit of a title, upper case ("état" -> "É"); "?" when there is none. */
+  function letterOf(title) {
+    var chars = text(title).trim();
+    chars = typeof Array.from === 'function' ? Array.from(chars) : chars.split('');
+    for (var i = 0; i < chars.length; i++) if (!/[\s\-_.,;:!?'"()\[\]{}*#@\/\\|+=<>~`&%$^]/.test(chars[i])) return chars[i].toUpperCase();
+    return '?';
+  }
+
+  // ---- In-place cells: tkit.cellValue and tkit.cellText ---------------------------------------------------------
+  var YES_WORDS = ['y', 'yes', 'sim', 's', 'true', '1'], NO_WORDS = ['n', 'no', 'nao', 'false', '0'];
+  function cellFail(message) { return { ok: false, value: null, error: message }; }
+  function cellOk(value) { return { ok: true, value: value }; }
+  function scoreBounds(spec) {
+    var min = spec.min === undefined || spec.min === null ? 1 : Math.round(Number(spec.min)), max = spec.max === undefined || spec.max === null ? 5 : Math.round(Number(spec.max));
+    if (isNaN(min)) min = 1;
+    if (isNaN(max)) max = 5;
+    return { min: min, max: Math.max(min, Math.min(min + 9, max)) };
+  }
+  function hasBound(value) { return value !== undefined && value !== null && value !== ''; }
+  function rangeMessage(min, max) {
+    if (hasBound(min) && hasBound(max)) return tf('rangeBetween', { min: number(min), max: number(max) });
+    return hasBound(min) ? tf('rangeMin', { min: number(min) }) : tf('rangeMax', { max: number(max) });
+  }
+  /** What to save for what an in-place cell holds. spec.type: number | money (typed as people write it, min/max checked), score
+   *  (a whole number from spec.min = 1 to spec.max = 5), yesno (y n yes no sim nao true false), text, choice (an option id or
+   *  label out of spec.options). Empty is { ok: true, value: null }; a bad value is { ok: false, error }. */
+  function cellValue(spec, raw) {
+    spec = spec || {};
+    var type = spec.type || 'text';
+    if (type === 'yesno') {
+      if (typeof raw === 'boolean') return cellOk(raw);
+      if (emptyRaw(raw)) return cellOk(null);
+      var word = normalize(raw).trim();
+      if (YES_WORDS.indexOf(word) >= 0) return cellOk(true);
+      if (NO_WORDS.indexOf(word) >= 0) return cellOk(false);
+      return cellFail(t('notAnOption'));
+    }
+    if (emptyRaw(raw)) return cellOk(null);
+    if (type === 'number' || type === 'money') {
+      var n = parseNumber(raw);
+      if (n === null) return cellFail(t('notNumber'));
+      if ((hasBound(spec.min) && n < Number(spec.min)) || (hasBound(spec.max) && n > Number(spec.max))) return cellFail(rangeMessage(spec.min, spec.max));
+      return cellOk(n);
+    }
+    if (type === 'score') {
+      var bounds = scoreBounds(spec), s = Number(typeof raw === 'string' ? raw.trim() : raw);
+      if (!isFinite(s) || Math.round(s) !== s) return cellFail(t('notNumber'));
+      return s < bounds.min || s > bounds.max ? cellFail(rangeMessage(bounds.min, bounds.max)) : cellOk(s);
+    }
+    if (type === 'choice') {
+      var option = findOption(spec, raw);
+      return option ? cellOk(option.id) : cellFail(t('notAnOption'));
+    }
+    return cellOk(text(raw).trim());
+  }
+  /** What an in-place cell shows for its value: numbers and money as the page's language writes them, a score as stars, yes/no
+   *  as Yes/No, a choice by its label, and an em dash when empty. spec.format(value) wins for a value that is there. */
+  function cellText(spec, value) {
+    spec = spec || {};
+    if (value === undefined || value === null || value === '') return '—';
+    if (typeof spec.format === 'function') return text(spec.format(value));
+    switch (spec.type || 'text') {
+      case 'number': return number(value, 6);
+      case 'money': return money(value, spec.currency);
+      case 'score': {
+        var bounds = scoreBounds(spec), stars = '', v = Number(value);
+        for (var i = bounds.min; i <= bounds.max; i++) stars += i <= v ? '★' : '☆';
+        return stars;
+      }
+      case 'yesno': return value ? t('yes') : t('no');
+      case 'choice': { var option = findOption(spec, value); return option ? text(option.label) : text(value); }
+      default: return text(value);
+    }
+  }
+
+  // ---- The "…" menu: keyboard and placement ------------------------------------------------------------------------
+  function menuEnabled(item) { return !!item && item !== '-' && typeof item === 'object' && !item.disabled; }
+  /** Which menu item a key lands on. items = [{ id, label, disabled? } | '-']; current is the index now (-1: none). ArrowDown and
+   *  ArrowUp wrap and skip separators and disabled items, Home and End jump to the first and last, a single character jumps to
+   *  the next label that starts with it (accents and case ignored). Any other key: current. -1 when nothing can be chosen. */
+  function menuIndex(items, current, key) {
+    var list = items || [], enabled = [], i;
+    for (i = 0; i < list.length; i++) if (menuEnabled(list[i])) enabled.push(i);
+    if (!enabled.length) return -1;
+    current = typeof current === 'number' ? current : -1;
+    if (key === 'Home') return enabled[0];
+    if (key === 'End') return enabled[enabled.length - 1];
+    if (key === 'ArrowDown') {
+      for (i = 0; i < enabled.length; i++) if (enabled[i] > current) return enabled[i];
+      return enabled[0];
+    }
+    if (key === 'ArrowUp') {
+      for (i = enabled.length - 1; i >= 0; i--) if (enabled[i] < current) return enabled[i];
+      return enabled[enabled.length - 1];
+    }
+    if (typeof key === 'string' && key.length === 1 && key !== ' ') {
+      var letter = normalize(key);
+      for (var step = 1; step <= list.length; step++) {
+        var at = (Math.max(current, -1) + step) % list.length;
+        if (menuEnabled(list[at]) && normalize(list[at].label).indexOf(letter) === 0) return at;
+      }
+    }
+    return current;
+  }
+  /** Where a popover goes: `anchor` is the button's box, `size` the popover's, `bound` the area it must stay in (boxes are
+   *  { left, top, right, bottom }; size is { width, height }). Right edges line up (left edges when that would leave the area);
+   *  it opens below and flips above when below would not fit and above does. Returns { left, top, flipped }. */
+  function menuPosition(anchor, size, bound, gap) {
+    gap = gap === undefined ? 4 : gap;
+    var left = anchor.right - size.width;
+    if (left < bound.left + gap) left = anchor.left;
+    left = Math.max(bound.left + gap, Math.min(left, bound.right - size.width - gap));
+    var below = anchor.bottom + gap, above = anchor.top - gap - size.height, flipped = false, top = below;
+    if (below + size.height > bound.bottom - gap && above >= bound.top + gap) { top = above; flipped = true; }
+    else top = Math.max(bound.top + gap, Math.min(below, bound.bottom - gap - size.height));
+    return { left: left, top: top, flipped: flipped };
+  }
+
   // ---- DOM helpers -----------------------------------------------------------
   function h(tag, props) {
     var el = document.createElement(tag);
@@ -1459,7 +1656,12 @@
     'arrow-right': 'M5 12h14M12 5l7 7-7 7',
     'chevron-down': 'M6 9l6 6 6-6',
     file: 'M6 3h9l4 4v14H6zM15 3v4h4',
-    bell: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 0 0 4 0'
+    bell: 'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 0 0 4 0',
+    'chevron-up': 'M6 15l6-6 6 6',
+    'arrow-up': 'M12 19V5M5 12l7-7 7 7',
+    'arrow-down': 'M12 5v14M5 12l7 7 7-7',
+    more: 'M5 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2M19 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2',
+    move: 'M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20'
   };
   var SVG = 'http://www.w3.org/2000/svg';
   function icon(name, size) {
@@ -1697,6 +1899,224 @@
     };
     var loading = data && typeof data.get === 'function' ? Promise.resolve().then(function () { return data.get(key, null); }) : Promise.resolve(null);
     return loading.then(function (stored) { S.value = mergeSettings(defaults, stored); return S; }, function (error) { S.error = error; return S; });
+  }
+
+  // ==== v2.2: services that touch the page ==========================================================
+
+  // ---- Move before delete: tkit.chooseMove --------------------------------------------------------
+  /** Asks where records should go before the thing they sit in is deleted. { title, text?, options: [{ id, label }], confirm? }
+   *  -> Promise of the chosen option's id, or null when cancelled (or there is nowhere to move to). A small <t-modal>. */
+  function chooseMove(options) {
+    options = options || {};
+    var choices = Array.isArray(options.options) ? options.options : [];
+    if (!choices.length) return Promise.resolve(null);
+    return new Promise(function (resolve) {
+      var done = false, heading = text(options.title || t('moveTo'));
+      var select = h('select', { class: 't-input', 'aria-label': t('moveTo') });
+      choices.forEach(function (choice) { select.appendChild(h('option', { value: text(choice.id), text: text(choice.label) })); });
+      var modal = h('t-modal', { title: heading });
+      function finish(answer) {
+        if (done) return;
+        done = true;
+        try { modal.close(); } catch (_) { /* already closed */ }
+        if (modal.parentNode) modal.parentNode.removeChild(modal);
+        resolve(answer);
+      }
+      function chosen() {
+        for (var i = 0; i < choices.length; i++) if (text(choices[i].id) === select.value) return choices[i].id;
+        return null;
+      }
+      var ok = h('button', { type: 'button', class: 't-button primary', text: options.confirm || t('ok'), onClick: function () { finish(chosen()); } });
+      select.addEventListener('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); finish(chosen()); } });
+      if (options.text) modal.appendChild(h('p', { text: text(options.text) }));
+      modal.appendChild(h('label', { class: 't-field' }, h('span', { text: t('moveTo') }), select));
+      modal.appendChild(h('div', { class: 't-actions' }, h('button', { type: 'button', class: 't-button', text: t('cancel'), onClick: function () { finish(null); } }), ok));
+      modal.addEventListener('t-close', function () { finish(null); });
+      document.body.appendChild(modal);
+      modal.open();
+    });
+  }
+
+  // ---- Dragging by a handle (the row editor and the gallery) -----------------------------------------------------
+  /** Starts a drag on pointerdown. opts: handle (the element that got the event), item (the element being dragged), others()
+   *  (the other items' elements, in order), axis ('y' | 'xy'), onDrop(index) (index into the others, see dropIndex). A bar shows
+   *  where it will land (.t-drop-before / .t-drop-after on a neighbour). */
+  function dragReorder(event, opts) {
+    if (event.button || !opts.item) return;
+    event.preventDefault();
+    var handle = opts.handle, item = opts.item, index = null, moved = false, mark = null;
+    try { handle.setPointerCapture(event.pointerId); } catch (_) { /* gone */ }
+    item.classList.add('dragging');
+    function unmark() { if (mark) { mark.classList.remove('t-drop-before'); mark.classList.remove('t-drop-after'); mark = null; } }
+    function move(e) {
+      var others = opts.others();
+      var rects = others.map(function (el) { var box = el.getBoundingClientRect(); return { left: box.left, top: box.top, width: box.width, height: box.height }; });
+      index = dropIndex(rects, e.clientX, e.clientY, opts.axis);
+      moved = true;
+      unmark();
+      if (!others.length) return;
+      mark = others[Math.min(index, others.length - 1)];
+      mark.classList.add(index < others.length ? 't-drop-before' : 't-drop-after');
+    }
+    function finish(apply) {
+      handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', cancel);
+      item.classList.remove('dragging');
+      unmark();
+      if (apply && moved && index !== null) opts.onDrop(index);
+    }
+    var up = function () { finish(true); }, cancel = function () { finish(false); };
+    handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', cancel);
+  }
+
+  // ---- In-place cells: tkit.editCell ---------------------------------------------------------------------------------
+  /** One input for one cell: { node, get(), focus(), disable(flag), wire(commit, cancel) }. */
+  function cellControl(spec, current) {
+    var type = spec.type || 'text', label = text(spec.label), control;
+    if (type === 'score') {
+      var bounds = scoreBounds(spec), name = 't-score-' + uid(), group = h('span', { class: 't-cell-stars', role: 'radiogroup', 'aria-label': label }), stars = [], inputs = [];
+      var paint = function () {
+        var picked = 0;
+        inputs.forEach(function (input) { if (input.checked) picked = Number(input.value); });
+        stars.forEach(function (star, i) { star.classList.toggle('on', bounds.min + i <= picked); });
+      };
+      for (var n = bounds.min; n <= bounds.max; n++) {
+        var input = h('input', { type: 'radio', name: name, value: String(n), 'aria-label': tf('scoreOf', { n: n, m: bounds.max }) });
+        input.checked = Number(current) === n;
+        inputs.push(input);
+        var star = h('label', { class: 't-star' }, input, icon('star', 22));
+        stars.push(star);
+        group.appendChild(star);
+      }
+      var clearButton = h('button', { type: 'button', class: 't-icon-button t-cell-clear', 'aria-label': t('clearValue'), title: t('clearValue') }, icon('close', 14));
+      group.appendChild(clearButton);
+      paint();
+      control = {
+        node: group,
+        get: function () { var picked = ''; inputs.forEach(function (input) { if (input.checked) picked = input.value; }); return picked; },
+        focus: function () { var on = null; inputs.forEach(function (input) { if (input.checked) on = input; }); (on || inputs[0]).focus(); },
+        disable: function (flag) { inputs.forEach(function (input) { input.disabled = flag; }); clearButton.disabled = flag; },
+        wire: function (commit) {
+          group.addEventListener('change', paint);
+          // A real click or tap saves at once; the arrow keys (which also "click" a radio, with detail 0) only move the choice, Enter saves.
+          group.addEventListener('click', function (event) {
+            if (event.target === clearButton || (event.target.closest && event.target.closest('.t-cell-clear'))) { inputs.forEach(function (input) { input.checked = false; }); paint(); commit(); }
+            else if (event.target.type === 'radio' && event.detail > 0) { paint(); commit(); }
+          });
+        }
+      };
+      return control;
+    }
+    var field;
+    if (type === 'yesno' || type === 'choice') {
+      field = h('select', { class: 't-input t-cell-input', 'aria-label': label });
+      var items = type === 'yesno' ? [['', '—'], ['y', t('yes')], ['n', t('no')]] : [['', '—']].concat((spec.options || []).map(function (o) { return [text(o.id), text(o.label)]; }));
+      items.forEach(function (pair) { field.appendChild(h('option', { value: pair[0], text: pair[1] })); });
+      field.value = type === 'yesno' ? (current === true ? 'y' : current === false ? 'n' : '') : (current === undefined || current === null ? '' : text(current));
+    } else {
+      field = h('input', { class: 't-input t-cell-input', type: 'text', 'aria-label': label });
+      if (type === 'number' || type === 'money') field.setAttribute('inputmode', 'decimal');
+      field.value = type === 'number' || type === 'money' ? (typeof current === 'number' ? String(current).replace('.', language() === 'pt' ? ',' : '.') : text(current)) : text(current);
+    }
+    return {
+      node: field,
+      get: function () { return field.value; },
+      focus: function () { field.focus(); if (field.select && field.tagName === 'INPUT') field.select(); },
+      disable: function (flag) { field.disabled = flag; },
+      wire: function (commit) {
+        if (field.tagName !== 'SELECT') return;
+        // A choice made with the mouse saves at once; with the arrow keys it only moves (a closed select "changes" on every arrow).
+        var typed = false;
+        field.addEventListener('pointerdown', function () { typed = false; });
+        field.addEventListener('keydown', function (event) { if (event.key !== 'Enter' && event.key !== 'Escape' && event.key !== 'Tab') typed = true; });
+        field.addEventListener('change', function () { if (!typed) commit(); });
+      }
+    };
+  }
+  /** Makes `button` (a <button class="t-cell"> showing a value) editable in place; returns { open(), cancel(), spec }. Click or Enter
+   *  swaps in the right input; Enter or leaving it saves, Esc cancels. spec = { type: 'number' | 'money' | 'score' | 'yesno' | 'text' |
+   *  'choice', value, options?, currency?, min?, max?, label, format?, save: async function (value) }. save() is awaited with the
+   *  new value (see cellValue); while it runs the cell is busy, on success the button shows the new text (put the value in an
+   *  element with data-cell-value to keep other things inside the button), on failure the editor stays with the error. Calling
+   *  it again on the same button only replaces the spec. */
+  function editCell(button, spec) {
+    if (!button) return null;
+    if (button._tCell) { button._tCell.spec = spec || {}; return button._tCell; }
+    var api = { spec: spec || {}, editing: false, busy: false, open: open, cancel: cancel };
+    var wrap = null, control = null, message = null, hadFocus = false;
+    function sameValue(a, b) { return (a === undefined || a === '' ? null : a) === (b === undefined || b === '' ? null : b); }
+    function paint() {
+      var shown = cellText(api.spec, api.spec.value), target = button.querySelector('[data-cell-value]') || button;
+      target.textContent = shown;
+      button.classList.toggle('empty', api.spec.value === undefined || api.spec.value === null || api.spec.value === '');
+    }
+    function showError(error) {
+      if (!message) { message = h('small', { class: 't-error t-cell-error', role: 'alert' }); wrap.appendChild(message); }
+      message.textContent = text(error);
+      wrap.classList.add('error');
+    }
+    function clearError() {
+      if (message && message.parentNode) message.parentNode.removeChild(message);
+      message = null;
+      if (wrap) wrap.classList.remove('error');
+    }
+    function close(refocus) {
+      if (!api.editing) return;
+      api.editing = false;
+      if (wrap && wrap.parentNode) wrap.parentNode.replaceChild(button, wrap);
+      wrap = null; control = null; message = null;
+      paint();
+      if (refocus) button.focus();
+    }
+    function cancel() { if (api.editing && !api.busy) close(true); }
+    function commit() {
+      if (!api.editing || api.busy) return;
+      var spec = api.spec, parsed = cellValue(spec, control.get());
+      hadFocus = !!wrap && !!document.activeElement && wrap.contains(document.activeElement);
+      if (!parsed.ok) { showError(parsed.error); if (hadFocus) control.focus(); return; }
+      if (sameValue(parsed.value, spec.value)) { close(hadFocus); return; }
+      clearError();
+      api.busy = true;
+      wrap.classList.add('saving');
+      wrap.setAttribute('aria-busy', 'true');
+      control.disable(true);
+      var spinner = h('span', { class: 't-cell-spin', role: 'status', 'aria-label': t('saving') }, icon('spinner', 14));
+      wrap.appendChild(spinner);
+      Promise.resolve().then(function () { return typeof spec.save === 'function' ? spec.save(parsed.value) : undefined; }).then(function () {
+        spec.value = parsed.value;
+        api.busy = false;
+        close(hadFocus);
+      }, function (error) {
+        api.busy = false;
+        if (!api.editing || !wrap) return;
+        wrap.classList.remove('saving');
+        wrap.removeAttribute('aria-busy');
+        if (spinner.parentNode) spinner.parentNode.removeChild(spinner);
+        control.disable(false);
+        showError(error && error.message ? error.message : t('error'));
+        if (hadFocus) control.focus();
+      });
+    }
+    function open() {
+      if (api.editing || !button.parentNode) return;
+      api.editing = true;
+      control = cellControl(api.spec, api.spec.value);
+      wrap = h('span', { class: 't-cell-edit' }, control.node);
+      wrap.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && event.target.tagName !== 'BUTTON') { event.preventDefault(); commit(); }
+        else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
+        else if (event.key !== 'Tab' && message) clearError();
+      });
+      wrap.addEventListener('focusout', function (event) {
+        if (api.busy || (event.relatedTarget && wrap && wrap.contains(event.relatedTarget))) return;
+        setTimeout(function () { if (api.editing && !api.busy && wrap && !wrap.contains(document.activeElement)) commit(); }, 0);
+      });
+      control.wire(commit);
+      button.parentNode.replaceChild(wrap, button);
+      control.focus();
+    }
+    button._tCell = api;
+    button.addEventListener('click', function (event) { event.preventDefault(); open(); });
+    return api;
   }
 
   // ---- Markdown -> DOM -------------------------------------------------------------------------
@@ -2488,18 +2908,44 @@
 
     // ---- <t-gallery> ---------------------------------------------------------------------------------------
     var TGallery = makeElement();
+    TGallery.observedAttributes = ['sortable', 'placeholder', 'empty-text'];
+    TGallery.prototype.attributeChangedCallback = function () { if (this.isConnected && this._bound) this._draw(); };
     TGallery.prototype.connectedCallback = function () {
       var self = this;
-      adopt(self, ['items']);
+      adopt(self, ['items', 'sortable']);
       if (!self._bound) {
         self._bound = true;
+        self._live = h('span', { class: 't-sr', 'aria-live': 'polite' });
         self.addEventListener('click', function (event) {
+          var button = event.target.closest ? event.target.closest('button[data-act]') : null;
           var card = event.target.closest ? event.target.closest('.t-gal-card') : null;
-          if (card && self.contains(card)) self._open(card.dataset.id);
+          if (!card || !self.contains(card)) return;
+          if (button && self.contains(button)) { self._nudge(card.dataset.id, button.dataset.act === 'up' ? -1 : 1, button.dataset.act); return; }
+          if (!self.sortable) self._open(card.dataset.id);
         });
         self.addEventListener('keydown', function (event) {
           var card = event.target.closest ? event.target.closest('.t-gal-card') : null;
-          if (card && self.contains(card) && event.target === card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); self._open(card.dataset.id); }
+          if (!card || !self.contains(card) || event.target !== card) return;
+          if (self.sortable) {
+            // Alt + arrows move the focused card earlier or later; a plain arrow is left to the page.
+            var earlier = event.key === 'ArrowUp' || event.key === 'ArrowLeft', later = event.key === 'ArrowDown' || event.key === 'ArrowRight';
+            if (event.altKey && (earlier || later)) { event.preventDefault(); self._nudge(card.dataset.id, earlier ? -1 : 1, earlier ? 'up' : 'down', true); }
+          } else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); self._open(card.dataset.id); }
+        });
+        self.addEventListener('pointerdown', function (event) {
+          var handle = event.target.closest ? event.target.closest('.t-gal-handle') : null;
+          var card = handle ? handle.closest('.t-gal-card') : null;
+          if (!handle || !card || !self.contains(card) || !self.sortable) return;
+          var id = card.dataset.id;
+          dragReorder(event, {
+            handle: handle, item: card, axis: 'xy',
+            others: function () { return Array.prototype.filter.call(self.querySelectorAll('.t-gal-card'), function (c) { return c !== card; }); },
+            onDrop: function (index) {
+              var ids = Array.prototype.filter.call(self.querySelectorAll('.t-gal-card'), function (c) { return c !== card; }).map(function (c) { return c.dataset.id; });
+              ids.splice(index, 0, id);
+              self._apply(ids, id);
+            }
+          });
         });
       }
       self._draw();
@@ -2508,15 +2954,41 @@
       var item = (this._items || []).filter(function (i) { return text(i.id) === text(id); })[0];
       if (item) emit(this, 't-open', { id: item.id, item: item });
     };
+    /** Puts the cards in the order of `ids` at once and tells the page (which sets .items again, or not). */
+    TGallery.prototype._apply = function (ids, movedId, act) {
+      var self = this, items = self._items || [], before = items.map(function (i) { return text(i.id); });
+      if (sameJson(ids.map(text), before)) return;
+      self._items = ids.map(function (id) { return items.filter(function (i) { return text(i.id) === text(id); })[0]; });
+      self._live.textContent = tf('movedTo', { n: ids.map(text).indexOf(text(movedId)) + 1, m: ids.length });
+      self._draw();
+      if (act) {
+        var card = rowById(self, movedId), button = card ? card.querySelector('button[data-act="' + act + '"]:not(:disabled)') || card.querySelector('button[data-act]:not(:disabled)') : null;
+        if (button) button.focus();
+      }
+      emit(self, 't-reorder', { ids: ids.slice() });
+    };
+    TGallery.prototype._nudge = function (id, delta, act, keepCardFocus) {
+      var ids = (this._items || []).map(function (i) { return i.id; }), at = ids.map(text).indexOf(text(id));
+      if (at < 0) return;
+      this._apply(moveId(ids, id, at + delta), id, act);
+      if (keepCardFocus) { var card = rowById(this, id); if (card) card.focus(); }
+    };
     TGallery.prototype._draw = function () {
-      var self = this, items = self._items || [];
+      var self = this, items = self._items || [], sortable = self.sortable, letters = self.getAttribute('placeholder') === 'letter';
       if (!self.isConnected) return;
       clear(self);
       if (!items.length) { self.appendChild(h('t-state', { kind: 'empty', title: self.getAttribute('empty-text') || t('empty') })); return; }
-      var grid = h('div', { class: 't-gal-grid' });
-      items.forEach(function (item) {
+      var grid = h('div', { class: 't-gal-grid' + (sortable ? ' sorting' : '') });
+      items.forEach(function (item, index) {
         var media = h('div', { class: 't-gal-media' });
-        var placeholder = function () { clear(media); media.appendChild(h('span', { class: 't-gal-empty' }, icon('image', 28))); };
+        var placeholder = function () {
+          clear(media);
+          media.className = 't-gal-media';
+          if (letters) {
+            media.className += ' letter' + (TONES.indexOf(item.tone) > 0 ? ' ' + item.tone : '');
+            media.appendChild(h('span', { class: 't-gal-letter', 'aria-hidden': 'true', text: letterOf(item.title) }));
+          } else media.appendChild(h('span', { class: 't-gal-empty' }, icon('image', 28)));
+        };
         if (item.image) {
           var img = h('img', { src: text(item.image), alt: '', loading: 'lazy' });
           img.addEventListener('error', placeholder);
@@ -2524,17 +2996,28 @@
         } else placeholder();
         var body = h('div', { class: 't-gal-body' }, h('strong', { class: 't-gal-title', text: text(item.title) }));
         if (item.subtitle) body.appendChild(h('span', { class: 't-gal-sub', text: text(item.subtitle) }));
-        if (item.badge || item.meta) {
+        var badges = (item.badge ? [{ text: item.badge, tone: item.tone }] : []).concat(Array.isArray(item.badges) ? item.badges : []);
+        if (badges.length || item.meta) {
           var foot = h('div', { class: 't-gal-foot' });
-          if (item.badge) foot.appendChild(toneBadge(item.tone, item.badge));
+          badges.forEach(function (badge) { if (badge && badge.text !== undefined && badge.text !== null && badge.text !== '') foot.appendChild(toneBadge(badge.tone, badge.text)); });
           if (item.meta) foot.appendChild(h('small', { text: text(item.meta) }));
           body.appendChild(foot);
         }
-        grid.appendChild(h('article', { class: 't-gal-card', tabindex: '0', dataset: { id: text(item.id) }, 'aria-label': text(item.title) }, media, body));
+        var card = h('article', { class: 't-gal-card' + (item.muted ? ' muted' : ''), tabindex: '0', dataset: { id: text(item.id) }, 'aria-label': text(item.title) }, media, body);
+        if (sortable) {
+          card.appendChild(h('div', { class: 't-gal-tools' },
+            h('span', { class: 't-gal-handle', 'aria-hidden': 'true', title: t('reorder') }, icon('drag', 16)),
+            h('span', { class: 't-gal-buttons' },
+              h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('moveUp') + ': ' + text(item.title), disabled: index === 0, dataset: { act: 'up' } }, icon('arrow-up', 14)),
+              h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('moveDown') + ': ' + text(item.title), disabled: index === items.length - 1, dataset: { act: 'down' } }, icon('arrow-down', 14)))));
+        }
+        grid.appendChild(card);
       });
       self.appendChild(grid);
+      self.appendChild(self._live);
     };
     Object.defineProperty(TGallery.prototype, 'items', { get: function () { return this._items || []; }, set: function (v) { this._items = Array.isArray(v) ? v : []; this._draw(); } });
+    Object.defineProperty(TGallery.prototype, 'sortable', { get: function () { return this.hasAttribute('sortable'); }, set: function (v) { if (v) this.setAttribute('sortable', ''); else this.removeAttribute('sortable'); } });
     define('t-gallery', TGallery);
 
     // ---- <t-checklist> --------------------------------------------------------------------------------------
@@ -2886,7 +3369,7 @@
     var TListEditor = makeElement();
     TListEditor.prototype.connectedCallback = function () {
       var self = this;
-      adopt(self, ['items', 'addLabel', 'inUse']);
+      adopt(self, ['items', 'addLabel', 'inUse', 'beforeRemove']);
       if (!self._bound) {
         self._bound = true;
         self._live = h('span', { class: 't-sr', 'aria-live': 'polite' });
@@ -2960,7 +3443,9 @@
       var self = this, item = self._find(id);
       if (!item) return Promise.resolve();
       var n = Number(self._inUse && self._inUse[id]) || 0;
-      var ask = n > 0 ? confirm(plural(n, 'inUseOne', 'inUseMany'), { confirm: t('delete'), tone: 'danger' }) : Promise.resolve(true);
+      // beforeRemove (the page's own question, say chooseMove) replaces the built-in warning; it runs even when nothing uses the item.
+      var ask = typeof self._beforeRemove === 'function' ? Promise.resolve().then(function () { return self._beforeRemove(Object.assign({}, item), n); }).then(function (yes) { return !!yes; })
+        : n > 0 ? confirm(plural(n, 'inUseOne', 'inUseMany'), { confirm: t('delete'), tone: 'danger' }) : Promise.resolve(true);
       return ask.then(function (yes) {
         if (!yes || !self._find(id)) return;
         self._commit(self._items.filter(function (i) { return text(i.id) !== text(id); }));
@@ -3040,12 +3525,15 @@
     } });
     Object.defineProperty(TListEditor.prototype, 'addLabel', { get: function () { return this._addLabel || ''; }, set: function (v) { this._addLabel = text(v); this._draw(); } });
     Object.defineProperty(TListEditor.prototype, 'inUse', { get: function () { return this._inUse || {}; }, set: function (v) { this._inUse = isPlain(v) ? v : {}; this._draw(); } });
+    Object.defineProperty(TListEditor.prototype, 'beforeRemove', { get: function () { return this._beforeRemove || null; }, set: function (v) { this._beforeRemove = typeof v === 'function' ? v : null; } });
     define('t-list-editor', TListEditor);
 
     // ---- <t-fields-editor> --------------------------------------------------------------------------------------------------
     var DETAIL_TYPES = ['choice', 'multi', 'money', 'formula'];
     var CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP'];
     var TFieldsEditor = makeElement();
+    TFieldsEditor.observedAttributes = ['hide-required'];
+    TFieldsEditor.prototype.attributeChangedCallback = function () { if (this.isConnected && this._bound) this._draw(); };
     TFieldsEditor.prototype.connectedCallback = function () {
       var self = this;
       adopt(self, ['fields', 'inUse', 'optionsInUse', 'types', 'extra']);
@@ -3250,7 +3738,7 @@
             h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('moveDown') + ': ' + text(field.label), disabled: index === fields.length - 1, dataset: { act: 'down' } }, icon('arrowDown', 14))),
           h('input', { class: 't-input t-fe-label', type: 'text', value: text(field.label), 'aria-label': t('fieldName') }),
           typeSelect);
-        if (field.type !== 'formula') main.appendChild(h('label', { class: 't-fe-req' }, h('input', { type: 'checkbox', class: 't-switch', checked: !!field.required, dataset: { act: 'required' } }), h('span', { text: t('requiredToggle') })));
+        if (field.type !== 'formula' && !self.hasAttribute('hide-required')) main.appendChild(h('label', { class: 't-fe-req' }, h('input', { type: 'checkbox', class: 't-switch', checked: !!field.required, dataset: { act: 'required' } }), h('span', { text: t('requiredToggle') })));
         if (hasDetail) main.appendChild(h('button', { type: 'button', class: 't-icon-button t-fe-toggle', 'aria-expanded': open ? 'true' : 'false', 'aria-label': t('details') + ': ' + text(field.label), dataset: { act: 'toggle' } }, icon('chevron-down', 16)));
         main.appendChild(h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('delete') + ': ' + text(field.label), dataset: { act: 'delete' } }, icon('trash', 14)));
         var row = h('li', { class: 't-fe-row' + (open ? ' open' : ''), dataset: { id: text(field.id) } }, main);
@@ -3742,6 +4230,297 @@
       self.appendChild(h('t-state', { kind: 'empty', title: self._title === undefined ? null : self._title, text: self.getAttribute('text') }, actions));
     };
     define('t-empty-start', TEmptyStart);
+
+    // ==== v2.2 elements ===============================================================================
+
+    // ---- <t-row-editor> ------------------------------------------------------------------------------------
+    var TRowEditor = makeElement();
+    TRowEditor.prototype.connectedCallback = function () {
+      var self = this;
+      adopt(self, ['rows', 'cells', 'addLabel', 'newRow', 'canRemove', 'confirmRemove']);
+      if (!self._bound) {
+        self._bound = true;
+        self._live = h('span', { class: 't-sr', 'aria-live': 'polite' });
+        self.addEventListener('t-change', function (event) { if (event.target !== self) event.stopPropagation(); }); // a nested editor in a cell: not ours
+        self.addEventListener('click', function (event) {
+          var button = event.target.closest ? event.target.closest('button[data-act]') : null;
+          if (!button || !self.contains(button) || button.closest('t-row-editor') !== self) return;
+          var row = button.closest('[data-id]'), id = row ? row.dataset.id : null, act = button.dataset.act;
+          if (act === 'up') self._move(id, -1, 'up');
+          else if (act === 'down') self._move(id, 1, 'down');
+          else if (act === 'remove') self._remove(id, button);
+          else if (act === 'add') self._add();
+        });
+        self.addEventListener('pointerdown', function (event) {
+          var handle = event.target.closest ? event.target.closest('.t-re-handle') : null;
+          var row = handle ? handle.closest('.t-re-row') : null;
+          if (!handle || !row || !self.contains(row)) return;
+          var others = function () { return Array.prototype.filter.call(row.parentNode.children, function (r) { return r !== row && r.dataset && r.dataset.id; }); };
+          dragReorder(event, {
+            handle: handle, item: row, axis: 'y', others: others,
+            onDrop: function (index) {
+              var ids = others().map(function (r) { return r.dataset.id; });
+              ids.splice(index, 0, row.dataset.id);
+              self._reorder(ids, row.dataset.id);
+            }
+          });
+        });
+      }
+      self._draw();
+    };
+    TRowEditor.prototype._find = function (id) { return (this._rows || []).filter(function (r) { return text(r.id) === text(id); })[0]; };
+    TRowEditor.prototype._commit = function (rows) {
+      this._rows = rows;
+      this._draw();
+      emit(this, 't-change', { rows: copyList(rows) });
+    };
+    /** The page's `change(patch)` for one row: merges (undefined removes a key), tells the page, redraws only when asked (typing keeps its focus). */
+    TRowEditor.prototype._changer = function (id) {
+      var self = this;
+      return function (patch, options) {
+        var row = self._find(id);
+        if (!row) return;
+        var next = Object.assign({}, row);
+        Object.keys(patch || {}).forEach(function (key) { if (patch[key] === undefined) delete next[key]; else next[key] = patch[key]; });
+        self._rows = self._rows.map(function (r) { return r === row ? next : r; });
+        if (options && options.redraw) self._draw();
+        emit(self, 't-change', { rows: copyList(self._rows) });
+      };
+    };
+    TRowEditor.prototype._reorder = function (ids, movedId, act) {
+      var self = this, rows = self._rows || [];
+      if (sameJson(ids.map(text), rows.map(function (r) { return text(r.id); }))) return;
+      var next = ids.map(function (id) { return self._find(id); });
+      self._live.textContent = tf('movedTo', { n: ids.map(text).indexOf(text(movedId)) + 1, m: ids.length });
+      self._commit(next);
+      if (act) {
+        var row = rowById(self, movedId), button = row ? row.querySelector('button[data-act="' + act + '"]:not(:disabled)') || row.querySelector('button[data-act="' + (act === 'up' ? 'down' : 'up') + '"]:not(:disabled)') : null;
+        if (button) button.focus();
+      }
+    };
+    TRowEditor.prototype._move = function (id, delta, act) {
+      var ids = (this._rows || []).map(function (r) { return r.id; }), at = ids.map(text).indexOf(text(id));
+      if (at < 0 || at + delta < 0 || at + delta >= ids.length) return;
+      this._reorder(moveId(ids, id, at + delta), id, act);
+    };
+    TRowEditor.prototype._add = function () {
+      var self = this, row = typeof self._newRow === 'function' ? self._newRow() : {};
+      row = isPlain(row) ? Object.assign({}, row) : {};
+      if (row.id === undefined || row.id === null || row.id === '') row.id = uid();
+      self._commit((self._rows || []).concat([row]));
+      var li = rowById(self, row.id), first = li ? li.querySelector('.t-re-cells input, .t-re-cells select, .t-re-cells textarea, .t-re-cells button') : null;
+      if (first) first.focus();
+    };
+    TRowEditor.prototype._remove = function (id, button) {
+      var self = this, row = self._find(id);
+      if (!row) return Promise.resolve();
+      var verdict = typeof self._canRemove === 'function' ? self._canRemove(Object.assign({}, row)) : true;
+      if (verdict !== true && verdict !== undefined) { toast(typeof verdict === 'string' ? verdict : t('error'), { tone: 'error' }); return Promise.resolve(); }
+      var ask = typeof self._confirmRemove === 'function' ? Promise.resolve().then(function () { return self._confirmRemove(Object.assign({}, row)); }) : Promise.resolve(true);
+      return ask.then(function (yes) {
+        if (!yes || !self._find(id)) return;
+        self._commit(self._rows.filter(function (r) { return text(r.id) !== text(id); }));
+        var add = self.querySelector('[data-act="add"]');
+        if (add) add.focus();
+      });
+    };
+    /** The control that has focus, as { id, index } (which row, which control inside it), to put focus back after a redraw. */
+    TRowEditor.prototype._focusMark = function () {
+      var el = document.activeElement;
+      if (!el || !this.contains(el) || !el.closest) return null;
+      var row = el.closest('.t-re-row');
+      if (!row) return el.dataset && el.dataset.act === 'add' ? { add: true } : null;
+      var controls = Array.prototype.slice.call(row.querySelectorAll('input, select, textarea, button'));
+      return { id: row.dataset.id, index: controls.indexOf(el), start: el.selectionStart, end: el.selectionEnd };
+    };
+    TRowEditor.prototype._focusBack = function (mark) {
+      if (!mark) return;
+      var el = null;
+      if (mark.add) el = this.querySelector('[data-act="add"]');
+      else {
+        var row = rowById(this, mark.id);
+        el = row ? Array.prototype.slice.call(row.querySelectorAll('input, select, textarea, button'))[mark.index] : null;
+      }
+      if (!el) return;
+      el.focus();
+      try { if (mark.start !== undefined && mark.start !== null && el.setSelectionRange) el.setSelectionRange(mark.start, mark.end); } catch (_) { /* not a text box */ }
+    };
+    TRowEditor.prototype._draw = function () {
+      var self = this;
+      if (!self.isConnected) return;
+      var rows = self._rows || [], addLabel = self._addLabel || t('addItem'), mark = self._focusMark();
+      clear(self);
+      var list = h('ul', { class: 't-re-list' });
+      rows.forEach(function (row, index) {
+        var nodes = typeof self._cells === 'function' ? self._cells(Object.assign({}, row), self._changer(row.id)) : null;
+        var name = t('row') + ' ' + (index + 1);
+        var verdict = typeof self._canRemove === 'function' ? self._canRemove(Object.assign({}, row)) : true;
+        var removable = verdict === true || verdict === undefined;
+        var li = h('li', { class: 't-re-row', dataset: { id: text(row.id) } },
+          h('span', { class: 't-re-handle', 'aria-hidden': 'true', title: t('reorder') }, icon('drag', 16)),
+          h('div', { class: 't-re-cells' }, nodes),
+          h('span', { class: 't-re-buttons' },
+            h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('moveUp') + ': ' + name, disabled: index === 0, dataset: { act: 'up' } }, icon('arrow-up', 14)),
+            h('button', { type: 'button', class: 't-icon-button', 'aria-label': t('moveDown') + ': ' + name, disabled: index === rows.length - 1, dataset: { act: 'down' } }, icon('arrow-down', 14)),
+            h('button', { type: 'button', class: 't-icon-button' + (removable ? '' : ' unavailable'), 'aria-label': t('remove') + ': ' + name, 'aria-disabled': removable ? null : 'true', title: removable || typeof verdict !== 'string' ? null : verdict, dataset: { act: 'remove' } }, icon('trash', 14))));
+        list.appendChild(li);
+      });
+      self.appendChild(list);
+      self.appendChild(h('div', { class: 't-re-add' }, h('button', { type: 'button', class: 't-button', dataset: { act: 'add' } }, icon('plus', 14), h('span', { text: addLabel }))));
+      self.appendChild(self._live);
+      self._focusBack(mark);
+    };
+    /** Draws the rows again with what the page's `cells` function builds now (the rows themselves did not change), keeping focus. */
+    TRowEditor.prototype.refresh = function () { this._draw(); };
+    Object.defineProperty(TRowEditor.prototype, 'rows', { get: function () { return copyList(this._rows); }, set: function (v) {
+      var next = copyList(v);
+      if (this._rows && sameJson(next, this._rows)) return; // the page echoing what we just told it: leave the focus alone
+      this._rows = next; this._draw();
+    } });
+    ['cells', 'addLabel', 'newRow', 'canRemove', 'confirmRemove'].forEach(function (name) {
+      Object.defineProperty(TRowEditor.prototype, name, { get: function () { return this['_' + name]; }, set: function (v) {
+        this['_' + name] = name === 'addLabel' ? text(v) : typeof v === 'function' ? v : null;
+        if (name === 'cells' || name === 'addLabel' || name === 'canRemove') this._draw();
+      } });
+    });
+    define('t-row-editor', TRowEditor);
+
+    // ---- <t-menu> -----------------------------------------------------------------------------------------------
+    var TMenu = makeElement();
+    TMenu.observedAttributes = ['label'];
+    TMenu.prototype.connectedCallback = function () {
+      var self = this;
+      adopt(self, ['items']);
+      if (!self._bound) {
+        self._bound = true;
+        self._opened = false;
+        self.addEventListener('click', function (event) {
+          event.stopPropagation(); // a menu in a clickable row must not also open the row
+          var item = event.target.closest ? event.target.closest('.t-menu-item') : null;
+          var trigger = event.target.closest ? event.target.closest('.t-menu-button') : null;
+          if (item && self.contains(item) && !item.disabled) self._select(item.dataset.id);
+          else if (trigger && self.contains(trigger)) { if (self._opened) self.close(true); else self.open(); }
+        });
+        self.addEventListener('keydown', function (event) {
+          var key = event.key;
+          if (!self._opened) {
+            if (event.target.closest && event.target.closest('.t-menu-button') && (key === 'ArrowDown' || key === 'ArrowUp')) { event.preventDefault(); event.stopPropagation(); self.open(key === 'ArrowUp'); }
+            else if (event.target.closest && event.target.closest('.t-menu-button') && (key === 'Enter' || key === ' ')) event.stopPropagation(); // the click that follows opens it
+            return;
+          }
+          if (key === 'Escape') { event.preventDefault(); event.stopPropagation(); self.close(true); return; }
+          if (key === 'Tab') { self.close(false); return; }
+          var buttons = self._itemButtons(), at = buttons.indexOf(document.activeElement), items = self._items || [];
+          var current = at >= 0 ? Number(buttons[at].dataset.index) : -1;
+          if (key === 'Enter' || key === ' ') { event.stopPropagation(); return; } // the button's own click selects
+          var next = menuIndex(items, current, key);
+          if (next !== current || key.length === 1 || key === 'Home' || key === 'End' || key.indexOf('Arrow') === 0) {
+            event.preventDefault(); event.stopPropagation();
+            var target = next >= 0 ? self.querySelector('.t-menu-item[data-index="' + next + '"]') : null;
+            if (target) target.focus();
+          }
+        });
+        self._outside = function (event) { if (self._opened && !self.contains(event.target)) self.close(false); };
+        self._away = function () { if (self._opened) self.close(false); };
+      }
+      self._draw();
+    };
+    TMenu.prototype.disconnectedCallback = function () { this._unlisten(); this._opened = false; };
+    TMenu.prototype.attributeChangedCallback = function () { if (this.isConnected && this._bound) this._draw(); };
+    TMenu.prototype._itemButtons = function () { return Array.prototype.slice.call(this.querySelectorAll('.t-menu-item')); };
+    TMenu.prototype._unlisten = function () {
+      if (!this._listening) return;
+      this._listening = false;
+      document.removeEventListener('pointerdown', this._outside, true);
+      window.removeEventListener('resize', this._away);
+      window.removeEventListener('scroll', this._away, true);
+    };
+    TMenu.prototype._select = function (id) {
+      var self = this;
+      self.close(true);
+      emit(self, 't-select', { id: id });
+    };
+    TMenu.prototype._draw = function () {
+      var self = this;
+      if (!self.isConnected) return;
+      var label = self.getAttribute('label') || t('actions');
+      clear(self);
+      self._button = h('button', { type: 'button', class: 't-icon-button t-menu-button', 'aria-label': label, 'aria-haspopup': 'menu', 'aria-expanded': self._opened ? 'true' : 'false' }, icon('more', 16));
+      self.appendChild(self._button);
+      self._pop = null;
+      if (self._opened) self._drawPop(-1);
+    };
+    TMenu.prototype._drawPop = function (focusIndex) {
+      var self = this, items = self._items || [], label = self.getAttribute('label') || t('actions');
+      if (self._pop && self._pop.parentNode) self._pop.parentNode.removeChild(self._pop);
+      var pop = h('div', { class: 't-menu-pop', role: 'menu', 'aria-label': label });
+      items.forEach(function (item, index) {
+        if (item === '-') { pop.appendChild(h('hr', { class: 't-menu-sep', role: 'separator' })); return; }
+        if (!isPlain(item)) return;
+        var row = h('button', { type: 'button', class: 't-menu-item' + (item.tone === 'danger' ? ' danger' : ''), role: 'menuitem', tabindex: '-1', disabled: !!item.disabled, dataset: { id: text(item.id), index: String(index) } },
+          item.icon ? icon(item.icon, 14) : null, h('span', { text: text(item.label) }));
+        pop.appendChild(row);
+      });
+      pop.style.visibility = 'hidden';
+      self.appendChild(pop);
+      self._pop = pop;
+      self._place();
+      pop.style.visibility = '';
+      var target = focusIndex >= 0 ? self.querySelector('.t-menu-item[data-index="' + focusIndex + '"]') : null;
+      if (target) target.focus();
+    };
+    /** Under the button (above it near the bottom), inside the app. Position is fixed; where the page makes <t-app> a containing block the
+     *  first guess is corrected by measuring where it really landed. */
+    TMenu.prototype._place = function () {
+      var self = this, pop = self._pop, button = self._button;
+      if (!pop || !button) return;
+      var app = self.closest ? self.closest('t-app') : null, main = app ? app.querySelector('.t-app-main') : null;
+      var area = (main || app || document.documentElement).getBoundingClientRect();
+      var bound = main || app ? { left: area.left, top: area.top, right: area.right, bottom: area.bottom } : { left: 0, top: 0, right: window.innerWidth || area.right, bottom: window.innerHeight || area.bottom };
+      var box = button.getBoundingClientRect(), size = { width: pop.offsetWidth, height: pop.offsetHeight };
+      var spot = menuPosition({ left: box.left, top: box.top, right: box.right, bottom: box.bottom }, size, bound, 4);
+      pop.style.left = spot.left + 'px'; pop.style.top = spot.top + 'px';
+      var real = pop.getBoundingClientRect();
+      if (Math.abs(real.left - spot.left) > 1) pop.style.left = (spot.left - (real.left - spot.left)) + 'px';
+      if (Math.abs(real.top - spot.top) > 1) pop.style.top = (spot.top - (real.top - spot.top)) + 'px';
+      pop.classList.toggle('flipped', spot.flipped);
+    };
+    /** Opens the menu and focuses its first item (its last one with lastFirst). */
+    TMenu.prototype.open = function (lastFirst) {
+      var self = this;
+      if (self._opened || !self.isConnected) return;
+      var items = self._items || [];
+      self._opened = true;
+      self._button.setAttribute('aria-expanded', 'true');
+      self._drawPop(menuIndex(items, -1, lastFirst === true ? 'ArrowUp' : 'ArrowDown'));
+      if (!self._listening) {
+        self._listening = true;
+        document.addEventListener('pointerdown', self._outside, true);
+        window.addEventListener('resize', self._away);
+        window.addEventListener('scroll', self._away, true);
+      }
+    };
+    /** Closes it; with refocus the button gets focus back. */
+    TMenu.prototype.close = function (refocus) {
+      var self = this;
+      if (!self._opened) return;
+      self._opened = false;
+      self._unlisten();
+      if (self._pop && self._pop.parentNode) self._pop.parentNode.removeChild(self._pop);
+      self._pop = null;
+      if (self._button) { self._button.setAttribute('aria-expanded', 'false'); if (refocus) self._button.focus(); }
+    };
+    Object.defineProperty(TMenu.prototype, 'items', { get: function () { return copyList(this._items); }, set: function (v) {
+      this._items = (Array.isArray(v) ? v : []).map(function (item) { return isPlain(item) ? Object.assign({}, item) : item; });
+      if (this.isConnected && this._bound && this._opened) this._drawPop(-1);
+    } });
+    Object.defineProperty(TMenu.prototype, 'opened', { get: function () { return !!this._opened; } });
+    define('t-menu', TMenu);
+
+    // ---- <t-action-bar> -----------------------------------------------------------------------------------------------
+    var TActionBar = makeElement();
+    TActionBar.prototype.connectedCallback = function () { if (!this.getAttribute('role')) this.setAttribute('role', 'group'); };
+    define('t-action-bar', TActionBar);
   }
 
   /** csv.download: the text as a UTF-8 .csv file. */
@@ -3749,7 +4528,7 @@
 
   window.tkit = {
     version: 2,
-    minor: 1,
+    minor: 2,
     elements: elements,
     icons: Object.keys(ICONS),
     h: h, icon: icon, clear: clear, toast: toast, confirm: confirm, live: live, form: form, fill: fill,
@@ -3769,6 +4548,9 @@
     // v2.1
     copy: copy, autosave: autosave, tableFooter: tableFooter, weekdayGrid: weekdayGrid,
     search: { match: searchMatch, highlight: searchHighlight, snippet: searchSnippet },
-    textarea: { wrap: textareaWrap, prefixLines: textareaPrefixLines, wrapEdit: wrapEdit, prefixEdit: prefixEdit }
+    textarea: { wrap: textareaWrap, prefixLines: textareaPrefixLines, wrapEdit: wrapEdit, prefixEdit: prefixEdit },
+    // v2.2
+    editCell: editCell, chooseMove: chooseMove, cellValue: cellValue, cellText: cellText,
+    menuIndex: menuIndex, menuPosition: menuPosition, moveId: moveId, dropIndex: dropIndex, letterOf: letterOf
   };
 })();

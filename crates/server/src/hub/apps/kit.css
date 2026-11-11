@@ -31,6 +31,9 @@
  * t-gallery, t-checklist, t-progress, t-steps.
  * Version 2.1 adds the elements t-data-tools and t-empty-start, a footer row in t-table, .t-kanban-meta (a column total),
  * the five-day t-calendar (.t-cal-grid.five, .t-cal-wkend), .t-state-actions, .t-fe-extra and a mark style for search hits.
+ * Version 2.2 adds the elements t-row-editor, t-menu and t-action-bar, .t-back (a compact "Back" button), .t-filters (a filter row; under
+ * 640px a search box or select in .t-toolbar, .t-filters or a *-tools row takes the whole line), .t-cell and .t-star (an in-place cell and
+ * its score stars), .t-gal-media.letter (a letter tile) and the drag markers .t-drop-before / .t-drop-after.
  */
 :root {
   color-scheme: light;
@@ -552,3 +555,110 @@ t-empty-start { display: block; min-width: 0; }
 .t-new-option { min-width: 0; }
 .t-new-option-button { justify-self: start; }
 mark { padding: 0 2px; border-radius: 3px; background: var(--t-warn-soft); color: var(--t-ink); }
+
+/* ==== Version 2.2 ============================================================== */
+
+/* ---- Back link, filter rows ------------------------------------------------------------------------------- */
+/* "Back" on an in-app sub-screen (a catalog item, a checklist run, an article): compact, never a full-width bar. */
+.t-back { display: inline-flex; align-items: center; gap: 4px; justify-self: start; align-self: flex-start; width: fit-content; max-width: 100%; min-height: 32px; padding: 4px 10px 4px 6px; border: 0; border-radius: var(--t-radius-sm); background: none; color: var(--t-ink-soft); font: inherit; font-weight: 500; text-decoration: none; cursor: pointer; }
+.t-back:hover { background: var(--t-fill); color: var(--t-ink); }
+.t-filters { display: flex; align-items: center; flex-wrap: wrap; gap: var(--t-space-2); min-width: 0; }
+@container t-app (max-width: 640px) {
+  /* A search box or a sort menu in a filter row is a whole line on a phone (!important: pages size theirs inline). */
+  :is(.t-toolbar, .t-filters, .t-table-tools, [class*="-tools"]) > :is(.t-input, select.t-input) { flex: 1 1 100% !important; width: 100% !important; max-width: none !important; }
+}
+
+/* ---- Drag markers (row editor, gallery) ----------------------------------------------------------------------- */
+.t-re-row, .t-gal-card { position: relative; }
+.t-re-row.dragging, .t-gal-card.dragging { opacity: .4; }
+.t-re-row.t-drop-before::after, .t-re-row.t-drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; border-radius: var(--t-radius-full); background: var(--t-accent); pointer-events: none; }
+.t-re-row.t-drop-before::after { top: -5px; }
+.t-re-row.t-drop-after::after { bottom: -5px; }
+.t-gal-card.t-drop-before::after, .t-gal-card.t-drop-after::after { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; border-radius: var(--t-radius-full); background: var(--t-accent); pointer-events: none; }
+.t-gal-card.t-drop-before::after { left: -8px; }
+.t-gal-card.t-drop-after::after { right: -8px; }
+
+/* ---- t-row-editor ----------------------------------------------------------------------------------------------- */
+t-row-editor { display: grid; gap: var(--t-space-2); min-width: 0; }
+.t-re-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.t-re-row { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 6px; border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-elevated); }
+.t-re-handle { display: inline-grid; place-items: center; flex: none; width: 24px; height: 32px; color: var(--t-faint); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.t-re-cells { display: flex; align-items: center; flex-wrap: wrap; flex: 1 1 0; gap: 6px; min-width: 0; }
+.t-re-cells > .t-input { flex: 1 1 140px; width: auto; min-width: 0; }
+.t-re-buttons { display: inline-flex; flex: none; margin-left: auto; }
+.t-re-buttons > .unavailable { opacity: .45; cursor: not-allowed; }
+.t-re-add { display: flex; }
+@container t-app (max-width: 640px) {
+  /* Phones: the handle beside the cells, the buttons on a line of their own under them. */
+  .t-re-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: start; }
+  .t-re-cells { grid-column: 2; }
+  .t-re-buttons { grid-column: 2; justify-self: end; margin-left: 0; }
+}
+
+/* ---- t-menu ------------------------------------------------------------------------------------------------------ */
+t-menu { position: relative; display: inline-flex; flex: none; }
+.t-menu-pop { position: fixed; z-index: 40; display: grid; gap: 1px; min-width: 180px; max-width: min(280px, calc(100vw - 16px)); padding: 4px; border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-elevated); box-shadow: var(--t-shadow-md); }
+.t-menu-item { display: flex; align-items: center; gap: var(--t-space-2); width: 100%; min-height: 32px; padding: 6px 10px; border: 0; border-radius: var(--t-radius-sm); background: none; color: var(--t-ink); font: inherit; text-align: left; cursor: pointer; }
+.t-menu-item > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-menu-item:hover:not(:disabled), .t-menu-item:focus-visible { background: var(--t-fill); outline: none; }
+.t-menu-item:focus-visible { box-shadow: inset 0 0 0 2px var(--t-focus); }
+.t-menu-item.danger { color: var(--t-danger-ink); }
+.t-menu-item.danger:hover:not(:disabled), .t-menu-item.danger:focus-visible { background: var(--t-danger-soft); }
+.t-menu-item:disabled { opacity: .5; cursor: default; }
+.t-menu-sep { height: 1px; margin: 4px 2px; border: 0; background: var(--t-line); }
+
+/* ---- t-cell: a value edited in place (tkit.editCell) --------------------------------------------------------------- */
+.t-cell { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; width: 100%; min-height: 32px; padding: 4px 6px; border: 1px solid transparent; border-radius: var(--t-radius-sm); background: none; color: inherit; font: inherit; text-align: left; cursor: text; }
+.t-cell:hover { border-color: var(--t-line-input); }
+.t-cell.empty { color: var(--t-muted); }
+.t-cell:focus-visible { outline-offset: 0; }
+.t-cell.saving { opacity: .6; cursor: progress; }
+.t-cell.error { border-color: var(--t-danger); }
+.t-cell-edit { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; width: 100%; min-width: 0; }
+.t-cell-edit > .t-cell-input { flex: 1 1 96px; width: auto; min-width: 0; }
+.t-cell-edit.saving { opacity: .7; }
+.t-cell-edit.error > .t-cell-input { border-color: var(--t-danger); }
+.t-cell-error { flex: 1 1 100%; }
+.t-cell-spin { display: inline-grid; place-items: center; color: var(--t-muted); }
+.t-cell-spin > svg { animation: t-spin 900ms linear infinite; }
+.t-cell-stars { display: inline-flex; align-items: center; gap: 2px; }
+.t-star { position: relative; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: var(--t-radius-sm); color: var(--t-faint); cursor: pointer; }
+.t-star > input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.t-star:hover { background: var(--t-fill); color: var(--t-warn); }
+.t-star.on { color: var(--t-warn); }
+.t-star.on > svg { fill: currentColor; }
+.t-star:focus-within { outline: 2px solid var(--t-focus); outline-offset: 0; }
+
+/* ---- t-action-bar -------------------------------------------------------------------------------------------------- */
+t-action-bar { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--t-space-2); min-width: 0; }
+t-action-bar > [slot="summary"] { margin-right: auto; min-width: 0; }
+@container t-app (max-width: 640px) {
+  /* Under 640px the bar stays at the foot of the scrolling screen, just above the nav, so the main button is always in reach. */
+  t-action-bar { position: sticky; bottom: 0; z-index: 5; padding: var(--t-space-3); padding-bottom: max(var(--t-space-3), env(safe-area-inset-bottom)); border-top: 1px solid var(--t-line); background: var(--t-surface); box-shadow: 0 -4px 14px rgb(0 0 0 / 0.06); }
+  .t-page > t-action-bar { margin-inline: calc(-1 * var(--t-space-3)); }
+}
+
+/* ---- t-gallery: letter tiles, reorder mode, muted cards ------------------------------------------------------------ */
+.t-gal-media.letter { display: grid; place-items: center; background: var(--t-fill); color: var(--t-ink-soft); }
+.t-gal-letter { font-size: 2.5rem; font-weight: 600; line-height: 1; }
+.t-gal-media.letter.accent { background: var(--t-accent-soft); color: var(--t-accent-ink); }
+.t-gal-media.letter.ok { background: var(--t-ok-soft); color: var(--t-ok-ink); }
+.t-gal-media.letter.warn { background: var(--t-warn-soft); color: var(--t-warn-ink); }
+.t-gal-media.letter.danger { background: var(--t-danger-soft); color: var(--t-danger-ink); }
+.t-gal-media.letter.info { background: var(--t-app-blue-soft); color: var(--t-app-blue); }
+.t-gal-media.letter.violet { background: var(--t-app-violet-soft); color: var(--t-app-violet); }
+.t-gal-card.muted { opacity: .55; }
+.t-gal-grid.sorting .t-gal-card { cursor: default; }
+.t-gal-tools { display: flex; align-items: center; gap: var(--t-space-1); padding: 0 var(--t-space-2) var(--t-space-2); }
+.t-gal-handle { display: inline-grid; place-items: center; width: 28px; height: 32px; color: var(--t-faint); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.t-gal-buttons { display: inline-flex; margin-left: auto; }
+
+/* ---- Touch and motion ------------------------------------------------------------------------------------------------ */
+@media (pointer: coarse) {
+  .t-menu-item, .t-back, .t-cell { min-height: 44px; }
+  .t-star { width: 44px; height: 44px; }
+  .t-re-handle, .t-gal-handle { width: 36px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-cell-spin > svg { animation: none; }
+}

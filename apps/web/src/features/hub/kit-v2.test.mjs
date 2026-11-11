@@ -638,7 +638,7 @@ test('markdown: markdownOutline lists headings with unique anchors', () => {
 
 test('kit v2: the public surface', () => {
   assert.equal(en.version, 2);
-  assert.equal(en.minor, 1, 'kit 2.1');
+  assert.ok(en.minor >= 1, 'kit 2.1 or later');
   for (const name of ['fold', 'download', 'daysFromToday', 'parseNumber', 'parseRoute', 'context', 'mergeContext', 'settings', 'mergeSettings', 'slug', 'fieldValue', 'fieldText', 'validate', 'compute', 'parseMarkdown', 'markdown', 'markdownOutline']) {
     assert.equal(typeof en[name], 'function', name);
   }
@@ -977,7 +977,7 @@ test('h: for t-* tags every prop is an attribute; other tags keep text as textCo
 });
 
 test('kit 2.1: the public surface, the elements and the strings', () => {
-  assert.equal(en.minor, 1);
+  assert.ok(en.minor >= 1);
   assert.equal(en.version, 2, 'the version number stays');
   for (const name of ['copy', 'autosave', 'tableFooter', 'weekdayGrid']) assert.equal(typeof en[name], 'function', name);
   for (const group of [['search', ['match', 'highlight', 'snippet']], ['textarea', ['wrap', 'prefixLines', 'wrapEdit', 'prefixEdit']], ['csv', ['columnsFor', 'filename']]]) {
@@ -999,4 +999,225 @@ test('kit 2.1: the public surface, the elements and the strings', () => {
   assert.equal(pt.t('weekendMore'), '+ fim de semana');
   assert.equal(pt.t('newOption'), 'Nova opção…');
   assert.equal(pt.t('copied'), 'Copiado');
+});
+
+// ================================================================ kit v2.2
+
+const KIT_CSS = readFileSync(new URL('../../../../../crates/server/src/hub/apps/kit.css', here), 'utf8');
+const DEMO_HTML = readFileSync(new URL('../../../../../crates/server/src/hub/apps/kit-demo.html', here), 'utf8');
+
+test('reorder: moveId moves an id inside the list and leaves the input alone', () => {
+  const ids = ['a', 'b', 'c', 'd'];
+  assert.deepEqual(plain(en.moveId(ids, 'a', 2)), ['b', 'c', 'a', 'd']);
+  assert.deepEqual(plain(en.moveId(ids, 'd', 0)), ['d', 'a', 'b', 'c']);
+  assert.deepEqual(plain(en.moveId(ids, 'b', 2)), ['a', 'c', 'b', 'd'], 'one down');
+  assert.deepEqual(plain(en.moveId(ids, 'b', 0)), ['b', 'a', 'c', 'd'], 'one up');
+  assert.deepEqual(plain(en.moveId(ids, 'b', -5)), ['b', 'a', 'c', 'd'], 'kept inside the list (low)');
+  assert.deepEqual(plain(en.moveId(ids, 'b', 99)), ['a', 'c', 'd', 'b'], 'kept inside the list (high)');
+  assert.deepEqual(plain(en.moveId(ids, 'zzz', 1)), ids, 'unknown id: unchanged');
+  assert.deepEqual(plain(en.moveId(ids, 'a', 'x')), ids, 'not a number: unchanged');
+  assert.deepEqual(plain(en.moveId(ids, 'a', 0)), ids);
+  assert.deepEqual(plain(en.moveId([1, 2, 3], '2', 2)), [1, 3, 2], 'ids compare as text');
+  assert.notEqual(en.moveId(ids, 'a', 0), ids, 'a copy');
+  assert.deepEqual(ids, ['a', 'b', 'c', 'd'], 'the input is untouched');
+  assert.deepEqual(plain(en.moveId(undefined, 'a', 0)), []);
+});
+
+test('reorder: dropIndex for a column of rows follows the pointer height', () => {
+  const rows = [0, 1, 2].map(i => ({ left: 0, top: i * 40, width: 300, height: 36 }));
+  assert.equal(en.dropIndex(rows, 10, -20, 'y'), 0, 'above everything');
+  assert.equal(en.dropIndex(rows, 10, 10, 'y'), 0, 'upper half of the first');
+  assert.equal(en.dropIndex(rows, 10, 30, 'y'), 1, 'lower half of the first: after it');
+  assert.equal(en.dropIndex(rows, 10, 100, 'y'), 3, 'past the last');
+  assert.equal(en.dropIndex([], 5, 5, 'y'), 0, 'nothing else in the list');
+  assert.equal(en.dropIndex(undefined, 5, 5), 0);
+});
+
+test('reorder: dropIndex for a grid picks the nearest card and the side of it', () => {
+  // two rows of three cards, 100 wide, 120 tall, 10 apart
+  const cards = [];
+  for (let row = 0; row < 2; row++) for (let col = 0; col < 3; col++) cards.push({ left: col * 110, top: row * 130, width: 100, height: 120 });
+  assert.equal(en.dropIndex(cards, 20, 60, 'xy'), 0, 'left half of the first card: before it');
+  assert.equal(en.dropIndex(cards, 80, 60, 'xy'), 1, 'right half of the first card: after it');
+  assert.equal(en.dropIndex(cards, 120, 60, 'xy'), 1, 'left half of the second: before it');
+  assert.equal(en.dropIndex(cards, 300, 60, 'xy'), 3, 'right of the last card in the row: after it, which is the start of the next row');
+  assert.equal(en.dropIndex(cards, 20, 190, 'xy'), 3, 'second row, left half of its first card');
+  assert.equal(en.dropIndex(cards, 400, 400, 'xy'), 6, 'far below the grid: the end');
+  assert.equal(en.dropIndex(cards, 50, -50, 'xy'), 0, 'above the grid, over the first column: the start');
+});
+
+test('gallery: letterOf takes the first letter or digit, upper case', () => {
+  assert.equal(en.letterOf('cappuccino'), 'C');
+  assert.equal(en.letterOf('  étoile'), 'É');
+  assert.equal(en.letterOf('"quoted"'), 'Q');
+  assert.equal(en.letterOf('- 3 items'), '3');
+  assert.equal(en.letterOf('çedilha'), 'Ç');
+  assert.equal(en.letterOf('😀 smile'), '😀', 'a character outside the BMP is kept whole');
+  assert.equal(en.letterOf(''), '?');
+  assert.equal(en.letterOf('   '), '?');
+  assert.equal(en.letterOf('***'), '?');
+  assert.equal(en.letterOf(undefined), '?');
+  assert.equal(en.letterOf(42), '4');
+});
+
+test('cells: cellValue reads numbers and money the way the page\'s language writes them', () => {
+  assert.deepEqual(plain(pt.cellValue({ type: 'number' }, '12,5')), { ok: true, value: 12.5 });
+  assert.deepEqual(plain(pt.cellValue({ type: 'number' }, '1.234,5')), { ok: true, value: 1234.5 });
+  assert.deepEqual(plain(en.cellValue({ type: 'number' }, '1,234.5')), { ok: true, value: 1234.5 });
+  assert.deepEqual(plain(pt.cellValue({ type: 'money' }, 'R$ 12,50')), { ok: true, value: 12.5 });
+  assert.deepEqual(plain(en.cellValue({ type: 'money' }, 3)), { ok: true, value: 3 });
+  assert.deepEqual(plain(en.cellValue({ type: 'number' }, '-4')), { ok: true, value: -4 });
+  assert.deepEqual(plain(en.cellValue({ type: 'number' }, '')), { ok: true, value: null });
+  assert.deepEqual(plain(en.cellValue({ type: 'number' }, '   ')), { ok: true, value: null });
+  assert.deepEqual(plain(en.cellValue({ type: 'number' }, null)), { ok: true, value: null });
+  assert.deepEqual(plain(en.cellValue({ type: 'number' }, 'abc')), { ok: false, value: null, error: 'Not a number' });
+  assert.deepEqual(plain(pt.cellValue({ type: 'number' }, 'abc')), { ok: false, value: null, error: 'Não é um número' });
+  assert.equal(en.cellValue({ type: 'number' }, 0).value, 0, 'zero is a value, not empty');
+});
+
+test('cells: cellValue checks min and max with a message that names the range', () => {
+  const spec = { type: 'number', min: 0, max: 10 };
+  assert.equal(en.cellValue(spec, '10').ok, true);
+  assert.equal(en.cellValue(spec, '0').ok, true);
+  assert.equal(en.cellValue(spec, '11').error, 'Between 0 and 10');
+  assert.equal(en.cellValue(spec, '-1').error, 'Between 0 and 10');
+  assert.equal(pt.cellValue(spec, '11').error, 'Entre 0 e 10');
+  assert.equal(en.cellValue({ type: 'money', min: 1 }, '0.5').error, 'At least 1');
+  assert.equal(en.cellValue({ type: 'number', max: 5 }, '6').error, 'At most 5');
+  assert.equal(pt.cellValue({ type: 'number', max: 5 }, '6').error, 'No máximo 5');
+  assert.equal(en.cellValue({ type: 'number', min: 0 }, '').ok, true, 'empty is never out of range');
+});
+
+test('cells: cellValue for a score, yes/no, a choice and plain text', () => {
+  assert.deepEqual(plain(en.cellValue({ type: 'score' }, '3')), { ok: true, value: 3 });
+  assert.deepEqual(plain(en.cellValue({ type: 'score' }, 5)), { ok: true, value: 5 });
+  assert.equal(en.cellValue({ type: 'score' }, '').value, null, 'cleared');
+  assert.equal(en.cellValue({ type: 'score' }, '6').error, 'Between 1 and 5');
+  assert.equal(en.cellValue({ type: 'score' }, '0').error, 'Between 1 and 5');
+  assert.equal(en.cellValue({ type: 'score' }, '2.5').ok, false, 'whole numbers only');
+  assert.equal(en.cellValue({ type: 'score' }, 'x').ok, false);
+  assert.equal(en.cellValue({ type: 'score', max: 10 }, '8').value, 8);
+  assert.equal(en.cellValue({ type: 'score', min: 0, max: 3 }, '0').value, 0);
+  for (const yes of ['y', 'Y', 'yes', 'sim', 'Sim', 'true', true, '1']) assert.equal(pt.cellValue({ type: 'yesno' }, yes).value, true, String(yes));
+  for (const no of ['n', 'no', 'não', 'Nao', 'false', false, '0']) assert.equal(pt.cellValue({ type: 'yesno' }, no).value, false, String(no));
+  assert.equal(en.cellValue({ type: 'yesno' }, '').value, null);
+  assert.equal(en.cellValue({ type: 'yesno' }, 'maybe').ok, false);
+  const choice = { type: 'choice', options: [{ id: 'open', label: 'Open' }, { id: 'won', label: 'Won' }] };
+  assert.deepEqual(plain(en.cellValue(choice, 'won')), { ok: true, value: 'won' });
+  assert.equal(en.cellValue(choice, 'WON').value, 'won', 'a label finds its id');
+  assert.equal(en.cellValue(choice, '').value, null);
+  assert.equal(en.cellValue(choice, 'lost').error, 'Not one of the options');
+  assert.equal(pt.cellValue(choice, 'lost').error, 'Não é uma das opções');
+  assert.deepEqual(plain(en.cellValue({ type: 'text' }, '  hello  ')), { ok: true, value: 'hello' });
+  assert.equal(en.cellValue({ type: 'text' }, '   ').value, null);
+  assert.equal(en.cellValue({}, 'x').value, 'x', 'text by default');
+  assert.equal(en.cellValue(undefined, 'x').value, 'x');
+});
+
+test('cells: cellText shows what the button should say', () => {
+  assert.equal(en.cellText({ type: 'text' }, null), '—');
+  assert.equal(en.cellText({ type: 'text' }, ''), '—');
+  assert.equal(en.cellText({ type: 'yesno' }, false), 'No', 'false is a value');
+  assert.equal(pt.cellText({ type: 'yesno' }, false), 'Não');
+  assert.equal(pt.cellText({ type: 'yesno' }, true), 'Sim');
+  assert.equal(pt.cellText({ type: 'number' }, 1234.5), '1.234,5');
+  assert.equal(en.cellText({ type: 'number' }, 1234.5), '1,234.5');
+  assert.equal(en.cellText({ type: 'number' }, 0), '0');
+  assert.equal(pt.cellText({ type: 'money', currency: 'BRL' }, 12.5).replace(/\s/g, ' '), 'R$ 12,50');
+  assert.equal(en.cellText({ type: 'money', currency: 'USD' }, 12.5), '$12.50');
+  assert.equal(en.cellText({ type: 'score' }, 3), '★★★☆☆');
+  assert.equal(en.cellText({ type: 'score', max: 3 }, 1), '★☆☆');
+  assert.equal(en.cellText({ type: 'score' }, 5), '★★★★★');
+  assert.equal(en.cellText({ type: 'choice', options: [{ id: 'won', label: 'Won' }] }, 'won'), 'Won');
+  assert.equal(en.cellText({ type: 'choice', options: [] }, 'gone'), 'gone', 'a removed option shows its id');
+  assert.equal(en.cellText({ type: 'text', format: v => v.toUpperCase() }, 'abc'), 'ABC', 'format wins');
+  assert.equal(en.cellText({ type: 'text', format: () => 'never' }, null), '—', 'but not for an empty value');
+});
+
+test('cells: editCell with no button does nothing, and chooseMove with nowhere to go answers null at once', async () => {
+  assert.equal(en.editCell(null, {}), null);
+  assert.equal(await en.chooseMove({ title: 'x', options: [] }), null);
+  assert.equal(await en.chooseMove({}), null);
+});
+
+test('menu: menuIndex walks the enabled items, wraps, and skips separators and disabled ones', () => {
+  const items = [{ id: 'a', label: 'Edit' }, '-', { id: 'b', label: 'Copy', disabled: true }, { id: 'c', label: 'Archive' }, { id: 'd', label: 'Delete' }];
+  assert.equal(en.menuIndex(items, -1, 'ArrowDown'), 0, 'from nothing: the first');
+  assert.equal(en.menuIndex(items, 0, 'ArrowDown'), 3, 'a separator and a disabled item are skipped');
+  assert.equal(en.menuIndex(items, 3, 'ArrowDown'), 4);
+  assert.equal(en.menuIndex(items, 4, 'ArrowDown'), 0, 'wraps to the first');
+  assert.equal(en.menuIndex(items, -1, 'ArrowUp'), 4, 'from nothing: the last');
+  assert.equal(en.menuIndex(items, 3, 'ArrowUp'), 0);
+  assert.equal(en.menuIndex(items, 0, 'ArrowUp'), 4, 'wraps to the last');
+  assert.equal(en.menuIndex(items, 3, 'Home'), 0);
+  assert.equal(en.menuIndex(items, 0, 'End'), 4);
+  assert.equal(en.menuIndex(items, 0, 'Enter'), 0, 'any other key: where it was');
+  assert.equal(en.menuIndex(items, 0, 'Shift'), 0);
+});
+
+test('menu: a letter jumps to the next label that starts with it, accents and case ignored', () => {
+  const items = [{ id: 'a', label: 'Arquivar' }, { id: 'b', label: 'Apagar' }, { id: 'c', label: 'Ação' }, { id: 'd', label: 'Copiar' }, { id: 'e', label: 'Alta', disabled: true }];
+  assert.equal(en.menuIndex(items, -1, 'a'), 0);
+  assert.equal(en.menuIndex(items, 0, 'a'), 1);
+  assert.equal(en.menuIndex(items, 1, 'A'), 2, 'case ignored; Ação starts with a once folded');
+  assert.equal(en.menuIndex(items, 2, 'a'), 0, 'wraps, skipping the disabled one');
+  assert.equal(en.menuIndex(items, -1, 'c'), 3);
+  assert.equal(en.menuIndex(items, 1, 'z'), 1, 'no match: stays');
+  assert.equal(en.menuIndex(items, 1, ' '), 1, 'a space is the activate key, not a search');
+  assert.equal(en.menuIndex([], -1, 'ArrowDown'), -1);
+  assert.equal(en.menuIndex(['-', { id: 'x', label: 'X', disabled: true }], -1, 'ArrowDown'), -1, 'nothing can be chosen');
+  assert.equal(en.menuIndex(undefined, -1, 'Home'), -1);
+});
+
+test('menu: menuPosition lines the right edges up, opens below, flips above near the bottom and stays inside', () => {
+  const bound = { left: 0, top: 0, right: 800, bottom: 600 };
+  const size = { width: 180, height: 120 };
+  const open = (left, top, w = 30, h = 30) => ({ left, top, right: left + w, bottom: top + h });
+  assert.deepEqual(plain(en.menuPosition(open(500, 100), size, bound)), { left: 350, top: 134, flipped: false }, 'right edges line up (530 - 180), 4px under');
+  assert.deepEqual(plain(en.menuPosition(open(500, 540), size, bound)), { left: 350, top: 416, flipped: true }, 'no room below: above');
+  assert.equal(en.menuPosition(open(10, 100), size, bound).left, 10, 'would leave the area on the left: left edges line up');
+  assert.equal(en.menuPosition(open(790, 100, 10), size, bound).left, 616, 'kept inside on the right (800 - 180 - 4)');
+  const tiny = en.menuPosition(open(100, 20), { width: 100, height: 500 }, { left: 0, top: 0, right: 400, bottom: 300 });
+  assert.equal(tiny.flipped, false);
+  assert.equal(tiny.top, 4, 'too tall for both sides: clamped to the top of the area');
+  assert.equal(en.menuPosition(open(500, 100), size, bound, 10).top, 140, 'the gap is a parameter');
+  const inside = { left: 200, top: 50, right: 700, bottom: 400 };
+  assert.equal(en.menuPosition(open(150, 80), size, inside).left, 204, 'the area need not start at 0: kept 4px inside its left edge');
+  assert.equal(en.menuPosition(open(210, 80), size, inside).left, 210, 'left edges line up when right edges would leave the area');
+});
+
+test('kit 2.2: the public surface, the elements, the strings and the documentation', () => {
+  assert.equal(en.minor, 2);
+  assert.equal(en.version, 2, 'the version number stays');
+  for (const name of ['editCell', 'chooseMove', 'cellValue', 'cellText', 'menuIndex', 'menuPosition', 'moveId', 'dropIndex', 'letterOf']) assert.equal(typeof en[name], 'function', name);
+  for (const tag of ['t-row-editor', 't-menu', 't-action-bar']) {
+    assert.ok(KIT_JS.includes(`define('${tag}'`), `${tag} is defined`);
+    assert.ok(KIT_CSS.includes(tag), `${tag} is styled`);
+    assert.ok(DEMO_HTML.includes(`<${tag}`), `${tag} is in the demo`);
+  }
+  for (const word of ['t-reorder', 't-select', 'beforeRemove', 'hide-required', 'sortable', 'placeholder', 'badges', 'muted', 'confirmRemove', 'canRemove', 'newRow']) assert.ok(KIT_JS.includes(word), word);
+  assert.match(KIT_JS, /KIT v2\.2/);
+  const header = KIT_JS.slice(0, KIT_JS.indexOf('(function () {'));
+  for (const documented of ['t-row-editor', 't-menu', 'tkit.editCell', 'tkit.cellValue', 'tkit.cellText', 'placeholder="letter"', 'sortable', 't-reorder', 'tkit.chooseMove', 'beforeRemove', 't-action-bar', 'hide-required', 'tkit.menuIndex', 'tkit.menuPosition', 'tkit.moveId', 'tkit.dropIndex', 'tkit.letterOf', '.t-back', '.t-cell', 'chevron-up']) {
+    assert.ok(header.includes(documented), `the header comment documents ${documented}`);
+  }
+  for (const key of ['actions', 'saving', 'rangeBetween', 'rangeMin', 'rangeMax', 'notAnOption', 'scoreOf', 'clearValue', 'moveTo']) {
+    assert.notEqual(en.t(key), key, `en ${key}`);
+    assert.notEqual(pt.t(key), key, `pt ${key}`);
+  }
+  for (const key of ['actions', 'saving', 'rangeBetween', 'rangeMin', 'rangeMax', 'notAnOption', 'clearValue', 'moveTo']) assert.notEqual(en.t(key), pt.t(key), `${key} is translated`);
+  assert.equal(pt.t('actions'), 'Ações');
+  assert.equal(pt.t('moveTo'), 'Mover para');
+  for (const icon of ['chevron-up', 'arrow-up', 'arrow-down', 'more', 'move', 'star']) assert.ok(en.icons.includes(icon), `icon ${icon}`);
+});
+
+test('kit 2.2: the stylesheet has the classes the new pieces use, and the phone rules', () => {
+  for (const cls of ['.t-back', '.t-cell', '.t-cell-edit', '.t-star', '.t-filters', '.t-menu-pop', '.t-menu-item', '.t-re-row', '.t-re-handle', '.t-gal-letter', '.t-gal-media.letter', '.t-gal-tools', '.t-drop-before', '.t-drop-after']) {
+    assert.ok(KIT_CSS.includes(cls), `${cls} is styled`);
+  }
+  assert.match(KIT_CSS, /\.t-back \{[^}]*width: fit-content/, 'the back button is never a full-width bar');
+  assert.match(KIT_CSS, /@container t-app \(max-width: 640px\) \{[^}]*\.t-toolbar[^}]*\.t-input[^}]*width: 100% !important/, 'a search box in a filter row is a whole line on a phone');
+  assert.match(KIT_CSS, /@container t-app \(max-width: 640px\) \{[^}]*t-action-bar \{ position: sticky; bottom: 0/, 'the action bar sticks to the bottom on a phone');
+  assert.match(KIT_CSS, /safe-area-inset-bottom/);
+  for (const tone of ['accent', 'ok', 'warn', 'danger', 'info', 'violet']) assert.ok(KIT_CSS.includes(`.t-gal-media.letter.${tone}`), `letter tile tone ${tone}`);
 });

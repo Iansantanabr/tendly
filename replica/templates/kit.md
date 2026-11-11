@@ -181,3 +181,13 @@ Catalog, Checklist, Calculator and Compare came out 540–670 lines. These piece
 10. Phone fix: inside `.t-toolbar` / page filter rows, `.t-input` and `select.t-input` take the full width under 640px (Catalog's search and sort did not).
 
 Acceptance: all tests pass; pure parts tested (`editCell` value parsing per type, menu keyboard index logic, gallery reorder index logic); demo entries; header comment; report the API.
+
+### Using v2.2 in templates (mandatory from here on)
+
+- Ordered editable rows (steps, criteria, outputs, resources' slots): `<t-row-editor>` with `.cells(row, change)`; never a hand-built list with ↑/↓.
+- "…" actions: `<t-menu>`; never a `<select>` used as a menu.
+- In-place table cells: render `<button class="t-cell">` and call `tkit.editCell(button, spec)` once per render (it binds; `.open()` on the returned object).
+- Items without image in a gallery: `placeholder="letter"` and `tone`; several badges via `badges`; reorder mode via `sortable` + `t-reorder`.
+- Deleting an option that records use: `<t-list-editor>.beforeRemove` + `tkit.chooseMove(...)` (it replaces the built-in warning).
+- A screen's main actions on phones: `<t-action-bar>` (with `slot="summary"` for a result).
+- Sub-screen back links: `.t-back`. Filter rows: `.t-filters` (inputs go full width on phones).

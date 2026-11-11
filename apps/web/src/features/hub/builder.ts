@@ -13,6 +13,16 @@ export type TemplateId = "base" | "blank" | "kanban" | "table" | "catalog" | "ca
 /** Where a template sits in the "Start from" list. */
 export type TemplateGroup = "featured" | "organize" | "schedule" | "track" | "collect" | "decide" | "content";
 
+/** The headings of the "Start from" list, in the order they show; `featured` has none and comes first. A group with no template is not drawn. */
+export const TEMPLATE_GROUPS: readonly { id: Exclude<TemplateGroup, "featured">; /** Shown as `t(label)`. */ label: string }[] = [
+  { id: "organize", label: "Organize" },
+  { id: "schedule", label: "Agenda" },
+  { id: "track", label: "Track" },
+  { id: "collect", label: "Collect" },
+  { id: "decide", label: "Decide" },
+  { id: "content", label: "Content" },
+];
+
 export interface Template {
   id: TemplateId;
   /** Shown as `t(label)`. */
