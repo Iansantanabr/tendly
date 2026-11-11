@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
+    .stack > .t-card { display: grid; gap: var(--t-space-3); }
+    .day-card h2, .stack h2 { margin: 0; font-size: var(--t-text-lg); }
+    .day-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
+    .day-bar h2 { flex: 1 1 auto; margin: 0; font-size: var(--t-text-lg); }
+    .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+    .week button { display: grid; justify-items: center; gap: 2px; min-height: 44px; padding: 4px 0; border: 1px solid var(--t-line); border-radius: var(--t-radius-sm); background: var(--t-elevated); color: var(--t-ink-soft); font: inherit; font-size: var(--t-text-sm); cursor: pointer; }
+    .week button[aria-pressed="true"] { border-color: var(--t-accent); background: var(--t-accent-soft); color: var(--t-ink); }
+    .week i { width: 6px; height: 6px; border-radius: 50%; }
+    .week .has i { background: var(--t-accent); }
+    .scroller { overflow: auto; max-width: 100%; border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-surface); }
+    .slots { display: grid; grid-template-columns: 170px repeat(var(--cols), minmax(var(--cw), 1fr)); min-width: max-content; }
+    .slots .rl { position: sticky; left: 0; z-index: 1; padding: 10px; border-top: 1px solid var(--t-line); background: var(--t-surface); font-weight: 500; }
+    .slots .hh { padding: 6px 4px; border-left: 1px solid var(--t-line); color: var(--t-muted); font-size: var(--t-text-xs); white-space: nowrap; }
+    .slots .closed { grid-column: 2 / -1; padding: 10px; border-top: 1px solid var(--t-line); color: var(--t-muted); }
+    .slot { display: grid; align-content: center; gap: 1px; min-width: 0; min-height: 44px; margin: 3px; padding: 4px 8px; border: 1px solid var(--t-line); border-radius: var(--t-radius-sm); background: var(--t-elevated); color: var(--t-ink); font: inherit; font-size: var(--t-text-sm); text-align: left; cursor: pointer; }
+    .slot small { color: var(--t-muted); font-size: var(--t-text-xs); }
+    .slot b, .slot span { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+    .slot.free:hover:not(:disabled) { border-color: var(--t-accent); }
+    .slot:disabled { opacity: .45; cursor: default; }
+    .slot.busy { border-color: transparent; background: var(--t-fill); }
+    .slot.tone-accent { background: var(--t-accent-soft); } .slot.tone-ok { background: var(--t-ok-soft); } .slot.tone-warn { background: var(--t-warn-soft); }
+    .slot.tone-danger { background: var(--t-danger-soft); } .slot.tone-info { background: var(--t-app-blue-soft); } .slot.tone-violet { background: var(--t-app-violet-soft); }
+    .slot-list { display: grid; gap: 6px; } .slot-list .slot { margin: 0; }
+    .res-row { display: flex; align-items: center; gap: var(--t-space-3); padding: 8px 0; border-top: 1px solid var(--t-line); }
+    .res-row > :first-child { flex: 1; min-width: 0; }
+    .row-main { display: grid; gap: 2px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--t-ink); font: inherit; text-align: left; cursor: pointer; }
+    .narrow { display: none; }
+    @container t-app (max-width: 640px) { .wide { display: none; } .narrow { display: grid; gap: var(--t-space-3); } }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Seções">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="book" data-icon="calendar">Reservar</button>
+      <button data-view="mine" data-icon="list">Minhas reservas</button>
+      <button data-view="resources" data-icon="grid">Recursos</button>
+      <button data-view="history" data-icon="clock">Histórico</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Ajustes</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="book">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div></header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <div id="status"><t-state kind="loading"></t-state></div>
+          <t-empty-start id="empty" hidden title="Nenhum recurso ainda" text="Adicione uma sala, um carro ou qualquer coisa compartilhada que as pessoas reservam, ou carregue alguns exemplos para ver como funciona." action="Novo recurso"></t-empty-start>
+          <div id="book-body" class="stack" style="max-width: none" hidden>
+            <div class="day-bar">
+              <button type="button" class="t-icon-button" id="prev" aria-label="Dia anterior"></button>
+              <button type="button" class="t-button" id="today">Hoje</button>
+              <button type="button" class="t-icon-button" id="next" aria-label="Dia seguinte"></button>
+              <input type="date" class="t-input" id="day" aria-label="Data" style="width: auto">
+              <h2 id="day-title"></h2>
+            </div>
+            <div class="week" id="week"></div>
+            <section id="slots-block" class="t-card">
+              <div class="t-card-head"><h2>Por horário</h2></div>
+              <div class="scroller wide"><div class="slots" id="grid"></div></div>
+              <div class="narrow">
+                <label class="t-field"><span>Recurso</span><select id="phone-res"></select></label>
+                <div class="slot-list" id="phone-list"></div>
+              </div>
+            </section>
+            <section id="days-block" class="t-card"><div class="t-card-head"><h2>Por dia</h2></div><div id="days-list"></div></section>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="mine">
+        <div class="t-page">
+          <header class="t-page-head">
+            <h1 class="t-title">Minhas reservas</h1>
+            <div class="t-segment" role="group" aria-label="Mostrar"><button type="button" id="seg-mine" aria-pressed="true">Minhas</button><button type="button" id="seg-all" aria-pressed="false">Todas</button></div>
+          </header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <p class="t-muted" id="mine-hint" hidden>Defina seu nome em Ajustes para ver só as suas reservas.</p>
+          <t-state id="mine-empty" kind="empty" title="Nenhuma reserva próxima" text="As reservas que você fizer aparecem aqui, agrupadas por dia."></t-state>
+          <div class="stack" id="mine-list" style="max-width: none"></div>
+        </div>
+      </t-view>
+      <t-view name="resources">
+        <div class="t-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">Recursos</h1><p class="t-muted">Salas, equipamentos, carros: tudo que as pessoas reservam.</p></div>
+            <button type="button" class="t-button primary" id="new-res">Novo recurso</button>
+          </header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <t-gallery id="gallery" placeholder="letter" empty-text="Nenhum recurso ainda"></t-gallery>
+        </div>
+      </t-view>
+      <t-view name="history">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Histórico</h1><button type="button" class="t-button" id="export">Exportar CSV</button></header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <t-pills id="pills"></t-pills>
+          <t-table id="table" searchable empty-text="Nenhuma reserva ainda"></t-table>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Ajustes</h1></header>
+          <div class="stack">
+            <section class="t-card">
+              <div class="t-card-head"><h2>Reservas</h2></div>
+              <label class="t-field"><span>Seu nome</span><input type="text" id="s-person" placeholder="Usado como nome padrão nas novas reservas"></label>
+              <label class="t-field"><span>A semana começa na</span><select id="s-week"><option value="1">Segunda</option><option value="0">Domingo</option></select></label>
+              <label class="t-field"><span>Até quantos dias à frente dá para reservar</span><input type="number" id="s-horizon" min="1" max="365"></label>
+              <label class="t-switch-line"><input type="checkbox" class="t-switch" id="s-past"><span>Permitir reservas no passado</span></label>
+            </section>
+            <t-data-tools id="tools"></t-data-tools>
+          </div>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-detail id="detail" title-field="resourceName">
+    <button type="button" slot="actions" class="t-button" id="d-change">Alterar</button>
+    <button type="button" slot="actions" class="t-button danger" id="d-cancel">Cancelar reserva</button>
+  </t-detail>
+
+  <t-modal id="book-modal" title="Reserva">
+    <form id="book-form" class="t-form" novalidate>
+      <t-record-form id="book-rf"></t-record-form>
+      <div class="t-actions"><span class="t-spacer"></span><button type="button" class="t-button" data-close>Cancelar</button><button type="submit" class="t-button primary">Salvar</button></div>
+    </form>
+  </t-modal>
+
+  <t-modal id="cancel-modal" title="Cancelar reserva">
+    <form id="cancel-form" class="t-form">
+      <label class="t-field"><span>Motivo (opcional)</span><input type="text" id="c-reason"></label>
+      <div class="t-actions"><span class="t-spacer"></span><button type="button" class="t-button" data-close>Manter reserva</button><button type="submit" class="t-button danger">Cancelar reserva</button></div>
+    </form>
+  </t-modal>
+
+  <t-modal id="res-modal" title="Recurso">
+    <form id="res-form" class="t-form" novalidate>
+      <t-record-form id="res-rf"></t-record-form>
+      <div class="t-field"><span>Reservado por</span><div class="t-segment" role="group" aria-label="Reservado por"><button type="button" data-kind="slots">Horários</button><button type="button" data-kind="days">Dias</button></div></div>
+      <div id="slot-box" class="t-form">
+        <label class="t-field"><span>Duração do horário</span><select id="s-min"><option value="15">15 min</option><option value="30">30 min</option><option value="60">1 h</option><option value="90">1 h 30</option><option value="120">2 h</option></select></label>
+        <div class="t-toolbar"><label class="t-field"><span>De</span><input type="time" id="s-from"></label><label class="t-field"><span>Até</span><input type="time" id="s-to"></label></div>
+        <div class="t-field"><span>Dias da semana</span><div class="week" id="s-wd"></div></div>
+      </div>
+      <div class="t-actions"><button type="button" class="t-button danger" id="res-delete" hidden>Apagar</button><span class="t-spacer"></span><button type="button" class="t-button" data-close>Cancelar</button><button type="submit" class="t-button primary">Salvar</button></div>
+    </form>
+  </t-modal>
+
+  <script>
+    // PAGE MAP: LOGIC (pure rules, tested) -> text (T) -> state -> book screen -> my bookings -> resources -> history ->
+    // booking dialog and detail -> settings and data tools -> start-up. CSV, examples, delete-all and the empty state are kit elements.
+    // DATA: `resources` { name, kind: 'slots'|'days', tone, capacity, location, description, slot: { minutes, from, to, weekdays }, active, order }
+    //       `bookings` { resourceId, resourceName, date, start, end, endDate, who, purpose, status: 'confirmed'|'cancelled', cancelledReason, createdBy }.
+    // Settings (tendly.data key `settings`): { v, person, weekStart, horizonDays, allowPast }.
+    // Never double-book: save() lists the resource's bookings fresh, checks, inserts, then checks again (lostRace) and takes ours back if it lost.
+
+    // LOGIC START
+    // Pure booking rules: no DOM, no SDK. booking-logic.test.mjs runs this exact block in node:vm; it is identical in both language files.
+    // A resource is { id, kind: 'slots'|'days', slot: { minutes, from, to, weekdays: [0-6, 0 = Sunday] } }.
+    // A booking is { id, resourceId, date, start, end, endDate, status, created_at }: start/end for slots, endDate (inclusive) for days.
+    // limits = { today: 'YYYY-MM-DD', now: 'HH:MM', allowPast, horizonDays }.
+    const toMin = hm => { const p = String(hm || '').split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); };
+    const toHm = n => String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
+    const ymdWeekday = d => new Date(d + 'T12:00:00Z').getUTCDay();
+    const ymdAdd = (d, n) => new Date(Date.parse(d + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+    const rangeEnd = b => b.endDate || b.date;
+    const weekOf = (d, weekStart) => { const back = (ymdWeekday(d) - weekStart + 7) % 7; return [0, 1, 2, 3, 4, 5, 6].map(i => ymdAdd(d, i - back)); };
+    const gcd = (a, b) => b ? gcd(b, a % b) : a;
+    // The shared time axis of the slot resources: first start, last end, and a unit that divides every slot.
+    function timeline(resources) {
+      const rs = resources.filter(r => r.kind === 'slots' && r.slot);
+      if (!rs.length) return null;
+      let from = Infinity, to = 0, unit = 0;
+      rs.forEach(r => { const s = r.slot; from = Math.min(from, toMin(s.from)); to = Math.max(to, toMin(s.to)); unit = gcd(gcd(unit, toMin(s.from)), gcd(Number(s.minutes) || 60, toMin(s.to))); });
+      return { from, to, unit: unit || 60 };
+    }
+    // The slots of a resource on a date: [{ start, end }]; none for a days resource or a weekday it is closed.
+    function slotsFor(resource, date) {
+      const s = resource && resource.slot;
+      if (!s || resource.kind !== 'slots' || !(s.weekdays || []).includes(ymdWeekday(date))) return [];
+      const step = Math.max(1, Number(s.minutes) || 60), out = [];
+      for (let m = toMin(s.from); m + step <= toMin(s.to); m += step) out.push({ start: toHm(m), end: toHm(m + step) });
+      return out;
+    }
+    // Two intervals overlap when they share time: slots on the same date with start < otherEnd && otherStart < end (touching edges is fine);
+    // otherwise the date ranges (endDate inclusive) intersect.
+    function overlaps(a, b) {
+      if (a.start && b.start) return a.date === b.date && toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end);
+      return a.date <= rangeEnd(b) && b.date <= rangeEnd(a);
+    }
+    // The confirmed bookings of the same resource (other than the candidate itself) that the candidate overlaps.
+    function conflicts(candidate, bookings) {
+      if (candidate.status === 'cancelled') return [];
+      return bookings.filter(b => b.id !== candidate.id && b.status === 'confirmed' && b.resourceId === candidate.resourceId && overlaps(candidate, b));
+    }
+    // After inserting: true when someone else's conflicting booking was made first (earlier created_at, the id breaks a tie), so ours must go.
+    function lostRace(mine, bookings) {
+      return conflicts(mine, bookings).some(o => o.created_at < mine.created_at || (o.created_at === mine.created_at && o.id < mine.id));
+    }
+    function dateProblem(date, lim) {
+      lim = lim || {};
+      if (!lim.allowPast && lim.today && date < lim.today) return 'past';
+      if (lim.today && lim.horizonDays != null && date > ymdAdd(lim.today, lim.horizonDays)) return 'far';
+      return null;
+    }
+    function slotProblem(date, slot, lim) {
+      lim = lim || {};
+      return dateProblem(date, lim) || (!lim.allowPast && lim.today === date && lim.now && toMin(slot.start) < toMin(lim.now) ? 'past' : null);
+    }
+    // Every slot of the day with the booking in it (or null) and why it cannot be booked ('past' | 'far' | null).
+    function slotGrid(resource, date, bookings, lim) {
+      return slotsFor(resource, date).map(s => {
+        const booking = conflicts({ resourceId: resource.id, date, start: s.start, end: s.end }, bookings)[0] || null;
+        return { start: s.start, end: s.end, booking, problem: booking ? null : slotProblem(date, s, lim) };
+      });
+    }
+    const freeSlots = (resource, date, bookings, lim) => slotGrid(resource, date, bookings, lim).filter(c => !c.booking && !c.problem);
+    // How many consecutive free slots start at index i of a slotGrid (up to max): the lengths a person may pick.
+    function runFrom(grid, i, max) {
+      let n = 0;
+      while (i + n < grid.length && n < max && !grid[i + n].booking && !grid[i + n].problem && (n === 0 || grid[i + n].start === grid[i + n - 1].end)) n++;
+      return n;
+    }
+    // Why a booking cannot be made: 'order' | 'hours' | 'closed' | 'past' | 'far', or null when it is fine.
+    function checkBooking(resource, c, lim) {
+      if (resource.kind !== 'slots') return rangeEnd(c) < c.date ? 'order' : dateProblem(c.date, lim) || (dateProblem(rangeEnd(c), lim) === 'far' ? 'far' : null);
+      const s = resource.slot;
+      if (!c.start || !c.end || toMin(c.end) <= toMin(c.start)) return 'order';
+      if (toMin(c.start) < toMin(s.from) || toMin(c.end) > toMin(s.to)) return 'hours';
+      if (!(s.weekdays || []).includes(ymdWeekday(c.date))) return 'closed';
+      return slotProblem(c.date, c, lim);
+    }
+    // LOGIC END
+
+    // Everything visible in the script is in T and in the markup; the pt-BR twin changes only these.
+    const LANG = document.documentElement.lang;
+    const fmt = (d, o) => new Intl.DateTimeFormat(LANG, o).format(new Date(d + 'T12:00:00'));
+    const T = {
+      noun: { one: 'reserva', many: 'reservas' }, csvName: 'Reservas', free: 'Livre', allDay: 'Dia todo', details: 'Detalhes',
+      wd: d => fmt(d, { weekday: 'short' }), longDay: d => fmt(d, { weekday: 'long', day: 'numeric', month: 'long' }), shortDay: d => fmt(d, { weekday: 'short', day: 'numeric', month: 'short' }),
+      dur: m => m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''),
+      problems: { order: 'O fim precisa vir depois do início.', hours: 'Isso está fora do horário deste recurso.', closed: 'Este recurso não abre nesse dia da semana.', past: 'Esse horário já passou.', far: 'Isso está mais longe do que as reservas permitem.' },
+      taken: 'Esse horário já está reservado.', justTaken: 'Esse horário acabou de ser reservado por outra pessoa.', conflict: 'Alguém mudou isto enquanto isso; recarreguei.', notFound: 'Essa reserva não existe mais.', noResource: 'Esse recurso não existe mais.',
+      fWho: 'Quem', fPurpose: 'Finalidade', fDate: 'Data', fStart: 'Início', fWhen: 'Quando', fEnd: 'Fim', fUntil: 'Último dia', fLength: 'Duração', fResource: 'Recurso', fStatus: 'Situação', fReason: 'Motivo do cancelamento',
+      confirmed: 'Confirmada', cancelled: 'Cancelada', book: 'Reservar', changeTitle: 'Alterar reserva', until: (who, d) => 'Reservado por ' + who + ' até ' + tkit.date(d),
+      change: 'Alterar', cancelBooking: 'Cancelar reserva', actions: 'Ações', all: 'Todos',
+      fName: 'Nome', fColor: 'Cor', fCapacity: 'Capacidade', fLocation: 'Local', fDescription: 'Descrição', fActive: 'Disponível para reserva',
+      newResource: 'Novo recurso', editResource: 'Editar recurso', slotErr: 'Confira a duração, o horário e os dias.', hasBookings: 'Este recurso tem reservas. Desligue "Disponível para reserva" em vez de apagar.',
+      deleteQ: name => 'Apagar "' + name + '"?', del: 'Apagar', kinds: { slots: 'Horários', days: 'Dias' },
+      hours: s => s.from + '–' + s.to + ' · ' + T.dur(s.minutes), loadFail: 'Não foi possível carregar as reservas', retry: 'Tentar de novo',
+      exported: n => 'Exportado: ' + n + (n === 1 ? ' linha' : ' linhas'),
+      sumDay: (d, parts) => 'Reservas de ' + T.shortDay(d) + ': ' + parts, sumSlots: (name, n, m) => name + ' ' + n + ' de ' + m + ' horários ocupados', sumClosed: name => name + ' fechado',
+      sumFree: name => name + ' livre', sumTaken: name => name + ' reservado', sumOther: n => n + (n === 1 ? ' reserva próxima' : ' reservas próximas'),
+      sel: (b, when) => 'Reserva: ' + b.resourceName + ', ' + when + ', ' + b.who,
+      // Examples: resources, then bookings [resource index, days from today, start, end, last day offset, who, purpose, cancelled?]
+      exRes: [
+        { name: 'Sala de reunião 1', kind: 'slots', tone: 'info', capacity: '8 pessoas', location: 'Segundo andar', minutes: 30 },
+        { name: 'Sala de reunião 2', kind: 'slots', tone: 'violet', capacity: '4 pessoas', location: 'Segundo andar', minutes: 60 },
+        { name: 'Carro da empresa', kind: 'days', tone: 'warn', capacity: '5 lugares', location: 'Garagem' },
+        { name: 'Projetor', kind: 'days', tone: 'ok', capacity: '', location: 'Recepção' }
+      ],
+      exBookings: [
+        [0, 0, '09:00', '10:00', 0, 'Ana', 'Alinhamento semanal'], [0, 0, '14:00', '15:00', 0, 'Marcos', 'Entrevista com candidata'],
+        [0, 1, '10:00', '11:30', 0, 'Paula', 'Treinamento da equipe'], [1, 0, '11:00', '12:00', 0, 'Rafael', 'Reunião com fornecedor'],
+        [1, 1, '15:00', '16:00', 0, 'Ana', 'Revisão de proposta'], [1, 2, '09:00', '10:00', 0, 'Marcos', 'Planejamento do trimestre'],
+        [2, 1, null, null, 3, 'Paula', 'Visitas a clientes'], [3, 2, null, null, 2, 'Rafael', 'Apresentação no auditório'],
+        [0, 3, '16:00', '17:00', 0, 'Rafael', 'Reunião adiada', true], [2, 5, null, null, 6, 'Marcos', 'Viagem cancelada', true]
+      ]
+    };
+
+    const DEFAULTS = { v: 1, person: '', weekStart: 1, horizonDays: 60, allowPast: false };
+    const STATUS = [{ id: 'confirmed', label: T.confirmed, tone: 'ok' }, { id: 'cancelled', label: T.cancelled, tone: 'danger' }];
+    const BOOK_FIELDS = [
+      { id: 'resourceName', label: T.fResource, type: 'text', required: true }, { id: 'date', label: T.fDate, type: 'date', required: true },
+      { id: 'start', label: T.fStart, type: 'time' }, { id: 'end', label: T.fEnd, type: 'time' }, { id: 'endDate', label: T.fUntil, type: 'date' },
+      { id: 'who', label: T.fWho, type: 'text', required: true }, { id: 'purpose', label: T.fPurpose, type: 'text' },
+      { id: 'status', label: T.fStatus, type: 'choice', options: STATUS }, { id: 'cancelledReason', label: T.fReason, type: 'text' }
+    ];
+    const fld = (id, extra) => Object.assign({}, BOOK_FIELDS.find(f => f.id === id), extra);
+    const RES_FIELDS = [
+      { id: 'name', label: T.fName, type: 'text', required: true },
+      { id: 'tone', label: T.fColor, type: 'choice', options: tkit.tones.filter(Boolean).map(x => ({ id: x, label: tkit.t('tone_' + x), tone: x })) },
+      { id: 'capacity', label: T.fCapacity, type: 'text' }, { id: 'location', label: T.fLocation, type: 'text' },
+      { id: 'description', label: T.fDescription, type: 'longtext' }, { id: 'active', label: T.fActive, type: 'checkbox' }
+    ];
+    const DEFAULT_SLOT = { minutes: 60, from: '08:00', to: '18:00', weekdays: [1, 2, 3, 4, 5] };
+
+    const resourcesC = tendly.db.collection('resources'), bookingsC = tendly.db.collection('bookings');
+    const $ = id => document.getElementById(id), h = tkit.h;
+    const app = document.querySelector('t-app');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let S, resStore, bksStore, loadedR = false, loadedB = false, R = [], bks = [];
+    let day = tkit.today(), mobileRes = null, mineAll = false, histRes = '', booking = null, cancelling = null, editingRes = null, kind = 'slots', imported = [];
+
+    // ---- helpers -----------------------------------------------------------------------------
+    const flat = r => Object.assign({}, r.data, { id: r.id, rev: r.rev, created_at: r.created_at });
+    const rawOf = id => bksStore.records.find(r => r.id === id);
+    const live = () => bks.filter(b => b.status === 'confirmed');
+    const limits = () => { const n = new Date(); return { today: tkit.today(), now: toHm(n.getHours() * 60 + n.getMinutes()), allowPast: S.value.allowPast, horizonDays: S.value.horizonDays }; };
+    const mineOf = b => !S.value.person || tkit.fold(b.who) === tkit.fold(S.value.person);
+    const whenText = b => b.start ? b.start + '–' + b.end : rangeEnd(b) !== b.date ? tkit.date(b.date) + ' – ' + tkit.date(rangeEnd(b)) : T.allDay;
+    const fresh = async resourceId => (await bookingsC.list({ where: { resourceId, status: 'confirmed' }, limit: 5000 })).map(flat);
+    const resourceOf = b => R.find(r => r.id === b.resourceId);
+
+    // Check, write, check again. Throws an Error whose message the person reads.
+    async function save(resource, doc, existing) {
+      const cand = Object.assign({ resourceId: resource.id }, doc, existing ? { id: existing.id } : {});
+      const problem = checkBooking(resource, cand, limits());
+      if (problem) throw new Error(T.problems[problem]);
+      if (conflicts(cand, await fresh(resource.id)).length) throw new Error(T.taken);
+      const data = Object.assign({}, doc, { resourceId: resource.id, resourceName: resource.name, status: 'confirmed' });
+      if (existing) {
+        const before = { date: existing.date, start: existing.start, end: existing.end, endDate: existing.endDate, who: existing.who, purpose: existing.purpose };
+        await bookingsC.update(existing.id, data, { rev: existing.rev });
+        if (conflicts(cand, await fresh(resource.id)).length) { await bookingsC.update(existing.id, before); throw new Error(T.justTaken); }
+        return;
+      }
+      const record = await bookingsC.insert(Object.assign(data, { createdBy: S.value.person || doc.who }));
+      if (lostRace(flat(record), await fresh(resource.id))) { await bookingsC.remove(record.id); throw new Error(T.justTaken); }
+    }
+
+    // ---- book screen -------------------------------------------------------------------------
+    // One entry per cell: a free slot (with how many slots in a row are free) or a booking shown once over the slots it covers.
+    function cellsOf(r) {
+      const grid = slotGrid(r, day, live(), limits()), seen = {}, out = [];
+      grid.forEach((c, i) => {
+        if (!c.booking) return out.push(Object.assign({ run: runFrom(grid, i, 4) }, c));
+        if (!seen[c.booking.id]) { seen[c.booking.id] = 1; out.push({ booking: c.booking }); }
+      });
+      return out;
+    }
+    function slotButton(r, c) {
+      const b = c.booking;
+      if (b) return h('button', { type: 'button', class: 'slot busy tone-' + (r.tone || 'none'), title: b.who + (b.purpose ? ': ' + b.purpose : ''), onClick: () => showBooking(rawOf(b.id)) },
+        h('small', { text: b.start + '–' + b.end }), h('b', { text: b.who }), b.purpose ? h('span', { text: b.purpose }) : null);
+      return h('button', { type: 'button', class: 'slot free', disabled: !!c.problem, title: c.problem ? T.problems[c.problem] : '', onClick: () => openBooking({ resource: r, date: day, start: c.start, run: c.run }) },
+        h('small', { text: c.start + '–' + c.end }), h('span', { text: T.free }));
+    }
+    function drawGrid(rs) {
+      const grid = $('grid'), tl = timeline(rs);
+      tkit.clear(grid);
+      if (!tl) return;
+      const col = m => Math.round((m - tl.from) / tl.unit) + 2;
+      grid.style.setProperty('--cols', (tl.to - tl.from) / tl.unit);
+      grid.style.setProperty('--cw', Math.max(36, tl.unit * 2) + 'px');
+      grid.appendChild(h('div', { class: 'hh', style: { gridRow: 1, gridColumn: 1 } }));
+      for (let m = tl.from; m < tl.to; m += 60) if (m % tl.unit === 0) grid.appendChild(h('div', { class: 'hh', text: toHm(m), style: { gridRow: 1, gridColumn: col(m) + ' / span ' + Math.max(1, Math.round(60 / tl.unit)) } }));
+      rs.forEach((r, i) => {
+        const row = i + 2, cells = cellsOf(r);
+        grid.appendChild(h('div', { class: 'rl', style: { gridRow: row, gridColumn: 1 } }, h('div', { text: r.name }), r.capacity ? h('small', { class: 't-muted', text: r.capacity }) : null));
+        if (!cells.length) return grid.appendChild(h('div', { class: 'closed', text: T.problems.closed, style: { gridRow: row } }));
+        cells.forEach(c => {
+          const s = toMin(c.booking ? c.booking.start : c.start), e = toMin(c.booking ? c.booking.end : c.end), from = Math.max(s, tl.from);
+          const cell = slotButton(r, c);
+          cell.style.gridRow = row;
+          cell.style.gridColumn = col(from) + ' / span ' + Math.max(1, Math.ceil((Math.min(e, tl.to) - from) / tl.unit));
+          grid.appendChild(cell);
+        });
+      });
+    }
+    function drawPhone(rs) {
+      const pick = $('phone-res'), list = $('phone-list');
+      if (!rs.some(r => r.id === mobileRes)) mobileRes = rs[0] && rs[0].id;
+      tkit.clear(pick); tkit.clear(list);
+      rs.forEach(r => pick.appendChild(h('option', { value: r.id, text: r.name })));
+      pick.value = mobileRes || '';
+      const r = rs.find(x => x.id === mobileRes), cells = r ? cellsOf(r) : [];
+      if (r && !cells.length) list.appendChild(h('p', { class: 't-muted', text: T.problems.closed }));
+      cells.forEach(c => list.appendChild(slotButton(r, c)));
+    }
+    function drawDays(rs) {
+      const list = $('days-list');
+      tkit.clear(list);
+      rs.forEach(r => {
+        const hit = conflicts({ resourceId: r.id, date: day }, live())[0], bad = dateProblem(day, limits());
+        list.appendChild(h('div', { class: 'res-row' },
+          h('div', {}, h('b', { text: r.name }), h('div', { class: 't-muted', text: hit ? T.until(hit.who, rangeEnd(hit)) : T.free })),
+          hit ? h('button', { type: 'button', class: 't-button', text: T.details, onClick: () => showBooking(rawOf(hit.id)) })
+            : h('button', { type: 'button', class: 't-button primary', text: T.book, disabled: !!bad, title: bad ? T.problems[bad] : '', onClick: () => openBooking({ resource: r, date: day }) })));
+      });
+    }
+    function drawBook() {
+      const active = R.filter(r => r.active !== false), slotsRes = active.filter(r => r.kind === 'slots'), daysRes = active.filter(r => r.kind !== 'slots');
+      $('empty').hidden = active.length > 0;
+      $('book-body').hidden = !active.length;
+      if (!active.length) return;
+      $('day').value = day;
+      $('day-title').textContent = T.longDay(day);
+      const strip = $('week');
+      tkit.clear(strip);
+      weekOf(day, S.value.weekStart).forEach(d => strip.appendChild(h('button', { type: 'button', class: live().some(b => mineOf(b) && overlaps({ date: d }, b)) ? 'has' : '', 'aria-pressed': String(d === day), 'aria-label': T.longDay(d), onClick: () => go(d) },
+        h('small', { text: T.wd(d) }), h('b', { text: String(+d.slice(8)) }), h('i'))));
+      $('slots-block').hidden = !slotsRes.length;
+      $('days-block').hidden = !daysRes.length;
+      drawGrid(slotsRes); drawPhone(slotsRes); drawDays(daysRes);
+    }
+    function go(d) { day = d; drawBook(); setSummary(); }
+    $('prev').appendChild(tkit.icon('arrow-left', 16)); $('next').appendChild(tkit.icon('arrow-right', 16));
+    $('prev').addEventListener('click', () => go(ymdAdd(day, -1)));
+    $('next').addEventListener('click', () => go(ymdAdd(day, 1)));
+    $('today').addEventListener('click', () => go(tkit.today()));
+    $('day').addEventListener('change', event => { if (event.target.value) go(event.target.value); });
+    $('phone-res').addEventListener('change', event => { mobileRes = event.target.value; drawPhone(R.filter(r => r.active !== false && r.kind === 'slots')); });
+    $('empty').addEventListener('t-action', () => openResource(null));
+    $('empty').addEventListener('t-examples', () => exampleDocs().then(docs => tkit.samples.load(bookingsC, docs)).catch(fail));
+
+    // ---- my bookings -------------------------------------------------------------------------
+    function drawMine() {
+      const list = $('mine-list'), now = tkit.today();
+      tkit.clear(list);
+      const rows = live().filter(b => rangeEnd(b) >= now && (mineAll || mineOf(b))).sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''));
+      $('mine-empty').hidden = rows.length > 0;
+      $('mine-hint').hidden = !!S.value.person;
+      const groups = tkit.groupBy(rows, 'date');
+      Object.keys(groups).sort().forEach(d => list.appendChild(h('section', { class: 't-card day-card' }, h('div', { class: 't-card-head' }, h('h2', { text: T.longDay(d) })), groups[d].map(b => {
+        const menu = h('t-menu', { label: T.actions });
+        menu.items = [{ id: 'change', label: T.change, icon: 'edit' }, { id: 'cancel', label: T.cancelBooking, icon: 'trash', tone: 'danger' }];
+        menu.addEventListener('t-select', event => event.detail.id === 'cancel' ? askCancel(b) : openBooking({ resource: resourceOf(b), existing: b }));
+        return h('div', { class: 'res-row' }, h('button', { type: 'button', class: 'row-main', onClick: () => showBooking(rawOf(b.id)) },
+          h('b', { text: whenText(b) + ' · ' + b.resourceName }), h('span', { class: 't-muted', text: [b.who, b.purpose].filter(Boolean).join(' · ') })), menu);
+      }))));
+    }
+    [['seg-mine', false], ['seg-all', true]].forEach(([id, all]) => $(id).addEventListener('click', () => {
+      mineAll = all; $('seg-mine').setAttribute('aria-pressed', String(!all)); $('seg-all').setAttribute('aria-pressed', String(all)); drawMine();
+    }));
+
+    // ---- resources ---------------------------------------------------------------------------
+    function drawResources() {
+      $('gallery').items = R.map(r => ({ id: r.id, title: r.name, subtitle: r.kind === 'slots' ? T.hours(r.slot) : T.kinds.days, tone: r.tone || '', muted: r.active === false,
+        badges: [{ text: T.kinds[r.kind === 'slots' ? 'slots' : 'days'] }].concat(r.capacity ? [{ text: r.capacity }] : []), meta: r.location || '' }));
+    }
+    $('gallery').addEventListener('t-open', event => openResource(R.find(r => r.id === event.detail.id)));
+    $('new-res').addEventListener('click', () => openResource(null));
+    function setKind(k) {
+      kind = k;
+      document.querySelectorAll('[data-kind]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === k)));
+      $('slot-box').hidden = k !== 'slots';
+    }
+    document.querySelectorAll('[data-kind]').forEach(b => b.addEventListener('click', () => setKind(b.dataset.kind)));
+    $('s-wd').addEventListener('click', event => { const b = event.target.closest('button'); if (b) b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); });
+    function openResource(r) {
+      editingRes = r;
+      const slot = (r && r.slot) || DEFAULT_SLOT, wd = $('s-wd');
+      $('res-rf').fields = RES_FIELDS;
+      $('res-rf').value = r || { active: true, tone: 'info' };
+      setKind(r ? r.kind : 'slots');
+      $('s-min').value = String(slot.minutes); $('s-from').value = slot.from; $('s-to').value = slot.to;
+      tkit.clear(wd);
+      [0, 1, 2, 3, 4, 5, 6].map(i => (S.value.weekStart + i) % 7).forEach(d => wd.appendChild(h('button', { type: 'button', dataset: { d: String(d) }, 'aria-pressed': String(slot.weekdays.includes(d)) },
+        h('small', { text: T.wd(ymdAdd('2026-11-08', d)) }))));
+      $('res-delete').hidden = !r;
+      $('res-modal').title = r ? T.editResource : T.newResource;
+      $('res-modal').open();
+    }
+    $('res-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      let d;
+      try { d = await $('res-rf').submit(); } catch (error) { if (error.code !== 'invalid') fail(error); return; }
+      const slot = { minutes: +$('s-min').value, from: $('s-from').value, to: $('s-to').value, weekdays: [...$('s-wd').querySelectorAll('[aria-pressed="true"]')].map(b => +b.dataset.d) };
+      if (kind === 'slots' && (!slot.weekdays.length || !slot.from || toMin(slot.to) - toMin(slot.from) < slot.minutes)) return tkit.toast(T.slotErr, { tone: 'error' });
+      const data = { name: d.name, tone: d.tone || '', capacity: d.capacity || '', location: d.location || '', description: d.description || '', active: d.active !== false, kind, slot: kind === 'slots' ? slot : DEFAULT_SLOT };
+      try {
+        if (editingRes) await resourcesC.update(editingRes.id, data, { rev: editingRes.rev });
+        else await resourcesC.insert(Object.assign(data, { order: Math.max(0, ...R.map(r => r.order || 0)) + 1 }));
+        $('res-modal').close();
+      } catch (error) { if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); editingRes = flat(error.current); } else fail(error); }
+    });
+    $('res-delete').addEventListener('click', async () => {
+      if (bks.some(b => b.resourceId === editingRes.id)) return tkit.toast(T.hasBookings, { tone: 'error' });
+      if (!await tkit.confirm(T.deleteQ(editingRes.name), { confirm: T.del, tone: 'danger' })) return;
+      try { await resourcesC.remove(editingRes.id); $('res-modal').close(); } catch (error) { fail(error); }
+    });
+
+    // ---- history -----------------------------------------------------------------------------
+    function drawHistory() {
+      const rows = bks.slice().sort((a, b) => b.date.localeCompare(a.date) || (b.start || '').localeCompare(a.start || ''));
+      $('pills').options = [{ value: '', label: T.all, count: rows.length }].concat(R.map(r => ({ value: r.id, label: r.name, count: rows.filter(b => b.resourceId === r.id).length })));
+      $('table').columns = [{ key: 'date', label: T.fDate, type: 'date' }, { key: 'resourceName', label: T.fResource }, { key: 'when', label: T.fWhen }, { key: 'who', label: T.fWho }, { key: 'purpose', label: T.fPurpose },
+        { key: 'statusLabel', label: T.fStatus, type: 'badge', tones: { [T.confirmed]: 'ok', [T.cancelled]: 'danger' } }];
+      $('table').rows = rows.map(b => Object.assign({}, b, { when: whenText(b), statusLabel: b.status === 'cancelled' ? T.cancelled : T.confirmed }));
+    }
+    $('pills').value = '';
+    $('pills').addEventListener('t-change', event => { histRes = event.detail.value; $('table').filter = histRes ? row => row.resourceId === histRes : null; });
+    $('table').addEventListener('t-open', event => showBooking(rawOf(event.detail.id)));
+    $('export').addEventListener('click', () => {
+      const rows = bks.slice().sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''));
+      tkit.csv.download(tkit.csv.stringify(rows, tkit.csv.columnsFor(BOOK_FIELDS), { delimiter: tkit.csv.delimiter() }), tkit.csv.filename(document.title, T.csvName, tkit.today()));
+      tkit.toast(T.exported(rows.length));
+    });
+
+    // ---- booking dialog, cancel, detail ------------------------------------------------------
+    function dialogFields(ctx) {
+      const base = [fld('who', { required: true }), fld('purpose')], r = ctx.resource;
+      if (ctx.run) {   // from a free slot: the start is known, ask only the length
+        const options = [];
+        for (let n = 1; n <= ctx.run; n++) options.push({ id: String(n), label: T.dur(n * r.slot.minutes) });
+        return [{ id: 'length', label: T.fLength, type: 'choice', required: true, options }].concat(base);
+      }
+      return [fld('date', { required: true })].concat(r.kind === 'slots' ? [fld('start', { required: true }), fld('end', { required: true })] : [fld('endDate')], base);
+    }
+    function openBooking(ctx) {
+      if (!ctx.resource) return tkit.toast(T.noResource, { tone: 'error' });
+      booking = ctx;
+      $('book-rf').fields = dialogFields(ctx);
+      $('book-rf').value = ctx.existing ? Object.assign({}, ctx.existing) : { date: ctx.date, who: S.value.person, length: '1' };
+      $('book-modal').title = ctx.existing ? T.changeTitle : ctx.resource.name + (ctx.run ? ' · ' + T.shortDay(ctx.date) + ' · ' + ctx.start : '');
+      $('book-modal').open();
+      $('book-rf').focus();
+    }
+    $('book-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      let d;
+      try { d = await $('book-rf').submit(); } catch (error) { if (error.code !== 'invalid') fail(error); return; }
+      const r = booking.resource, out = { date: d.date || booking.date, who: d.who, purpose: d.purpose || '', start: null, end: null, endDate: null };
+      if (r.kind === 'slots') {
+        out.start = booking.run ? booking.start : d.start;
+        out.end = booking.run ? toHm(toMin(out.start) + Number(d.length) * r.slot.minutes) : d.end;
+      } else out.endDate = d.endDate || out.date;
+      try {
+        await save(r, out, booking.existing);
+        $('book-modal').close();
+        if (!S.value.person) S.save({ person: out.who }).catch(fail);
+      } catch (error) {
+        if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); booking.existing = flat(error.current); $('book-rf').value = Object.assign({}, booking.existing); }
+        else fail(error);
+      }
+    });
+    function askCancel(b) { cancelling = b; $('c-reason').value = ''; $('cancel-modal').open(); }
+    $('cancel-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      try { await bookingsC.update(cancelling.id, { status: 'cancelled', cancelledReason: $('c-reason').value.trim() }, { rev: cancelling.rev }); $('cancel-modal').close(); }
+      catch (error) { if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); cancelling = flat(error.current); } else fail(error); }
+    });
+    document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('t-modal').close()));
+    document.querySelectorAll('#book-form, #res-form').forEach(f => f.addEventListener('input', () => tendly.host.holdReload(true)));
+    document.querySelectorAll('t-modal').forEach(m => m.addEventListener('t-close', () => tendly.host.holdReload(false)));
+
+    function showBooking(record) {
+      if (!record) return;
+      const detail = $('detail'), b = flat(record), cancelled = b.status === 'cancelled';
+      detail.fields = BOOK_FIELDS;
+      detail.record = record;
+      $('d-change').hidden = $('d-cancel').hidden = cancelled;
+      if (!detail.opened) detail.open();
+      tkit.context({ selection: T.sel(b, whenText(b)) });
+    }
+    $('d-change').addEventListener('click', () => openBooking({ resource: resourceOf(flat($('detail').record)), existing: flat($('detail').record) }));
+    $('d-cancel').addEventListener('click', () => askCancel(flat($('detail').record)));
+    // A link like #history/<id> opens that booking; closing the drawer clears the id.
+    function syncRoute(route) {
+      route = route || tkit.route.get();
+      if (!loadedR || !loadedB) return;
+      const detail = $('detail'), record = route.id && rawOf(route.id);
+      if (record) { if (!(detail.opened && detail.record && detail.record.id === record.id)) showBooking(record); }
+      else if (route.id) { tkit.toast(T.notFound); tkit.route.close(); }
+      else if (detail.opened) detail.close();
+    }
+
+    // ---- settings and data tools -------------------------------------------------------------
+    const tools = $('tools');
+    async function sampleResources() {   // the example resources, created once; their ids are needed by the example bookings
+      if (!R.some(r => r._sample)) await tkit.samples.load(resourcesC, T.exRes.map((e, i) => ({ name: e.name, kind: e.kind, tone: e.tone, capacity: e.capacity, location: e.location, description: '', active: true, order: R.length + i + 1,
+        slot: e.kind === 'slots' ? { minutes: e.minutes, from: '08:00', to: '18:00', weekdays: [1, 2, 3, 4, 5] } : DEFAULT_SLOT })));
+      return (await resourcesC.list({ where: { _sample: true } })).map(flat);
+    }
+    async function exampleDocs() {
+      const rs = await sampleResources(), workday = n => { let d = ymdAdd(tkit.today(), n); while ([0, 6].includes(ymdWeekday(d))) d = ymdAdd(d, 1); return d; };
+      return T.exBookings.map(([i, offset, start, end, last, who, purpose, off]) => {
+        const r = rs.find(x => x.name === T.exRes[i].name), date = start ? workday(offset) : ymdAdd(tkit.today(), offset);
+        return { resourceId: r.id, resourceName: r.name, date, start, end, endDate: start ? null : ymdAdd(tkit.today(), last), who, purpose, status: off ? 'cancelled' : 'confirmed', cancelledReason: off ? purpose : '', createdBy: who };
+      });
+    }
+    const clearExamples = () => Promise.all([tkit.samples.clear(bookingsC), tkit.samples.clear(resourcesC)]).catch(fail);
+    tools.collection = bookingsC;
+    tools.fields = BOOK_FIELDS;
+    tools.noun = T.noun;
+    tools.filename = T.csvName;
+    tools.examples = exampleDocs;
+    // An imported row names its resource; rows for unknown resources or for taken times are skipped.
+    tools.beforeInsert = doc => {
+      const r = R.find(x => tkit.fold(x.name) === tkit.fold(doc.resourceName || ''));
+      if (!r || !doc.date || (r.kind === 'slots' && !(doc.start && doc.end))) return null;
+      const data = Object.assign({}, doc, { resourceId: r.id, resourceName: r.name, status: doc.status || 'confirmed', endDate: r.kind === 'slots' ? null : doc.endDate || doc.date, createdBy: doc.who });
+      if (conflicts(data, live().concat(imported)).length) return null;
+      if (data.status === 'confirmed') imported.push(data);
+      return data;
+    };
+    tools.addEventListener('t-imported', () => { imported = []; });
+    tools.addEventListener('t-examples', event => { if (event.detail.action === 'cleared') tkit.samples.clear(resourcesC).catch(fail); });
+    document.querySelectorAll('.sample-banner').forEach(b => b.addEventListener('t-clear', clearExamples));
+    $('s-person').addEventListener('change', event => S.save({ person: event.target.value.trim() }).catch(fail));
+    $('s-week').addEventListener('change', event => S.save({ weekStart: Number(event.target.value) }).catch(fail));
+    $('s-horizon').addEventListener('change', event => S.save({ horizonDays: Math.min(365, Math.max(1, parseInt(event.target.value, 10) || DEFAULTS.horizonDays)) }).catch(fail));
+    $('s-past').addEventListener('change', event => S.save({ allowPast: event.target.checked }).catch(fail));
+    function applySettings() {
+      const v = S.value;
+      $('s-person').value = v.person; $('s-week').value = String(v.weekStart); $('s-horizon').value = v.horizonDays; $('s-past').checked = v.allowPast;
+      update();
+    }
+
+    // ---- render everything, summary, start-up ------------------------------------------------
+    function setSummary() {
+      if (!loadedR || !loadedB) return;
+      const view = app.view || 'book';
+      if (view !== 'book') return tkit.context({ summary: T.sumOther(live().filter(b => rangeEnd(b) >= tkit.today()).length) });
+      const parts = R.filter(r => r.active !== false).map(r => {
+        if (r.kind === 'slots') { const g = slotGrid(r, day, live(), limits()); return g.length ? T.sumSlots(r.name, g.filter(c => c.booking).length, g.length) : T.sumClosed(r.name); }
+        return conflicts({ resourceId: r.id, date: day }, live()).length ? T.sumTaken(r.name) : T.sumFree(r.name);
+      });
+      tkit.context({ summary: T.sumDay(day, parts.join('; ')) });
+    }
+    function update() {
+      if (!loadedR || !loadedB) return;
+      tkit.clear($('status'));
+      R = resStore.records.map(flat).sort((a, b) => (a.order || 0) - (b.order || 0) || a.created_at.localeCompare(b.created_at));
+      bks = bksStore.records.map(flat);
+      drawBook(); drawMine(); drawResources(); drawHistory();
+      document.querySelectorAll('.sample-banner').forEach(b => { b.count = tkit.samples.count(bksStore.records) + tkit.samples.count(resStore.records); });
+      tools.records = bksStore.records;
+      const detail = $('detail');
+      if (detail.opened) {
+        const record = detail.record && rawOf(detail.record.id);
+        if (record) showBooking(record); else detail.close();
+      }
+      setSummary();
+      syncRoute();
+    }
+    const loadError = error => {
+      tkit.clear($('status'));
+      $('status').appendChild(h('t-state', { kind: 'error', title: T.loadFail, text: error.message }, h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => { resStore.reload(); bksStore.reload(); } })));
+    };
+    app.addEventListener('t-view', () => setTimeout(setSummary, 0));
+    tkit.route.on(syncRoute);
+    (async () => {
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) fail(S.error);
+      S.on(applySettings);
+      resStore = tkit.live(resourcesC, () => { loadedR = true; update(); }, { limit: 5000, onError: loadError });
+      bksStore = tkit.live(bookingsC, () => { loadedB = true; update(); }, { limit: 5000, onError: loadError });
+      applySettings();
+    })();
+  </script>
+</body>
+</html>

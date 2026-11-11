@@ -61,11 +61,14 @@ test('the name is two or three telling words, title-cased, and the letter and co
 });
 
 test('the templates match the server\'s, and the first message says what was made', () => {
-  assert.deepEqual(TEMPLATES.map(template => template.id), ['base', 'blank', 'kanban', 'table', 'catalog', 'calendar', 'dashboard', 'checklist', 'form', 'calculator', 'compare', 'knowledge']);
+  assert.deepEqual(TEMPLATES.map(template => template.id), ['base', 'blank', 'kanban', 'table', 'catalog', 'calendar', 'booking', 'dashboard', 'checklist', 'form', 'quiz', 'calculator', 'compare', 'knowledge', 'map']);
   assert.equal(guessTemplate('checklist de abertura da loja'), 'checklist');
   assert.equal(guessTemplate('simulador de comissão'), 'calculator');
   assert.equal(guessTemplate('comparar propostas de fornecedores'), 'compare');
   assert.equal(guessTemplate('catálogo de produtos'), 'catalog');
+  assert.equal(guessTemplate('reserva das salas de reunião'), 'booking');
+  assert.equal(guessTemplate('quiz de treinamento de atendimento'), 'quiz');
+  assert.equal(guessTemplate('mapa das lojas e obras'), 'map');
   const prompt = builderPrompt({ app: { name: 'Vendas', slug: 'vendas' }, sentence: 'quadro de vendas por etapa', template: 'kanban' });
   assert.match(prompt, /I just created the app "Vendas" in `apps\/vendas\/` from the "Kanban \/ CRM" template/);
   assert.match(prompt, /quadro de vendas por etapa/);

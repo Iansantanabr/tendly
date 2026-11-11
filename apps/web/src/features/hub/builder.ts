@@ -9,7 +9,7 @@ import type { AppColor } from "./app-tile";
 import { APP_COLORS } from "./app-tile";
 import { appConvention, type HubApp } from "./apps";
 
-export type TemplateId = "base" | "blank" | "kanban" | "table" | "catalog" | "calendar" | "dashboard" | "checklist" | "form" | "calculator" | "compare" | "knowledge";
+export type TemplateId = "base" | "blank" | "kanban" | "table" | "catalog" | "calendar" | "booking" | "dashboard" | "checklist" | "form" | "quiz" | "calculator" | "compare" | "knowledge" | "map";
 /** Where a template sits in the "Start from" list. */
 export type TemplateGroup = "featured" | "organize" | "schedule" | "track" | "collect" | "decide" | "content";
 
@@ -41,12 +41,15 @@ export const TEMPLATES: readonly Template[] = [
   { id: "table", label: "Table", hint: "Rows with a filter, categories and totals.", group: "organize", color: "blue", collection: "entries" },
   { id: "catalog", label: "Catalog", hint: "Cards with a picture, categories, search and a page for each item.", group: "organize", color: "rose", collection: "items" },
   { id: "calendar", label: "Calendar", hint: "A month with events and the day's agenda.", group: "schedule", color: "teal", collection: "events" },
+  { id: "booking", label: "Bookings", hint: "Rooms, cars and equipment by time slot or by day, without double booking.", group: "schedule", color: "amber", collection: "bookings" },
   { id: "dashboard", label: "Dashboard with charts", hint: "Totals and two charts over the entries you add.", group: "track", color: "amber", collection: "entries" },
   { id: "checklist", label: "Checklist / Routine", hint: "Steps to tick, who did them and when, repeated daily, weekly or monthly.", group: "track", color: "green", collection: "routines" },
   { id: "form", label: "Form + list", hint: "A form people fill in, and the list of what came in.", group: "collect", color: "green", collection: "submissions" },
+  { id: "quiz", label: "Quiz / Assessment", hint: "Questions in order, a score at the end and the history of attempts.", group: "collect", color: "violet", collection: "questions" },
   { id: "calculator", label: "Calculator / Simulator", hint: "Inputs, your own formulas and the result as you type; save and compare scenarios.", group: "decide", color: "blue", collection: "scenarios" },
   { id: "compare", label: "Comparison", hint: "Options side by side, weighted criteria and a clear winner.", group: "decide", color: "violet", collection: "options" },
   { id: "knowledge", label: "Knowledge base", hint: "Articles by topic, with search and links between them.", group: "content", color: "orange", collection: "articles" },
+  { id: "map", label: "Map / Places", hint: "Places on a map linked to a list, with categories and visits.", group: "content", color: "green", collection: "places" },
 ];
 
 /** Old names still accepted: the document editor became the knowledge base. */
@@ -62,6 +65,9 @@ const CLUES: Record<Exclude<TemplateId, "blank">, string[]> = {
   checklist: ["checklist", "check-list", "rotina", "routine", "inspecao", "inspection", "vistoria", "abertura", "opening", "fechamento", "closing", "onboarding", "integracao", "procedimento", "auditoria", "audit", "qualidade", "quality", "tarefa", "recorrente", "recurring"],
   calculator: ["calculadora", "calculator", "simulador", "simulator", "simulacao", "simulation", "orcamento", "quote", "comissao", "commission", "custo", "cost", "viabilidade", "feasibility", "cenario", "scenario", "precific", "pricing", "margem", "margin"],
   compare: ["comparador", "comparar", "compare", "comparison", "comparativo", "versus", "proposta", "proposal", "cotacao", "decisao", "decision", "escolher", "choose", "avaliar", "criterio", "criteria", "plano", "plan"],
+  booking: ["reserva", "booking", "agendamento", "agendar", "horario", "slot", "sala", "room", "veiculo", "vehicle", "carro", "equipamento", "recurso", "resource", "locacao", "aluguel", "rental"],
+  quiz: ["quiz", "teste", "test", "avaliacao", "assessment", "prova", "exam", "pergunta", "question", "treinamento", "training", "diagnostico", "diagnostic", "autoavaliacao", "conhecimento"],
+  map: ["mapa", "map", "local", "location", "endereco", "address", "unidade", "loja", "store", "obra", "visita", "visit", "rota", "route", "regiao", "region", "ponto"],
   kanban: ["kanban", "quadro", "funil", "pipeline", "crm", "lead", "etapa", "estagio", "stage", "board", "deal", "negocio", "oportunidade", "card", "cartao", "trello", "backlog", "sprint", "prospect"],
   table: ["tabela", "table", "planilha", "spreadsheet", "lista", "list", "inventario", "inventory", "estoque", "stock", "cadastro", "registro", "record", "contato", "contact", "cliente", "customer", "despesa", "expense", "gasto"],
   calendar: ["calendario", "calendar", "agenda", "schedule", "evento", "event", "compromisso", "appointment", "reuniao", "meeting", "escala", "shift", "prazo", "deadline", "aniversario", "birthday", "mes", "month", "semana", "week"],
@@ -75,6 +81,9 @@ const STRONG: Partial<Record<Exclude<TemplateId, "blank">, string[]>> = {
   checklist: ["checklist", "check-list", "rotina", "routine", "inspecao", "vistoria"],
   calculator: ["calculadora", "calculator", "simulador", "simulator"],
   compare: ["comparador", "comparar", "compare", "comparison", "comparativo"],
+  booking: ["reserva", "booking", "agendamento"],
+  quiz: ["quiz", "prova", "avaliacao", "assessment"],
+  map: ["mapa", "map"],
   kanban: ["kanban", "quadro", "funil", "pipeline", "crm", "board"],
   calendar: ["calendario", "calendar", "agenda"],
   dashboard: ["painel", "dashboard", "grafico", "chart"],

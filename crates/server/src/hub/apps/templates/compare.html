@@ -21,10 +21,8 @@
     .cmp-name { font-weight: 600; }
     .cmp-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
     .cmp-badges:empty { display: none; }
-    .cmp-menu { width: auto; max-width: 100%; margin-top: 4px; font-size: var(--t-text-sm); }
-    .cmp-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 4px 6px; border: 1px solid transparent; border-radius: var(--t-radius-sm); background: none; color: inherit; font: inherit; text-align: left; cursor: text; }
-    .cmp-cell:hover { border-color: var(--t-line-input); }
     .cmp-w { width: 72px; margin-top: 4px; }
+    .t-re-cells > .t-field { flex: 1 1 140px; min-width: 0; }
     .cmp-bar { display: block; height: 6px; margin-top: 6px; border-radius: 3px; background: var(--t-fill); overflow: hidden; }
     .cmp-bar > span { display: block; height: 100%; background: var(--t-accent); }
     .cmp-score strong { font-size: var(--t-text-lg); }
@@ -39,9 +37,6 @@
     .cmp-rank-top .cmp-total { margin-left: auto; }
     .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
     .settings-stack .t-card { display: grid; gap: var(--t-space-3); }
-    .crit { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--t-space-2); align-items: end; padding: var(--t-space-3); border: 1px solid var(--t-line); border-radius: var(--t-radius-md); }
-    .crit .t-actions { justify-content: flex-start; flex-wrap: nowrap; }
-    .crit-up svg { transform: rotate(180deg); }
   </style>
 </head>
 <body>
@@ -99,9 +94,9 @@
               <label class="t-field"><span>Currency</span><select id="currency"></select></label>
             </section>
             <section class="t-card">
-              <div class="t-card-head"><h2>Criteria</h2><button type="button" class="t-button small" id="add-criterion">Add criterion</button></div>
+              <div class="t-card-head"><h2>Criteria</h2></div>
               <p class="t-muted">Weight says how much a criterion counts (0 to 10). Deleting a criterion keeps the values already typed in the options.</p>
-              <div id="criteria" class="settings-stack"></div>
+              <t-row-editor id="criteria"></t-row-editor>
             </section>
             <section class="t-card" id="archived-card" hidden>
               <div class="t-card-head"><h2>Archived options</h2></div>
@@ -140,11 +135,11 @@
       criterion: 'Criterion', score: 'Score', pros: 'Pros', cons: 'Cons', weight: 'Weight', higher: 'Higher is better', lower: 'Lower is better',
       matrixLabel: 'Comparison of options by criterion', openLink: 'Open link', editHint: 'Press Enter to edit',
       weightOf: label => 'Weight of ' + label, actionsFor: name => 'Actions for ' + name,
-      menu: { '': 'Actions…', edit: 'Edit', choose: 'Choose this one', archive: 'Archive', del: 'Delete' },
+      menu: { edit: 'Edit', choose: 'Choose this one', archive: 'Archive', del: 'Delete' }, addCriterion: 'Add criterion',
       kinds: [['money', 'Money'], ['number', 'Number'], ['score', 'Score 1 to 5'], ['yesno', 'Yes or no']],
       scoreOf: n => n + ' / 5', fName: 'Name', fLink: 'Link', fNote: 'Notes', onePerLine: 'One per line.',
       newOption: 'New option', editOption: 'Edit option', newCriterion: 'New criterion', sel: name => 'Option: ' + name,
-      cLabel: 'Name', cKind: 'Type', cUnit: 'Unit', cBetter: 'Better when', cWeight: 'Weight', up: 'Move up', down: 'Move down', remove: 'Delete criterion',
+      cLabel: 'Name', cKind: 'Type', cUnit: 'Unit', cBetter: 'Better when', cWeight: 'Weight',
       loadFail: 'Could not load the options', retry: 'Try again', allArchived: 'All options are archived. Restore one in Settings.',
       conflict: 'Someone changed this meanwhile; it was reloaded.', notFound: 'That option no longer exists.',
       deleteQ: name => 'Delete "' + name + '"?', del: 'Delete', restore: 'Restore',
@@ -170,6 +165,7 @@
       ]
     };
     const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP'];
+    const MENU = ['edit', 'choose', 'archive', '-', 'del'].map(k => k === '-' ? k : { id: k, label: T.menu[k], tone: k === 'del' ? 'danger' : undefined });
 
     // LOGIC START
     // Pure scoring: no DOM, no SDK. Options are { id, archived?, values: { [criterionId]: value } }, criteria are the settings' list.
@@ -232,8 +228,8 @@
     const editor = $('editor'), optionForm = $('option-form'), recordForm = $('record-form'), tools = $('tools');
     const DESC = $('sub').textContent, TITLE = document.querySelector('.t-title').textContent;
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    let S, store, loaded = false, mode = 'matrix', editing = null, cellEditing = false, pendingFocus = '', model = { act: [], by: {}, ranked: [], winner: null };
-    let nextOrder = 1, forceCrit = false, focusCrit = '', weightTimer = null, fixingDecided = false;
+    let S, store, loaded = false, mode = 'matrix', editing = null, pendingFocus = '', model = { act: [], by: {}, ranked: [], winner: null };
+    let nextOrder = 1, weightTimer = null, redrawTimer = null, fixingDecided = false;
 
     // ---- state ---------------------------------------------------------------------------------
     const criteria = () => S.value.criteria;
@@ -259,16 +255,18 @@
     }
 
     // ---- render: matrix, cards, ranking ----------------------------------------------------------
-    function cellNode(rec, c) {
-      const text = formatValue(c, (rec.data.values || {})[c.id]);
-      const button = tkit.h('button', { type: 'button', class: 'cmp-cell', dataset: { key: rec.id + ':' + c.id }, 'aria-label': c.label + ', ' + nameOf(rec) + ': ' + (text || T.noData) + '. ' + T.editHint, onClick: () => editCell(button, rec, c) },
-        tkit.h('span', { class: text ? '' : 't-muted', text: text || T.noData }),
-        model.by[rec.id].cells[c.id].best ? tkit.h('span', { class: 't-badge ok', text: T.best }) : null);
+    function cellNode(rec, c) {   // a value edited in place by the kit: Enter saves, Esc cancels
+      const v = (rec.data.values || {})[c.id], spec = { type: c.kind, value: hasValue(v) ? v : null, currency: S.value.currency, format: x => formatValue(c, x),
+        label: c.label + ', ' + nameOf(rec), save: x => saveValue(rec, c, x) };
+      const button = tkit.h('button', { type: 'button', class: 't-cell', dataset: { key: rec.id + ':' + c.id }, 'aria-label': spec.label + ': ' + (formatValue(c, v) || T.noData) + '. ' + T.editHint },
+        tkit.h('span', { 'data-cell-value': '' }, tkit.cellText(spec, spec.value)), model.by[rec.id].cells[c.id].best ? tkit.h('span', { class: 't-badge ok', text: T.best }) : null);
+      tkit.editCell(button, spec);
       return button;
     }
     function menuFor(rec) {
-      return tkit.h('select', { class: 't-input cmp-menu', 'aria-label': T.actionsFor(nameOf(rec)), onChange: event => { const act = event.target.value; event.target.value = ''; optionAction(act, rec); } },
-        Object.keys(T.menu).map(k => tkit.h('option', { value: k, text: T.menu[k] })));
+      const menu = tkit.h('t-menu', { label: T.actionsFor(nameOf(rec)), items: MENU });
+      menu.addEventListener('t-select', event => optionAction(event.detail.id, rec));
+      return menu;
     }
     function bullets(list) {
       return Array.isArray(list) && list.length ? tkit.h('ul', { class: 'cmp-list' }, list.map(x => tkit.h('li', { text: x }))) : tkit.h('span', { class: 't-muted', text: T.notSet });
@@ -338,7 +336,7 @@
     }
     function render() {
       loaded = true;
-      if (cellEditing) return;   // finishing the edit redraws
+      if (document.querySelector('.t-cell-edit:not(.saving)')) { clearTimeout(redrawTimer); redrawTimer = setTimeout(render, 1000); return; }   // a cell is open: redraw once it closes
       compute();
       const none = store.records.length === 0;
       $('status').hidden = true;
@@ -359,35 +357,11 @@
       syncRoute();
     }
 
-    // ---- editing a value in place (keyboard only works: Enter saves, Esc cancels) --------------------
-    function editCell(button, rec, c) {
-      const current = (rec.data.values || {})[c.id], pick = c.kind === 'score' || c.kind === 'yesno';
-      const items = c.kind === 'score' ? [1, 2, 3, 4, 5].map(n => [String(n), T.scoreOf(n)]) : [['y', tkit.t('yes')], ['n', tkit.t('no')]];
-      const input = pick ? tkit.h('select', { class: 't-input', 'aria-label': c.label }, [['', T.notSet]].concat(items).map(o => tkit.h('option', { value: o[0], text: o[1] })))
-        : tkit.h('input', { class: 't-input', type: 'number', step: 'any', 'aria-label': c.label });
-      input.value = !hasValue(current) ? '' : c.kind === 'yesno' ? (current ? 'y' : 'n') : String(current);
-      let done = false;
-      cellEditing = true;
-      const finish = async save => {
-        if (done) return;
-        done = true; cellEditing = false;
-        pendingFocus = rec.id + ':' + c.id;
-        const value = input.value === '' ? null : c.kind === 'yesno' ? input.value === 'y' : Number(input.value);
-        if (save && value !== (hasValue(current) ? current : null)) await saveValue(rec, c, value);
-        render();
-      };
-      input.addEventListener('keydown', event => {
-        if (event.key === 'Enter') { event.preventDefault(); finish(true); }
-        else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); }
-      });
-      input.addEventListener('blur', () => finish(true));
-      if (pick) input.addEventListener('change', () => finish(true));
-      button.replaceWith(input);
-      input.focus();
-    }
+    // ---- saving a value edited in place ----------------------------------------------------------------
     async function saveValue(rec, c, value) {
+      pendingFocus = rec.id + ':' + c.id;   // the redraw that follows gives the cell its focus back
       try { await options.update(rec.id, { values: Object.assign({}, rec.data.values, { [c.id]: value }) }, { rev: rec.rev }); }
-      catch (error) { if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); store.reload(); } else fail(error); }
+      catch (error) { pendingFocus = ''; if (error.code === 'conflict') { store.reload(); throw new Error(T.conflict); } throw error; }
     }
     function setWeight(id, raw) {
       const weight = Math.min(10, Math.max(0, Math.round(Number(raw)) || 0));
@@ -486,47 +460,32 @@
     $('clear-choice').addEventListener('click', () => decide(null));
 
     // ---- settings: decision, criteria, archived ---------------------------------------------------------
-    const fieldBox = (label, control) => tkit.h('label', { class: 't-field' }, tkit.h('span', { text: label }), control);
-    function selectOf(items, value, label, on) {
-      const s = tkit.h('select', { 'aria-label': label, onChange: event => on(event.target.value) }, items.map(i => tkit.h('option', { value: i[0], text: i[1] })));
-      s.value = value;
-      return s;
-    }
-    function criterionRow(c, i, n) {
-      const patch = (p, redraw) => { forceCrit = !!redraw; saveCriteria(criteria().map(x => x.id === c.id ? Object.assign({}, x, p) : x)); };
-      const label = tkit.h('input', { maxlength: '60', dataset: { crit: c.id }, onChange: event => patch({ label: event.target.value.trim() || c.label }) });
-      const unit = tkit.h('input', { maxlength: '12', onChange: event => patch({ unit: event.target.value.trim() }) });
+    const criteriaEd = $('criteria');
+    const newCriterion = () => ({ id: tkit.slug(T.newCriterion, criteriaEd.rows.map(c => c.id)), label: T.newCriterion, kind: 'number', unit: '', weight: 5, better: 'higher' });
+    function criterionCells(c, change) {
+      const box = (label, control) => tkit.h('label', { class: 't-field' }, tkit.h('span', { text: label }), control);
+      const sel = (label, items, value, key, redraw) => {
+        const el = tkit.h('select', { onChange: event => change({ [key]: event.target.value }, { redraw }) }, items.map(i => tkit.h('option', { value: i[0], text: i[1] })));
+        el.value = value;
+        return box(label, el);
+      };
+      const txt = (label, key, max, fallback) => { const el = tkit.h('input', { maxlength: max, onChange: event => change({ [key]: event.target.value.trim() || fallback }) }); el.value = c[key] || ''; return box(label, el); };
       const out = tkit.h('output', { text: String(c.weight) });
-      const range = tkit.h('input', { type: 'range', min: '0', max: '10', step: '1', onInput: event => { out.textContent = event.target.value; setWeight(c.id, event.target.value); } });
-      label.value = c.label; unit.value = c.unit || ''; range.value = c.weight;
-      const move = d => { const list = criteria().slice(); list.splice(i + d, 0, list.splice(i, 1)[0]); forceCrit = true; saveCriteria(list); };
-      const btn = (cls, text, icon, on, disabled) => tkit.h('button', { type: 'button', class: 't-icon-button ' + cls, 'aria-label': text, title: text, disabled, onClick: on }, tkit.icon(icon, 16));
-      return tkit.h('div', { class: 'crit' }, fieldBox(T.cLabel, label), fieldBox(T.cKind, selectOf(T.kinds, c.kind, T.cKind, v => patch({ kind: v }, true))),
-        c.kind === 'number' ? fieldBox(T.cUnit, unit) : null, fieldBox(T.cBetter, selectOf([['higher', T.higher], ['lower', T.lower]], c.better || 'higher', T.cBetter, v => patch({ better: v }))),
-        fieldBox(T.cWeight, tkit.h('span', { class: 't-toolbar' }, range, out)),
-        tkit.h('div', { class: 't-actions' }, btn('crit-up', T.up, 'chevron-down', () => move(-1), i === 0), btn('', T.down, 'chevron-down', () => move(1), i === n - 1), btn('', T.remove, 'trash', () => removeCriterion(c))));
+      const range = tkit.h('input', { type: 'range', min: '0', max: '10', step: '1', onInput: event => { out.textContent = event.target.value; clearTimeout(weightTimer); weightTimer = setTimeout(() => change({ weight: Number(event.target.value) }), 120); } });
+      range.value = c.weight;
+      return [txt(T.cLabel, 'label', '60', c.label), sel(T.cKind, T.kinds, c.kind, 'kind', true), c.kind === 'number' ? txt(T.cUnit, 'unit', '12', '') : null,
+        sel(T.cBetter, [['higher', T.higher], ['lower', T.lower]], c.better || 'higher', 'better'), box(T.cWeight, tkit.h('span', { class: 't-toolbar' }, range, out))];
     }
-    async function removeCriterion(c) {
-      const used = store ? store.records.filter(r => hasValue((r.data.values || {})[c.id])).length : 0;
-      if (!await tkit.confirm(T.deleteCritQ(c.label, used), { confirm: T.del, tone: 'danger' })) return;
-      forceCrit = true;
-      saveCriteria(criteria().filter(x => x.id !== c.id));
-    }
-    function drawCriteria(force) {
-      const box = $('criteria');
-      if (!force && box.contains(document.activeElement)) return;   // do not pull a slider from under the finger
-      tkit.clear(box);
-      criteria().forEach((c, i) => box.appendChild(criterionRow(c, i, criteria().length)));
-      if (focusCrit) { const el = box.querySelector('[data-crit="' + focusCrit + '"]'); focusCrit = ''; if (el) { el.focus(); el.select(); } }
-    }
-    function addCriterion() {
-      const id = tkit.slug(T.newCriterion, criteria().map(c => c.id));
-      forceCrit = true; focusCrit = id;
+    criteriaEd.cells = criterionCells; criteriaEd.newRow = newCriterion; criteriaEd.addLabel = T.addCriterion;
+    criteriaEd.confirmRemove = c => tkit.confirm(T.deleteCritQ(c.label, store ? store.records.filter(r => hasValue((r.data.values || {})[c.id])).length : 0), { confirm: T.del, tone: 'danger' });
+    criteriaEd.addEventListener('t-change', event => saveCriteria(event.detail.rows));
+    $('new-criterion').addEventListener('click', () => {   // the top button: go to Settings and add a row there
       document.querySelector('t-app').view = 'settings';
-      saveCriteria(criteria().concat([{ id, label: T.newCriterion, kind: 'number', unit: '', weight: 5, better: 'higher' }]));
-    }
-    $('new-criterion').addEventListener('click', addCriterion);
-    $('add-criterion').addEventListener('click', addCriterion);
+      criteriaEd.rows = criteriaEd.rows.concat([newCriterion()]);
+      saveCriteria(criteriaEd.rows);
+      const first = criteriaEd.querySelector('.t-re-row:last-child input');
+      if (first) { first.focus(); first.select(); }
+    });
     $('title-input').addEventListener('change', event => { S.save({ title: event.target.value.trim() }).catch(fail); });
     $('currency').addEventListener('change', event => { S.save({ currency: event.target.value }).catch(fail); });
     function drawArchived() {
@@ -544,7 +503,7 @@
       tkit.clear(select);
       (CURRENCIES.indexOf(v.currency) >= 0 ? CURRENCIES : CURRENCIES.concat(v.currency)).forEach(code => select.appendChild(tkit.h('option', { value: code, text: code })));
       select.value = v.currency;
-      drawCriteria(forceCrit); forceCrit = false;
+      criteriaEd.rows = criteria();
       if (store && loaded) render();
     }
 
@@ -559,8 +518,7 @@
       criteria().forEach(c => { row['v_' + c.id] = (r.data.values || {})[c.id]; });
       return row;
     });
-    tools.exportColumns = () => [{ key: 'name', label: T.fName }, { key: 'link', label: T.fLink }, { key: 'note', label: T.fNote }].concat(criteria().map(c => ({ key: 'v_' + c.id, label: c.label,
-      format: c.kind === 'yesno' ? v => (v === true ? tkit.t('yes') : v === false ? tkit.t('no') : '') : undefined })), [{ key: 'score', label: T.score }]);
+    tools.exportColumns = () => tkit.csv.columnsFor(importFields(), S.value).concat([{ key: 'score', label: T.score }]);
     tools.beforeInsert = doc => {
       if (!doc.name) return null;
       const values = {};

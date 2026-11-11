@@ -15,18 +15,12 @@
     details.done-group > summary { cursor: pointer; margin-bottom: var(--t-space-2); }
     .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
     .settings-stack .t-card { display: grid; gap: var(--t-space-3); }
-    .run-bar { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); padding: var(--t-space-3); border-top: 1px solid var(--t-line); background: var(--t-surface); }
-    .run-hint { flex-basis: 100%; margin: 0; }
     .days { display: flex; flex-wrap: wrap; gap: var(--t-space-1); }
     .days .t-button[aria-pressed="true"] { background: var(--t-accent-soft); color: var(--t-accent-ink); border-color: var(--t-accent); }
     .t-actions.start { justify-content: flex-start; }
     .row-link { display: grid; gap: 1px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .t-re-cells > input[type=text] { flex: 1 1 160px; min-width: 0; }
     .row-link small { color: var(--t-muted); font-size: var(--t-text-sm); }
-    .flip { display: inline-flex; transform: rotate(180deg); }
-    .step-row { display: flex; flex-wrap: wrap; gap: var(--t-space-2); align-items: center; }
-    .step-row > input[type=text] { flex: 1 1 180px; min-width: 0; }
-    .step-row .step-tools { display: flex; align-items: center; gap: 2px; }
-    #steps-list { display: grid; gap: var(--t-space-2); }
   </style>
 </head>
 <body>
@@ -53,20 +47,17 @@
       </t-view>
       <t-view name="run">
         <div class="t-page">
-          <header class="t-page-head">
-            <button type="button" class="t-button" id="run-back">Voltar</button>
-            <div><h1 class="t-title" id="run-title"></h1><p class="t-muted" id="run-sub"></p></div>
-          </header>
+          <button type="button" class="t-back" id="run-back"><span>Voltar</span></button>
+          <header class="t-page-head"><div><h1 class="t-title" id="run-title"></h1><p class="t-muted" id="run-sub"></p></div></header>
           <t-checklist id="run-check"></t-checklist>
           <div class="t-actions start"><button type="button" class="t-button" id="run-note-btn">Adicionar nota a um passo</button></div>
           <label class="t-field"><span>Nota desta execução</span><textarea id="run-note" rows="2"></textarea></label>
-          <div class="run-bar" id="run-bar">
+          <t-action-bar id="run-bar">
+            <span slot="summary" class="t-muted" id="run-hint"></span>
             <button type="button" class="t-button danger" id="run-discard">Descartar</button>
-            <span class="t-spacer"></span>
             <button type="button" class="t-button" id="run-skip">Pular desta vez</button>
             <button type="button" class="t-button primary" id="run-finish">Concluir</button>
-            <p class="t-muted run-hint" id="run-hint"></p>
-          </div>
+          </t-action-bar>
         </div>
       </t-view>
       <t-view name="routines">
@@ -120,9 +111,7 @@
       <label class="t-field" id="r-monthly"><span>Dia do mês</span><input id="r-day" type="number" min="1" max="31"></label>
       <label class="t-field" id="r-once"><span>Data</span><input id="r-date" type="date"></label>
       <label class="t-field" id="r-time-field"><span>Horário limite (opcional)</span><input id="r-time" type="time"></label>
-      <div class="t-field"><span>Passos</span><div id="steps-list"></div>
-        <div class="t-actions start"><button type="button" class="t-button small" id="add-step">Adicionar passo</button></div>
-      </div>
+      <div class="t-field"><span>Passos</span><t-row-editor id="steps"></t-row-editor></div>
       <div class="t-actions">
         <button type="button" class="t-button danger" id="r-delete" hidden>Apagar</button>
         <span class="t-spacer"></span>
@@ -170,8 +159,8 @@
       missing: list => 'Passos obrigatórios que faltam: ' + list,
       runSel: (name, when, done, total) => 'Execução: ' + name + ' (' + when + ', ' + done + ' de ' + total + ')',
       notFound: 'Essa execução não existe mais.', finishedToast: 'Execução concluída', discardQ: 'Descartar esta execução? Os passos marcados se perdem.', discard: 'Descartar',
-      paused: 'Pausada', next: when => 'próxima: ' + when, active: 'Ativa', stepPlaceholder: 'O que fazer', stepN: n => 'Passo ' + n, required: 'Obrigatório',
-      delete: 'Apagar', moveUp: 'Subir', moveDown: 'Descer', editRoutine: 'Editar rotina', newRoutineTitle: 'Nova rotina',
+      paused: 'Pausada', next: when => 'próxima: ' + when, active: 'Ativa', stepPlaceholder: 'O que fazer', step: 'Passo', addStep: 'Adicionar passo', required: 'Obrigatório', navRoutines: 'Rotinas',
+      delete: 'Apagar', editRoutine: 'Editar rotina', newRoutineTitle: 'Nova rotina',
       needName: 'Dê um nome à rotina.', needStep: 'Adicione pelo menos um passo.', needDate: 'Escolha uma data.',
       conflict: 'Alguém mudou isto enquanto isso; recarreguei.', deleteQ: name => 'Apagar "' + name + '"? As execuções passadas continuam no Histórico.',
       emptyTitle: 'Nenhuma rotina ainda', emptyText: 'Crie uma rotina ou veja primeiro como funciona com exemplos.',
@@ -194,7 +183,11 @@
 
     // LOGIC START
     // Pure rules: no DOM, no SDK. Dates are 'YYYY-MM-DD' strings; "now" is a Date or { date, time: 'HH:MM' }.
-    // A routine here is a plain object { id, frequency, dueTime, active, ... }; a run is { routineId, period, status, startedAt, finishedAt, items }.
+    // A routine here is a plain object { id, frequency, dueTime, active, since, ... }; a run is { routineId, period, status, startedAt, finishedAt, items }.
+    // CREATION CUT-OFF: `since` is the day the routine was created ('YYYY-MM-DD', local time; see createdDay). An occurrence that falls
+    // before `since` never counts: not due, not late, not in nextDue. The occurrence ON that day does count (due) but cannot be late that
+    // day, since its dueTime may have passed before the routine existed: made at 15:00 with dueTime 09:00, it is due today and can only be
+    // late from tomorrow (a daily one is replaced by tomorrow's occurrence). No `since`: no cut-off (old data, tests).
     function pad2(n) { return (n < 10 ? '0' : '') + n; }
     function ymdParts(ymd) { const p = String(ymd).split('-'); return { y: +p[0], m: +p[1], d: +p[2] }; }
     function ymdFormat(y, m, d) { return y + '-' + pad2(m) + '-' + pad2(d); }
@@ -204,6 +197,8 @@
     }
     function ymdWeekday(ymd) { const p = ymdParts(ymd); return new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay(); }   // 0 = Sunday
     function daysInMonth(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+    // The local day of a record's created_at (any date string or Date), or undefined when it cannot be read.
+    function createdDay(createdAt) { const d = new Date(createdAt); return isNaN(d) ? undefined : ymdFormat(d.getFullYear(), d.getMonth() + 1, d.getDate()); }
     function clockOf(now) {
       if (now && now.date) return { date: now.date, time: now.time || '00:00' };
       const d = now || new Date();
@@ -211,11 +206,16 @@
     }
     // The first day of the week that holds `ymd`. weekStart: 0 = Sunday, 1 = Monday.
     function weekStartOf(ymd, weekStart) { return ymdAdd(ymd, -((ymdWeekday(ymd) - (weekStart || 0) + 7) % 7)); }
-    // The period around `date`: { period, opens, deadline }, or null when the routine has no schedule (manual, or "once" without a date).
+    // The period around `date`: { period, opens, deadline }, or null when the routine has no schedule (manual, or "once" without a date)
+    // or the occurrence is before the routine's `since` (see CREATION CUT-OFF).
     // daily: that day. weekly: the latest chosen weekday up to `date` (period = that day; opens and ends on it, so a missed one stays late
     // until the next chosen weekday). weekStart is unused here. Runs saved with the old week-start period just count for that date.
     // monthly: the month (period = the 1st), opens and ends on `day` (31 becomes the last day of a short month). once: its date.
     function windowFor(routine, date, weekStart) {
+      const w = rawWindow(routine, date);
+      return w && w.opens >= (routine.since || '') ? w : null;
+    }
+    function rawWindow(routine, date) {
       const f = routine.frequency || {};
       if (f.kind === 'daily') return { period: date, opens: date, deadline: date };
       if (f.kind === 'weekly') {
@@ -262,14 +262,18 @@
       if (!w) return false;
       if ((runs || []).some(r => r.routineId === routine.id && r.status === 'open' && r.period < w.period)) return true;
       if (!isDue(routine, runs, now, weekStart)) return false;
-      return c.date > w.deadline || (c.date === w.deadline && !!routine.dueTime && c.time > routine.dueTime);
+      const madeToday = w.deadline === routine.since;   // created on its own day: late only from the next day
+      return c.date > w.deadline || (c.date === w.deadline && !madeToday && !!routine.dueTime && c.time > routine.dueTime);
     }
     // The next day the routine needs doing (today if it is open now), or null (manual, once and done, paused). `runs` is optional.
     function nextDue(routine, now, runs, weekStart) {
       const f = routine.frequency || {};
       if (routine.active === false || !f.kind || f.kind === 'manual') return null;
       const c = clockOf(now), w = windowFor(routine, c.date, weekStart);
-      if (!w) return null;
+      if (!w) {   // before the first occurrence after creation: look ahead for it
+        for (let i = 1; routine.since && f.kind !== 'once' && i <= 366; i++) { const n = windowFor(routine, ymdAdd(c.date, i), weekStart); if (n) return n.opens; }
+        return null;
+      }
       if (!periodDone(routine, runs, w.period)) return c.date > w.opens ? c.date : w.opens;
       if (f.kind === 'once') return null;
       const p = ymdParts(w.period);
@@ -314,7 +318,7 @@
     const ready = { routines: false, runs: false };
     const isReady = () => ready.routines && ready.runs;
     const plain = rec => Object.assign({}, rec.data, { id: rec.id });
-    const routineList = () => routineStore.records.map(plain).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const routineList = () => routineStore.records.map(rec => Object.assign(plain(rec), { since: createdDay(rec.created_at) })).sort((a, b) => (a.order || 0) - (b.order || 0));
     const runList = () => runStore.records.map(plain);
     const runRec = id => runStore.records.find(r => r.id === id);
     const ws = () => S.value.weekStart;
@@ -416,10 +420,9 @@
       if (document.activeElement !== note) note.value = run.note || '';
       $('run-note-btn').hidden = !open;
       $('run-bar').hidden = !open;
-      const missing = missingRequired(run);
+      const missing = missingRequired(run), why = missing.length ? T.missing(missing.map(i => i.label).join(', ')) : '';
       $('run-finish').disabled = missing.length > 0;
-      $('run-finish').title = missing.length ? T.missing(missing.map(i => i.label).join(', ')) : '';
-      $('run-hint').textContent = missing.length ? T.missing(missing.map(i => i.label).join(', ')) : '';
+      $('run-finish').title = $('run-hint').textContent = why;
       $('run-hint').hidden = !missing.length;
       const p = runProgress(run);
       setTimeout(() => tkit.context({ selection: T.runSel(run.routineName, routine && routine.frequency && routine.frequency.kind === 'daily' && run.period === clock().date ? T.todayWord : periodText(routine, run.period), p.done, p.total) }), 0);
@@ -430,6 +433,7 @@
       try { await saveItems(rec, items => items.map(i => i.stepId === id ? Object.assign(i, { done, at: done ? nowIso() : null }) : i)); } catch (error) { fail(error); drawRun(); }
     });
     $('run-note').addEventListener('change', event => { runsCol.update(runId, { note: event.target.value }).catch(fail); });
+    $('run-back').prepend(tkit.icon('arrow-left', 16));
     $('run-back').addEventListener('click', () => { app.view = lastView; });
     // Leaves the run screen once `job` worked. runId is cleared first so the live update does not say "not found".
     async function leaveAfter(job) {
@@ -517,24 +521,13 @@
           drawEditor();
         } }));
       }
-      const list = $('steps-list');
-      tkit.clear(list);
-      // KIT-CANDIDATE: <t-list-editor> with an extra "required" switch per row (steps are label + required); built here until the kit has it.
-      draft.steps.forEach((s, i) => {
-        const input = h('input', { type: 'text', class: 't-input', value: s.label, placeholder: T.stepPlaceholder, 'aria-label': T.stepN(i + 1) });
-        input.addEventListener('input', () => { s.label = input.value; });
-        const req = h('input', { type: 'checkbox', class: 't-switch', checked: !!s.required, 'aria-label': T.required + ': ' + T.stepN(i + 1) });
-        req.addEventListener('change', () => { s.required = req.checked; });
-        const move = (by, label) => h('button', { type: 'button', class: 't-icon-button', 'aria-label': label, disabled: i + by < 0 || i + by >= draft.steps.length, onClick: () => { draft.steps.splice(i + by, 0, draft.steps.splice(i, 1)[0]); drawEditor(); } }, h('span', { class: by < 0 ? 'flip' : '' }, tkit.icon('chevron-down', 16)));
-        const del = h('button', { type: 'button', class: 't-icon-button', 'aria-label': T.delete, onClick: () => { draft.steps.splice(i, 1); drawEditor(); } }, tkit.icon('trash', 16));
-        list.appendChild(h('div', { class: 'step-row' }, input, h('span', { class: 'step-tools' }, h('label', { class: 't-switch-line' }, req, h('span', { text: T.required })), move(-1, T.moveUp), move(1, T.moveDown), del)));
-      });
     }
     function openRoutine(rec) {
       editing = rec || null;
       const r = rec ? rec.data : {}, f = r.frequency || { kind: 'daily' };
       draft = { kind: f.kind, weekdays: (f.weekdays || [1]).slice(), steps: (r.steps || []).map(s => Object.assign({}, s)) };
       if (!draft.steps.length) draft.steps.push(newStep());
+      steps.rows = draft.steps;
       $('r-name').value = r.name || '';
       $('r-description').value = r.description || '';
       $('r-owner').value = r.owner || '';
@@ -548,7 +541,15 @@
     }
     document.querySelectorAll('.new-routine').forEach(b => b.addEventListener('click', () => openRoutine(null)));
     $('r-kind').addEventListener('click', event => { const b = event.target.closest('button[data-kind]'); if (b) { draft.kind = b.dataset.kind; drawEditor(); } });
-    $('add-step').addEventListener('click', () => { draft.steps.push(newStep()); drawEditor(); const inputs = $('steps-list').querySelectorAll('input[type=text]'); inputs[inputs.length - 1].focus(); });
+    // Steps: a label and a "Required" switch per row; the row editor adds, removes and reorders.
+    const steps = $('steps');
+    steps.addLabel = T.addStep;
+    steps.newRow = newStep;
+    steps.cells = (row, change) => [
+      h('input', { type: 'text', class: 't-input', value: row.label, placeholder: T.stepPlaceholder, 'aria-label': T.step, onChange: event => change({ label: event.target.value }) }),
+      h('label', { class: 't-switch-line' }, h('input', { type: 'checkbox', class: 't-switch', checked: !!row.required, onChange: event => change({ required: event.target.checked }) }), h('span', { text: T.required }))
+    ];
+    steps.addEventListener('t-change', event => { draft.steps = event.detail.rows; });
     $('r-cancel').addEventListener('click', () => $('routine-modal').close());
     hold($('routine-modal'));
     $('routine-form').addEventListener('submit', async event => {

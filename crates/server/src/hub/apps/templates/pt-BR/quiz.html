@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .narrow { max-width: 720px; }
+    .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
+    .settings-stack > .t-card { gap: var(--t-space-3); }
+    .take-top { display: flex; align-items: center; gap: var(--t-space-3); }
+    .take-top t-progress { flex: 1; }
+    .q-card { gap: var(--t-space-3); justify-items: start; }
+    .q-card > * { max-width: 100%; }
+    .q-text { margin: 0; font-size: var(--t-text-xl); line-height: 1.35; }
+    .opts { display: grid; gap: var(--t-space-2); width: 100%; }
+    .opt { display: flex; align-items: center; gap: var(--t-space-3); min-height: 48px; padding: var(--t-space-2) var(--t-space-3); border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-elevated); color: var(--t-ink); cursor: pointer; }
+    .opt:hover { background: var(--t-fill); }
+    .opt:has(input:checked) { border-color: var(--t-accent); background: var(--t-accent-soft); }
+    .opt:has(input:focus-visible) { outline: 2px solid var(--t-focus); outline-offset: 2px; }
+    .opt.right { border-color: var(--t-ok); background: var(--t-ok-soft); }
+    .opt.wrong { border-color: var(--t-danger); background: var(--t-danger-soft); }
+    .opt input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--t-accent); }
+    .opt kbd { flex: none; min-width: 22px; padding: 0 6px; border-radius: var(--t-radius-sm); background: var(--t-fill); color: var(--t-muted); font: inherit; font-size: var(--t-text-xs); text-align: center; }
+    .opt > span { flex: 1; min-width: 0; }
+    .opts.scale { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .opts.scale .opt { justify-content: center; }
+    .scale-ends { display: flex; justify-content: space-between; width: 100%; font-size: var(--t-text-sm); }
+    .q-feedback { display: grid; gap: var(--t-space-2); width: 100%; }
+    .q-feedback p { margin: 0; }
+    .big { font-size: 56px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .result-card { justify-items: start; }
+    .q-open { display: grid; flex: 1 1 200px; gap: 4px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .q-meta { display: flex; flex-wrap: wrap; gap: 4px; }
+    .q-error { margin: 0; color: var(--t-danger-ink); }
+    .q-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--t-space-3); }
+    .q-list .t-re-add { display: none; }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Seções">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="start" data-icon="play">Início</button>
+      <button data-view="questions" data-icon="help">Perguntas</button>
+      <button data-view="results" data-icon="chart">Resultados</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Ajustes</button>
+    </t-nav>
+    <main class="t-app-main">
+      <!-- Telas de QUEM RESPONDE: início, take, result. Leem só os dados do quiz e os ajustes, nunca as telas de quem cria. -->
+      <t-view name="start">
+        <div class="t-page narrow">
+          <header class="t-page-head"><div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div></header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <div id="status"><t-state kind="loading"></t-state></div>
+          <t-empty-start id="empty" hidden title="Nenhuma pergunta ainda" text="Escreva sua primeira pergunta ou carregue um quiz de exemplo para ver como funciona." action="Nova pergunta"></t-empty-start>
+          <section class="t-card" id="intro" hidden>
+            <div class="t-md" id="intro-text"></div>
+            <p class="t-muted" id="facts"></p>
+            <label class="t-field"><span>Seu nome</span><input class="t-input" id="who" autocomplete="off"></label>
+            <div class="t-actions"><button type="button" class="t-button" id="resume" hidden>Continuar de onde parou</button><button type="button" class="t-button primary" id="begin">Começar</button></div>
+          </section>
+        </div>
+      </t-view>
+      <t-view name="take">
+        <div class="t-page narrow">
+          <div class="take-top"><t-progress id="take-progress" label="Progresso"></t-progress><span class="t-badge info" id="timer" hidden></span></div>
+          <div id="take-box"></div>
+          <t-action-bar><button type="button" class="t-button" id="prev">Anterior</button><button type="button" class="t-button primary" id="next">Próxima</button></t-action-bar>
+        </div>
+      </t-view>
+      <t-view name="result">
+        <div class="t-page narrow">
+          <div><button type="button" class="t-back" id="home"></button></div>
+          <div id="result-box"></div>
+          <t-action-bar><button type="button" class="t-button primary" id="again">Refazer</button></t-action-bar>
+        </div>
+      </t-view>
+      <!-- Telas de QUEM CRIA: perguntas, resultados, ajustes. -->
+      <t-view name="questions">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Perguntas</h1><p class="t-muted" id="q-count"></p></div><button type="button" class="t-button primary" id="new-q">Nova pergunta</button></header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <t-state id="q-none" kind="empty" title="Nenhuma pergunta ainda" text="Adicione perguntas aqui. Arraste para reordenar; desligue uma para escondê-la do quiz."></t-state>
+          <t-row-editor id="q-list" class="q-list"></t-row-editor>
+        </div>
+      </t-view>
+      <t-view name="results">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Resultados</h1><button type="button" class="t-button" id="export-attempts">Exportar tentativas (CSV)</button></header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <t-state id="r-none" kind="empty" title="Nenhuma tentativa ainda" text="As tentativas concluídas aparecem aqui com a nota e o resultado de cada pergunta."></t-state>
+          <div id="r-body" hidden class="settings-stack" style="max-width:none">
+            <div class="t-grid" id="stats"></div>
+            <t-table id="attempts" searchable empty-text="Nenhuma tentativa"></t-table>
+            <section class="t-card"><div class="t-card-head"><h2>Taxa de acerto por pergunta</h2></div><ul class="t-list" id="rates"></ul></section>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Ajustes</h1></header>
+          <div class="settings-stack">
+            <section class="t-card">
+              <div class="t-card-head"><h2>Quiz</h2></div>
+              <div class="t-field"><span>Modo</span><div class="t-segment" id="mode" role="group" aria-label="Modo"><button type="button" data-v="test">Teste</button><button type="button" data-v="diagnostic">Diagnóstico</button></div></div>
+              <label class="t-field"><span>Introdução (markdown)</span><textarea class="t-input" rows="3" data-set="intro"></textarea></label>
+              <label class="t-field" id="pass-box"><span>Aprovação (%)</span><input type="number" min="0" max="100" class="t-input" data-set="passPercent" data-num></label>
+              <label class="t-field"><span>Mostrar respostas</span><select class="t-input" data-set="showAnswers"><option value="end">No fim</option><option value="each">A cada pergunta</option><option value="never">Nunca</option></select></label>
+              <label class="t-switch-line"><input type="checkbox" class="t-switch" data-set="shuffle"><span>Embaralhar perguntas e opções</span></label>
+              <label class="t-switch-line"><input type="checkbox" class="t-switch" data-set="oneAtATime"><span>Uma pergunta por vez</span></label>
+              <label class="t-field"><span>Tempo limite (minutos, vazio para não ter)</span><input type="number" min="1" class="t-input" data-set="timeLimitMinutes" data-num></label>
+              <label class="t-field"><span>Seu nome</span><input class="t-input" data-set="person"></label>
+            </section>
+            <section class="t-card" id="texts-box">
+              <div class="t-card-head"><h2>Textos de resultado</h2></div>
+              <p class="t-muted">No modo diagnóstico, aparece o texto cuja faixa contém a nota (%).</p>
+              <t-row-editor id="texts"></t-row-editor>
+            </section>
+            <t-data-tools id="tools"></t-data-tools>
+          </div>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-modal id="editor" title="Pergunta">
+    <form id="q-form" class="t-form" novalidate>
+      <label class="t-field"><span>Pergunta</span><textarea class="t-input" id="q-text" rows="2"></textarea></label>
+      <div class="t-field"><span>Tipo</span><div class="t-segment" id="q-kind" role="group" aria-label="Tipo"></div></div>
+      <div class="t-field" id="q-opts-box"><span>Opções</span><t-row-editor id="q-opts"></t-row-editor></div>
+      <div class="t-field" id="q-tf-box" hidden><span>Resposta correta</span><div class="t-segment" id="q-tf" role="group" aria-label="Resposta correta"></div></div>
+      <div class="q-row">
+        <label class="t-field" id="q-points-box"><span>Pontos</span><input class="t-input" id="q-points" type="number" min="0" step="0.5"></label>
+        <label class="t-field"><span>Seção (opcional)</span><input class="t-input" id="q-section" list="q-sections" autocomplete="off"><datalist id="q-sections"></datalist></label>
+      </div>
+      <label class="t-field"><span>Explicação (markdown, aparece após responder)</span><textarea class="t-input" id="q-expl" rows="3"></textarea></label>
+      <p class="q-error" id="q-error" role="alert" hidden></p>
+      <div class="t-actions"><span class="t-spacer"></span><button type="button" class="t-button" id="q-cancel">Cancelar</button><button type="submit" class="t-button primary">Salvar</button></div>
+    </form>
+  </t-modal>
+
+  <script>
+    // PAGE MAP: LOGIC (pontuação pura, testada em quiz-logic.test.mjs) -> textos (T) -> estado -> QUEM RESPONDE (início, take, result) ->
+    // QUEM CRIA (lista e editor de perguntas, resultados, ajustes) -> ferramentas de dados -> partida. A parte de quem responde lê só as
+    // coleções e os ajustes; nunca toca nas telas de quem cria, então uma cópia publicada poderia mostrar só início/take/result.
+    // DATA: `questions` { text, kind, options: [{ id, label, correct, feedback? }], points, section, explanation, order, active }
+    //       `attempts` { who, startedAt, finishedAt|null, order: [question ids], answers: [{ questionId, optionIds?, value?, text?, correct, points }],
+    //                    score, maxScore, percent, passed|null, sectionScores }. Settings: one tendly.data key `settings`.
+
+    // LOGIC START
+    const isScored = q => q.kind === 'single' || q.kind === 'multi' || q.kind === 'truefalse';
+    const round = (n, d) => Math.round(n * Math.pow(10, d) + 1e-9) / Math.pow(10, d);
+    function pointsOf(q) { const n = q.points == null || q.points === '' ? 1 : Number(q.points); return isFinite(n) ? Math.max(0, n) : 1; }
+    function activeSorted(questions) { return questions.filter(q => q.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)); }
+    // One answer -> { correct: true|false|null (null: nothing to grade), points, fraction: 0..1|null }. Multi: points x max(0, (right - wrong) / total right).
+    function gradeAnswer(q, a) {
+      a = a || {};
+      if (q.kind === 'scale') { const v = Number(a.value); return { correct: null, points: 0, fraction: v >= 1 && v <= 5 ? (v - 1) / 4 : null }; }
+      if (!isScored(q)) return { correct: null, points: 0, fraction: null };
+      const opts = q.options || [], chosen = a.optionIds || [], right = opts.filter(o => o.correct);
+      if (q.kind === 'multi') {
+        const r = chosen.filter(id => right.some(o => o.id === id)).length, w = chosen.filter(id => opts.some(o => o.id === id && !o.correct)).length;
+        const fraction = right.length ? Math.max(0, (r - w) / right.length) : 0;
+        return { correct: right.length > 0 && r === right.length && w === 0, points: round(pointsOf(q) * fraction, 2), fraction };
+      }
+      const ok = chosen.length > 0 && right.some(o => o.id === chosen[0]);
+      return { correct: ok, points: ok ? pointsOf(q) : 0, fraction: ok ? 1 : 0 };
+    }
+    // Whole attempt. maxScore leaves out scale and open questions. Section scores are 0-100 (scale value 1-5 counts as 0-100); with no scored
+    // question at all, percent falls back to the scale average so diagnostics still get a number.
+    function scoreAttempt(questions, answers) {
+      const byQ = {}, secs = {}, out = [];
+      (answers || []).forEach(a => { byQ[a.questionId] = a; });
+      let score = 0, max = 0, totalW = 0, totalF = 0;
+      activeSorted(questions).forEach(q => {
+        const a = byQ[q.id] || { questionId: q.id }, g = gradeAnswer(q, a), w = isScored(q) ? pointsOf(q) : 1;
+        out.push(Object.assign({}, a, { correct: g.correct, points: g.points }));
+        if (isScored(q)) { score += g.points; max += pointsOf(q); }
+        if (g.fraction !== null && w > 0) {
+          const k = q.section || '', s = secs[k] || (secs[k] = { w: 0, f: 0 });
+          s.w += w; s.f += w * g.fraction; totalW += w; totalF += w * g.fraction;
+        }
+      });
+      const sectionScores = {};
+      Object.keys(secs).forEach(k => { if (k) sectionScores[k] = round(secs[k].f / secs[k].w * 100, 1); });
+      const percent = max > 0 ? round(score / max * 100, 1) : totalW > 0 ? round(totalF / totalW * 100, 1) : 0;
+      return { answers: out, score: round(score, 2), maxScore: round(max, 2), percent, sectionScores };
+    }
+    const isPassed = (percent, passPercent, mode) => mode === 'diagnostic' ? null : percent >= passPercent;
+    // Diagnostic text for a percent: the range that holds it (whole percent); in a gap, the last range that starts below it.
+    function resultTextFor(percent, texts) {
+      const p = Math.round(percent), list = (texts || []).slice().sort((a, b) => a.min - b.min);
+      const hit = list.filter(t => p >= t.min && p <= t.max)[0] || list.filter(t => p >= t.min).pop() || list[0];
+      return hit ? hit.text : '';
+    }
+    // Shuffle that depends only on its seed (the attempt's start time), so a reload shows the same order.
+    function shuffled(list, seed) {
+      const a = list.slice(); let s = 2166136261;
+      String(seed).split('').forEach(c => { s = Math.imul(s ^ c.charCodeAt(0), 16777619) >>> 0; });
+      const rnd = () => { s = (s + 0x6D2B79F5) >>> 0; let t = Math.imul(s ^ (s >>> 15), s | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)), x = a[i]; a[i] = a[j]; a[j] = x; }
+      return a;
+    }
+    function startOrder(questions, shuffle, seed) { const ids = activeSorted(questions).map(q => q.id); return shuffle ? shuffled(ids, seed) : ids; }
+    function questionsFor(questions, order) {
+      const act = activeSorted(questions);
+      return order && order.length ? order.map(id => act.filter(q => q.id === id)[0]).filter(Boolean) : act;
+    }
+    const optionsFor = (q, seed, shuffle) => shuffle && (q.kind === 'single' || q.kind === 'multi') ? shuffled(q.options || [], seed + q.id) : (q.options || []);
+    const remainingSeconds = (startedAt, nowMs, limitMinutes) => limitMinutes ? Math.max(0, Math.ceil((Date.parse(startedAt) + limitMinutes * 60000 - nowMs) / 1000)) : null;
+    const clockText = sec => Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2);
+    function attemptStats(attempts) {
+      const done = attempts.filter(a => a.finishedAt), graded = done.filter(a => a.passed === true || a.passed === false);
+      return { count: done.length, average: done.length ? round(done.reduce((s, a) => s + a.percent, 0) / done.length, 1) : null,
+        passRate: graded.length ? round(graded.filter(a => a.passed).length / graded.length * 100, 1) : null };
+    }
+    // Per scored question: how many finished attempts answered it and got it right; hardest = lowest rate.
+    function questionStats(questions, attempts) {
+      return questions.filter(isScored).map(q => {
+        let answered = 0, correct = 0;
+        attempts.filter(a => a.finishedAt).forEach(a => (a.answers || []).forEach(x => { if (x.questionId === q.id) { answered++; if (x.correct === true) correct++; } }));
+        return { id: q.id, answered, correct, rate: answered ? round(correct / answered * 100, 0) : null };
+      });
+    }
+    const hardest = stats => stats.filter(s => s.rate !== null).sort((a, b) => a.rate - b.rate)[0] || null;
+    // Options as text for CSV: "A*|B|C" (a trailing * marks a correct one).
+    function parseOptions(text) {
+      return String(text || '').split('|').map(s => s.trim()).filter(Boolean).map((s, i) => ({ id: 'o' + (i + 1), label: s.replace(/\s*\*$/, ''), correct: /\*$/.test(s) }));
+    }
+    const optionsToText = opts => (opts || []).map(o => o.label + (o.correct ? '*' : '')).join('|');
+    function nextOptionId(opts) { let n = 0; (opts || []).forEach(o => { const m = /^o(\d+)$/.exec(o.id); if (m) n = Math.max(n, Number(m[1])); }); return 'o' + (n + 1); }
+    const tfOptions = (correctId, yes, no) => [{ id: 'true', label: yes, correct: correctId === 'true' }, { id: 'false', label: no, correct: correctId === 'false' }];
+    // '' when the question can be saved, else a code: text, options, one, some.
+    function validateQuestion(q) {
+      if (!String(q.text || '').trim()) return 'text';
+      if (q.kind !== 'single' && q.kind !== 'multi' && q.kind !== 'truefalse') return '';
+      const opts = (q.options || []).filter(o => String(o.label || '').trim()), right = opts.filter(o => o.correct).length;
+      if (q.kind !== 'truefalse' && opts.length < 2) return 'options';
+      if (q.kind === 'multi') return right >= 1 ? '' : 'some';
+      return right === 1 ? '' : 'one';
+    }
+    // LOGIC END
+
+    const T = {
+      kinds: { single: 'Escolha única', multi: 'Múltipla escolha', truefalse: 'Verdadeiro / falso', scale: 'Escala 1-5', open: 'Resposta aberta' },
+      yes: 'Verdadeiro', no: 'Falso', low: 'Discordo totalmente', high: 'Concordo totalmente',
+      qWord: n => n === 1 ? 'pergunta' : 'perguntas',
+      facts: (n, limit, pass) => n + ' ' + T.qWord(n) + ' · ' + (limit ? 'tempo limite de ' + limit + ' min' : 'cerca de ' + Math.max(1, Math.round(n / 2)) + ' min') + (pass == null ? '' : ' · aprovação com ' + pass + '%'),
+      prev: 'Anterior', next: 'Próxima', check: 'Conferir resposta', finish: 'Finalizar', back: 'Voltar ao início',
+      right: 'Correta', wrong: 'Não foi dessa vez', review: 'Para revisão', mine: 'Sua resposta', rightIs: 'Resposta certa', none: 'Sem resposta', anon: 'Anônimo',
+      passed: 'Aprovado', failed: 'Não aprovado', timeUp: 'O tempo acabou. Suas respostas foram enviadas.', oneMinute: 'Falta um minuto',
+      sel: (i, n) => 'Tentativa: pergunta ' + i + ' de ' + n,
+      pts: (s, m) => m ? tkit.number(s, 2) + ' de ' + tkit.number(m, 2) + ' pontos' : '',
+      qCount: (n, on) => n + ' ' + T.qWord(n) + (on < n ? ' (' + on + ' ' + (on === 1 ? 'ativa' : 'ativas') + ')' : ''),
+      summary: (q, a, avg) => 'Quiz: ' + q + ' ' + T.qWord(q) + ', ' + a + ' ' + (a === 1 ? 'tentativa' : 'tentativas') + (a ? ', média ' + Math.round(avg) + '%' : ''),
+      gone: 'Essa tentativa não existe mais.', nothing: 'Adicione uma pergunta primeiro.', conflict: 'Alguém mudou isto enquanto isso; recarreguei.',
+      active: 'Ativa', edit: 'Editar', dup: 'Duplicar', copy: ' (cópia)', actions: 'Ações', del: 'Apagar', deleteQ: t => 'Apagar "' + t + '"?',
+      addOption: 'Adicionar opção', optionLabel: 'Opção', correct: 'Correta', feedback: 'Comentário (opcional)', newQ: 'Nova pergunta', editQ: 'Editar pergunta',
+      err: { text: 'Escreva a pergunta.', options: 'Adicione pelo menos duas opções.', one: 'Marque exatamente uma resposta correta.', some: 'Marque pelo menos uma opção correta.' },
+      attempts: 'Tentativas', average: 'Nota média', passRate: 'Taxa de aprovação', hardest: 'Mais difícil', rate: 'Taxa de acerto por pergunta',
+      cWho: 'Nome', cWhen: 'Concluída', cScore: 'Nota (%)', cPoints: 'Pontos', cResult: 'Resultado', cTime: 'Tempo',
+      sections: 'Nota por seção', loadFail: 'Não foi possível carregar o quiz', retry: 'Tentar de novo', csvQuestions: 'Perguntas', csvAttempts: 'Tentativas', exported: n => 'Exportado: ' + n + ' linhas',
+      fText: 'Pergunta', fKind: 'Tipo', fOptions: 'Opções (A*|B|C, * marca as corretas)', fPoints: 'Pontos', fSection: 'Seção', fExpl: 'Explicação',
+      min: 'De %', max: 'Até %', resultText: 'Texto exibido', addRange: 'Adicionar faixa',
+      texts: ['Precisa de atenção. Comece pelo básico e tente de novo.', 'Bom progresso. Alguns pontos para reforçar.', 'Excelente. Você está muito bem.'],
+      // Exemplos: [pergunta, tipo, pontos, seção, opções ("*" marca a correta; no verdadeiro/falso: o id certo), explicação]
+      examples: [
+        ['Um cliente chega irritado com uma entrega atrasada. O que você faz primeiro?', 'single', 2, 'Acolhimento', 'Explico a política da empresa|Escuto sem interromper e reconheço o problema*|Ofereço um desconto na hora|Passo para outra equipe', 'As pessoas se acalmam quando se sentem ouvidas. Política e ofertas vêm depois.'],
+        ['Em quanto tempo uma mensagem de cliente deve ser respondida?', 'single', 1, 'Acolhimento', 'No prazo de resposta que prometemos*|Quando sobrar um tempinho|Só se o cliente insistir', 'Responder logo, mesmo sem a solução, mostra que o pedido foi recebido.'],
+        ['Quais destas atitudes ajudam a acalmar uma conversa tensa?', 'multi', 2, 'Resolução', 'Chamar o cliente pelo nome*|Aumentar o tom de voz para ser ouvido|Resumir o problema de volta para ele*|Culpar outro setor', 'Use o nome e **resuma o problema**; nunca culpe os outros.'],
+        ['Tudo bem prometer um prazo que você não tem certeza de cumprir, só para acalmar o cliente.', 'truefalse', 1, 'Resolução', 'false', 'Uma promessa não cumprida custa mais confiança do que um prazo maior e honesto.'],
+        ['Depois de resolver o problema, o que completa o atendimento?', 'single', 2, 'Resolução', 'Encerrar o chamado na hora|Confirmar que o cliente ficou satisfeito e registrar o que aconteceu*|Esperar o cliente ligar de novo', 'Fechar o ciclo e registrar o caso ajuda o próximo cliente também.'],
+        ['Descreva uma situação de atendimento que deu certo e por quê.', 'open', 1, 'Feedback', '', 'Não há resposta certa; esta é para uma pessoa revisar.']
+      ],
+      people: ['Marina', 'Rafael', 'Paulo'], openText: 'Manter a calma e ouvir primeiro.'
+    };
+    const DEFAULTS = { v: 1, mode: 'test', intro: '', passPercent: 70, showAnswers: 'end', shuffle: false, oneAtATime: true, timeLimitMinutes: null, person: '',
+      resultTexts: [{ min: 0, max: 49, text: T.texts[0] }, { min: 50, max: 79, text: T.texts[1] }, { min: 80, max: 100, text: T.texts[2] }] };
+    const KINDS = Object.keys(T.kinds);
+    const CSV_FIELDS = [{ id: 'text', label: T.fText, type: 'text', required: true }, { id: 'kind', label: T.fKind, type: 'choice', options: KINDS.map(id => ({ id, label: T.kinds[id] })) },
+      { id: 'options', label: T.fOptions, type: 'text' }, { id: 'points', label: T.fPoints, type: 'number' }, { id: 'section', label: T.fSection, type: 'text' }, { id: 'explanation', label: T.fExpl, type: 'longtext' }];
+
+    const questions = tendly.db.collection('questions'), attempts = tendly.db.collection('attempts');
+    const $ = id => document.getElementById(id), h = tkit.h, app = document.querySelector('t-app');
+    const fail = e => tkit.toast(e && e.message ? e.message : String(e), { tone: 'error' });
+    const flat = r => Object.assign({ id: r.id }, r.data);
+    const go = (view, id) => { location.hash = '#' + view + (id ? '/' + encodeURIComponent(id) : ''); };
+    let S, qStore, aStore, cur = null, timer = null, lastResult = null, ed = null, loaded = 0, importOrder = 0;   // loaded: bit 1 questions, bit 2 attempts
+    const qList = () => qStore.records.map(flat).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // ================= TAKER: start =================
+    function drawStart() {
+      const n = activeSorted(qList()).length, open = aStore.records.filter(r => !r.data.finishedAt).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      $('empty').hidden = n > 0; $('intro').hidden = n === 0;
+      if (!n) return;
+      tkit.clear($('intro-text')); $('intro-text').appendChild(tkit.markdown(S.value.intro));
+      $('facts').textContent = T.facts(n, S.value.timeLimitMinutes, S.value.mode === 'test' ? S.value.passPercent : null);
+      if (!$('who').value) $('who').value = S.value.person;
+      $('resume').hidden = !open; $('resume').dataset.id = open ? open.id : '';
+    }
+    async function begin(who) {
+      const startedAt = new Date().toISOString();
+      try {
+        const list = (await questions.list({ limit: 5000 })).map(flat);
+        if (!activeSorted(list).length) return tkit.toast(T.nothing);
+        const rec = await attempts.insert({ who, startedAt, finishedAt: null, order: startOrder(list, S.value.shuffle, startedAt), answers: [], score: 0, maxScore: 0, percent: 0, passed: null, sectionScores: {} });
+        if (who && who !== S.value.person) S.save({ person: who }).catch(() => {});
+        go('take', rec.id);
+      } catch (e) { fail(e); }
+    }
+    $('begin').addEventListener('click', () => begin($('who').value.trim()));
+    $('resume').addEventListener('click', () => go('take', $('resume').dataset.id));
+
+    // ================= TAKER: take =================
+    async function openTake(id) {
+      let rec, list;
+      try { rec = await attempts.get(id); list = rec ? questionsFor((await questions.list({ limit: 5000 })).map(flat), rec.data.order) : []; } catch (e) { return fail(e); }
+      if (!rec || !list.length) { tkit.toast(T.gone); app.view = 'start'; return; }
+      if (rec.data.finishedAt) return go('result', id);
+      const drafts = {}, c = { rec, list, drafts, i: 0, seen: {}, warned: false };
+      (rec.data.answers || []).forEach(a => { drafts[a.questionId] = a; if (S.value.showAnswers === 'each') c.seen[a.questionId] = true; });
+      const first = list.findIndex(q => !drafts[q.id]);
+      c.i = S.value.oneAtATime ? (first < 0 ? list.length - 1 : first) : 0;
+      c.save = tkit.autosave(() => saveAnswers(c));
+      cur = c; startTimer(); drawTake();
+    }
+    async function saveAnswers(c) {
+      const answers = c.list.filter(q => c.drafts[q.id]).map(q => c.drafts[q.id]);
+      try { c.rec = await attempts.update(c.rec.id, { answers }, { rev: c.rec.rev }); }
+      catch (e) { if (e.code === 'conflict') { c.rec = e.current; tkit.toast(T.conflict, { tone: 'error' }); } else throw e; }
+    }
+    function questionCard(q) {
+      const c = cur, a = c.drafts[q.id] || {}, shown = !!c.seen[q.id] && S.value.oneAtATime, scale = q.kind === 'scale';
+      const card = h('section', { class: 't-card q-card' }, q.section ? h('span', { class: 't-badge accent', text: q.section }) : null, h('h2', { class: 'q-text', text: q.text }));
+      const save = patch => { c.drafts[q.id] = Object.assign({ questionId: q.id }, c.drafts[q.id], patch); c.save.touch(); };
+      if (q.kind === 'open') { card.appendChild(h('textarea', { class: 't-input', rows: '5', 'aria-label': T.mine, text: a.text || '', onInput: e => save({ text: e.target.value }) })); return card; }
+      const opts = scale ? [1, 2, 3, 4, 5].map(v => ({ id: String(v), label: String(v) })) : optionsFor(q, c.rec.data.startedAt, S.value.shuffle);
+      const chosen = scale ? [String(a.value || '')] : a.optionIds || [], multi = q.kind === 'multi', list = h('div', { class: 'opts' + (scale ? ' scale' : '') });
+      opts.forEach((o, k) => {
+        const on = chosen.indexOf(o.id) >= 0, mark = shown && isScored(q) ? (o.correct ? ' right' : on ? ' wrong' : '') : '';
+        const input = h('input', { type: multi ? 'checkbox' : 'radio', name: 'o-' + q.id, value: o.id, checked: on, disabled: shown, onChange: () => {
+          const ids = Array.prototype.map.call(list.querySelectorAll('input:checked'), i => i.value);
+          save(scale ? { value: Number(ids[0]) } : { optionIds: ids });
+        } });
+        list.appendChild(h('label', { class: 'opt' + mark }, input, scale ? null : h('kbd', { text: String(k + 1) }), h('span', { text: o.label }, shown && on && o.feedback ? h('small', { class: 't-muted', text: ' ' + o.feedback }) : null)));
+      });
+      card.appendChild(list);
+      if (scale) card.appendChild(h('div', { class: 'scale-ends t-muted' }, h('span', { text: '1 ' + T.low }), h('span', { text: '5 ' + T.high })));
+      if (shown) card.appendChild(feedbackNode(q, a));
+      return card;
+    }
+    const labelsOf = (q, ids) => (q.options || []).filter(o => ids.indexOf(o.id) >= 0).map(o => o.label).join(', ');
+    // Verdict, your answer, the right one when you missed, and the explanation: used while taking ("each") and in the result review.
+    function feedbackNode(q, a) {
+      const g = gradeAnswer(q, a), box = h('div', { class: 'q-feedback' });
+      if (g.correct !== null) box.appendChild(h('span', { class: 't-badge ' + (g.correct ? 'ok' : 'danger'), text: g.correct ? T.right : T.wrong }));
+      else if (q.kind === 'open') box.appendChild(h('span', { class: 't-badge info', text: T.review }));
+      const mine = q.kind === 'open' ? a && a.text : q.kind === 'scale' ? a && a.value : labelsOf(q, (a && a.optionIds) || []);
+      box.appendChild(h('p', {}, h('strong', { text: T.mine + ': ' }), mine ? String(mine) : T.none));
+      if (g.correct === false) box.appendChild(h('p', {}, h('strong', { text: T.rightIs + ': ' }), labelsOf(q, (q.options || []).filter(o => o.correct).map(o => o.id))));
+      if (q.explanation) box.appendChild(h('div', { class: 't-md' }, tkit.markdown(q.explanation)));
+      return box;
+    }
+    function drawTake() {
+      const c = cur, one = S.value.oneAtATime, q = c.list[c.i], box = $('take-box');
+      tkit.clear(box);
+      (one ? [q] : c.list).forEach(x => box.appendChild(questionCard(x)));
+      $('take-progress').max = c.list.length; $('take-progress').value = one ? c.i + 1 : c.list.filter(x => c.drafts[x.id]).length;
+      $('prev').hidden = !one || c.i === 0;
+      const last = !one || c.i === c.list.length - 1, pending = one && S.value.showAnswers === 'each' && !c.seen[q.id] && (isScored(q) || q.explanation);
+      $('next').textContent = pending ? T.check : last ? T.finish : T.next;
+      if (one) tkit.context({ selection: T.sel(c.i + 1, c.list.length) });
+      app.querySelector('.t-app-main').scrollTop = 0;
+    }
+    async function next() {
+      const c = cur; if (!c) return;
+      const q = c.list[c.i], one = S.value.oneAtATime;
+      if (one && S.value.showAnswers === 'each' && !c.seen[q.id] && (isScored(q) || q.explanation)) { c.seen[q.id] = true; c.drafts[q.id] = c.drafts[q.id] || { questionId: q.id }; c.save.touch(); return drawTake(); }
+      if (one && c.i < c.list.length - 1) { c.i++; return drawTake(); }
+      finish();
+    }
+    async function finish() {
+      const c = cur; if (!c) return;
+      cur = null; stopTimer();
+      try {
+        await c.save.flush();
+        const g = scoreAttempt(c.list, Object.keys(c.drafts).map(k => c.drafts[k]));
+        await attempts.update(c.rec.id, { answers: g.answers, score: g.score, maxScore: g.maxScore, percent: g.percent, sectionScores: g.sectionScores,
+          passed: isPassed(g.percent, S.value.passPercent, S.value.mode), finishedAt: new Date().toISOString() });
+        go('result', c.rec.id);
+      } catch (e) { cur = c; startTimer(); fail(e); }
+    }
+    function startTimer() {
+      const limit = S.value.timeLimitMinutes, el = $('timer');
+      stopTimer(); el.hidden = !limit;
+      if (!limit) return;
+      const tick = () => {
+        if (!cur) return;
+        const left = remainingSeconds(cur.rec.data.startedAt, Date.now(), limit);
+        el.textContent = clockText(left); el.className = 't-badge ' + (left <= 60 ? 'danger' : 'info');
+        if (left <= 60 && left > 0 && !cur.warned) { cur.warned = true; tkit.toast(T.oneMinute, { tone: 'error' }); }
+        if (left <= 0) { tkit.toast(T.timeUp); finish(); }
+      };
+      timer = setInterval(tick, 1000); tick();
+    }
+    const stopTimer = () => { clearInterval(timer); timer = null; };
+    $('next').addEventListener('click', next);
+    $('prev').addEventListener('click', () => { if (cur && cur.i > 0) { cur.i--; drawTake(); } });
+    document.addEventListener('keydown', e => {   // 1-9 choose, Enter goes on
+      if (!cur || e.metaKey || e.ctrlKey || e.altKey || /^(TEXTAREA|SELECT|BUTTON|A)$/.test(e.target.tagName) || document.querySelector('dialog[open]')) return;
+      if (e.key === 'Enter') { e.preventDefault(); next(); return; }
+      const input = S.value.oneAtATime && /^[1-9]$/.test(e.key) ? $('take-box').querySelectorAll('input:not(:disabled)')[Number(e.key) - 1] : null;
+      if (input) { e.preventDefault(); input.click(); input.focus(); }
+    });
+
+    // ================= TAKER: result =================
+    async function openResult(id) {
+      let rec, list;
+      try { rec = await attempts.get(id); list = (await questions.list({ limit: 5000 })).map(flat); } catch (e) { return fail(e); }
+      if (!rec) { tkit.toast(T.gone); app.view = 'start'; return; }
+      if (!rec.data.finishedAt) return go('take', id);
+      lastResult = rec;
+      const a = rec.data, box = $('result-box'), sections = Object.keys(a.sectionScores || {});
+      tkit.clear(box);
+      box.appendChild(h('section', { class: 't-card result-card' }, h('div', { class: 'big', text: tkit.number(a.percent, 0) + '%' }),
+        a.passed === null ? h('div', { class: 't-md' }, tkit.markdown(resultTextFor(a.percent, S.value.resultTexts))) : h('span', { class: 't-badge ' + (a.passed ? 'ok' : 'danger'), text: a.passed ? T.passed : T.failed }),
+        h('p', { class: 't-muted', text: [a.who, tkit.date(a.finishedAt), T.pts(a.score, a.maxScore)].filter(Boolean).join(' · ') })));
+      if (sections.length) {
+        const chart = h('t-chart', { type: 'bar', label: T.sections }); chart.data = sections.map(k => ({ label: k, value: a.sectionScores[k] }));
+        box.appendChild(h('section', { class: 't-card' }, h('div', { class: 't-card-head' }, h('h2', { text: T.sections })), chart));
+      }
+      if (S.value.showAnswers !== 'never') (a.answers || []).forEach((x, i) => {
+        const q = list.filter(y => y.id === x.questionId)[0];
+        if (q) box.appendChild(h('section', { class: 't-card q-card' }, h('h3', { class: 'q-text', text: (i + 1) + '. ' + q.text }), feedbackNode(q, x)));
+      });
+      tkit.context({ selection: null });
+    }
+    $('home').replaceChildren(tkit.icon('arrow-left', 16), h('span', { text: T.back }));
+    $('home').addEventListener('click', () => { app.view = 'start'; });
+    $('again').addEventListener('click', () => begin(lastResult ? lastResult.data.who : ''));
+
+    // ================= AUTHOR: questions =================
+    const listEl = $('q-list'), optsEl = $('q-opts'), editor = $('editor'), nextOrder = () => Math.max(0, ...qStore.records.map(r => r.data.order || 0)) + 1;
+    function drawQuestions() {
+      const list = qList();
+      $('q-none').hidden = list.length > 0; listEl.hidden = !list.length;
+      $('q-count').textContent = T.qCount(list.length, list.filter(q => q.active !== false).length);
+      listEl.rows = list.map(q => ({ id: q.id, text: q.text, kind: q.kind, points: q.points, section: q.section || '', active: q.active !== false }));
+      $('q-sections').replaceChildren(...Array.from(new Set(list.map(q => q.section).filter(Boolean))).map(s => h('option', { value: s })));
+    }
+    listEl.cells = row => {
+      const toggle = h('input', { type: 'checkbox', class: 't-switch', checked: row.active, 'aria-label': T.active + ': ' + row.text, onChange: e => questions.update(row.id, { active: e.target.checked }).catch(fail) });
+      const meta = h('span', { class: 'q-meta' }, h('span', { class: 't-badge', text: T.kinds[row.kind] }), isScored(row) ? h('span', { class: 't-badge', text: pointsOf(row) + ' pt' }) : null, row.section ? h('span', { class: 't-badge accent', text: row.section }) : null);
+      const menu = h('t-menu', { label: T.actions + ': ' + row.text });
+      menu.items = [{ id: 'edit', label: T.edit, icon: 'edit' }, { id: 'dup', label: T.dup, icon: 'copy' }];
+      menu.addEventListener('t-select', async e => {
+        const rec = qStore.records.find(r => r.id === row.id);
+        if (!rec) return;
+        if (e.detail.id === 'edit') openEditor(rec);
+        else { const { _sample, ...rest } = rec.data; questions.insert(Object.assign(rest, { text: rest.text + T.copy, order: nextOrder() })).catch(fail); }
+      });
+      return [toggle, h('button', { type: 'button', class: 'q-open', onClick: () => openEditor(qStore.records.find(r => r.id === row.id)) }, h('strong', { text: row.text }), meta), menu];
+    };
+    listEl.confirmRemove = async row => { if (await tkit.confirm(T.deleteQ(row.text), { confirm: T.del, tone: 'danger' })) await questions.remove(row.id).catch(fail); return false; };
+    listEl.addEventListener('t-change', async e => {   // reorder: write the new positions
+      try { await Promise.all(e.detail.rows.map((r, i) => (qStore.records.find(x => x.id === r.id) || { data: {} }).data.order === i + 1 ? null : questions.update(r.id, { order: i + 1 }))); } catch (err) { fail(err); }
+    });
+    $('new-q').addEventListener('click', () => openEditor(null));
+
+    // ---- question editor ----
+    $('q-kind').replaceChildren(...KINDS.map(k => h('button', { type: 'button', 'data-kind': k, text: T.kinds[k], onClick: () => {
+      ed.kind = k; if (k === 'single') { let seen = false; ed.options = ed.options.map(o => { const keep = o.correct && !seen; seen = seen || o.correct; return Object.assign({}, o, { correct: keep }); }); } syncEditor();
+    } })));
+    $('q-tf').replaceChildren(...['true', 'false'].map(v => h('button', { type: 'button', 'data-v': v, text: v === 'true' ? T.yes : T.no, onClick: () => { ed.tf = v; syncEditor(); } })));
+    function syncEditor() {
+      const k = ed.kind;
+      $('q-kind').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === k)));
+      $('q-tf').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === ed.tf)));
+      $('q-opts-box').hidden = k !== 'single' && k !== 'multi'; $('q-tf-box').hidden = k !== 'truefalse'; $('q-points-box').hidden = !isScored({ kind: k });
+      optsEl.rows = ed.options;
+    }
+    optsEl.addLabel = T.addOption;
+    optsEl.newRow = () => ({ id: nextOptionId(ed.options), label: '', correct: false });
+    optsEl.addEventListener('t-change', e => { ed.options = e.detail.rows; });
+    optsEl.cells = (row, change) => [
+      h('input', { class: 't-input', value: row.label, placeholder: T.optionLabel, 'aria-label': T.optionLabel, onChange: e => change({ label: e.target.value.trim() }) }),
+      h('label', { class: 't-switch-line' }, h('input', { type: 'checkbox', class: 't-switch', checked: !!row.correct, onChange: e => {
+        const on = e.target.checked;
+        ed.options = ed.options.map(o => o.id === row.id ? Object.assign({}, o, { correct: on }) : ed.kind === 'single' && on ? Object.assign({}, o, { correct: false }) : o); optsEl.rows = ed.options;
+      } }), h('span', { text: T.correct })),
+      h('input', { class: 't-input', value: row.feedback || '', placeholder: T.feedback, 'aria-label': T.feedback, onChange: e => change({ feedback: e.target.value.trim() }) })
+    ];
+    function openEditor(rec) {
+      const q = rec ? rec.data : null, blank = () => ({ id: nextOptionId([]), label: '', correct: false });
+      ed = { rec, kind: q ? q.kind : 'single', tf: q && q.kind === 'truefalse' ? (q.options.find(o => o.correct) || { id: 'true' }).id : 'true',
+        options: q && q.kind !== 'truefalse' && (q.options || []).length ? q.options.map(o => Object.assign({}, o)) : [blank(), { id: 'o2', label: '', correct: false }] };
+      $('q-text').value = q ? q.text : ''; $('q-points').value = q ? pointsOf(q) : 1; $('q-section').value = q ? q.section || '' : ''; $('q-expl').value = q ? q.explanation || '' : '';
+      $('q-error').hidden = true; editor.title = rec ? T.editQ : T.newQ; syncEditor(); editor.open(); $('q-text').focus();
+    }
+    $('q-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const kind = ed.kind, data = { text: $('q-text').value.trim(), kind, points: $('q-points').value === '' ? 1 : Math.max(0, Number($('q-points').value) || 0), section: $('q-section').value.trim(), explanation: $('q-expl').value.trim(),
+        options: kind === 'truefalse' ? tfOptions(ed.tf, T.yes, T.no) : kind === 'single' || kind === 'multi' ? ed.options.filter(o => o.label) : [], active: ed.rec ? ed.rec.data.active !== false : true };
+      const bad = validateQuestion(data);
+      if (bad) { $('q-error').textContent = T.err[bad]; $('q-error').hidden = false; return; }
+      try {
+        if (ed.rec) await questions.update(ed.rec.id, data, { rev: ed.rec.rev }); else await questions.insert(Object.assign(data, { order: nextOrder() }));
+        editor.close();
+      } catch (err) { if (err.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); openEditor(err.current); } else fail(err); }
+    });
+    $('q-cancel').addEventListener('click', () => editor.close());
+    $('q-form').addEventListener('input', () => { tendly.host.holdReload(true); });
+    editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
+
+    // ================= AUTHOR: results =================
+    const attemptsEl = $('attempts'), doneList = () => aStore.records.filter(r => r.data.finishedAt).map(flat);
+    const minutes = a => clockText(Math.max(0, Math.round((Date.parse(a.finishedAt) - Date.parse(a.startedAt)) / 1000)));
+    function drawResults() {
+      const done = doneList(), qs = qList(), st = attemptStats(done), rates = questionStats(qs, done), hard = hardest(rates);
+      $('r-none').hidden = done.length > 0; $('r-body').hidden = !done.length;
+      $('stats').replaceChildren(...[[st.count, T.attempts], [st.average === null ? '—' : Math.round(st.average) + '%', T.average], [st.passRate === null ? '—' : Math.round(st.passRate) + '%', T.passRate],
+        [hard ? hard.rate + '%' : '—', T.hardest + (hard ? ': ' + qs.find(q => q.id === hard.id).text : '')]].map(s => h('div', { class: 't-card t-stat' }, h('strong', { text: String(s[0]) }), h('span', { text: s[1] }))));
+      attemptsEl.columns = [{ key: 'who', label: T.cWho }, { key: 'when', label: T.cWhen, type: 'date' }, { key: 'percent', label: T.cScore, type: 'number' }, { key: 'result', label: T.cResult, type: 'badge', tones: { [T.passed]: 'ok', [T.failed]: 'danger' } }, { key: 'time', label: T.cTime }];
+      attemptsEl.rows = done.sort((a, b) => b.finishedAt.localeCompare(a.finishedAt)).map(a => ({ id: a.id, who: a.who || T.anon, when: a.finishedAt, percent: a.percent, result: a.passed === null ? '' : a.passed ? T.passed : T.failed, time: minutes(a) }));
+      $('rates').replaceChildren(...rates.map(s => { const q = qs.find(x => x.id === s.id); return h('li', { class: 't-row' }, h('span', { class: 't-row-text', text: q.text }), h('span', { class: 't-badge ' + (s.rate === null ? '' : s.rate >= 70 ? 'ok' : s.rate >= 40 ? 'warn' : 'danger'), text: s.rate === null ? '—' : s.rate + '%' })); }));
+    }
+    attemptsEl.addEventListener('t-open', e => go('result', e.detail.id));
+    $('export-attempts').addEventListener('click', () => {   // one row per attempt, one column per question
+      const done = doneList(), qs = activeSorted(qList());
+      const cols = [{ key: 'who', label: T.cWho }, { key: 'when', label: T.cWhen }, { key: 'percent', label: T.cScore }, { key: 'score', label: T.cPoints }, { key: 'result', label: T.cResult }, { key: 'time', label: T.cTime }]
+        .concat(qs.map(q => ({ key: q.id, label: q.text })));
+      const rows = done.map(a => {
+        const row = { who: a.who, when: a.finishedAt.slice(0, 10), percent: a.percent, score: a.score, result: a.passed === null ? '' : a.passed ? T.passed : T.failed, time: minutes(a) };
+        (a.answers || []).forEach(x => { const q = qs.find(y => y.id === x.questionId); if (q) row[q.id] = x.correct === null || x.correct === undefined ? (x.text || x.value || '') : x.correct ? T.right : T.wrong; });
+        return row;
+      });
+      tkit.csv.download(tkit.csv.stringify(rows, cols), tkit.csv.filename(document.title, T.csvAttempts, tkit.today()));
+      tkit.toast(T.exported(rows.length));
+    });
+
+    // ================= AUTHOR: settings =================
+    const textsEl = $('texts');
+    function applySettings() {
+      const v = S.value;
+      $('mode').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v.mode)));
+      document.querySelectorAll('[data-set]').forEach(el => { if (el === document.activeElement) return; const x = v[el.dataset.set]; if (el.type === 'checkbox') el.checked = !!x; else el.value = x == null ? '' : x; });
+      $('pass-box').hidden = v.mode !== 'test'; $('texts-box').hidden = v.mode !== 'diagnostic';
+      textsEl.rows = v.resultTexts.map((t, i) => Object.assign({ id: 't' + i }, t));
+      if (loaded === 3) renderAll();
+    }
+    $('mode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) S.save({ mode: b.dataset.v }).catch(fail); });
+    document.querySelectorAll('[data-set]').forEach(el => el.addEventListener('change', () => {
+      const key = el.dataset.set, n = Number(el.value);
+      let val = el.type === 'checkbox' ? el.checked : el.value;
+      if ('num' in el.dataset) val = el.value === '' || !isFinite(n) ? null : key === 'passPercent' ? Math.min(100, Math.max(0, n)) : Math.max(1, Math.round(n));
+      if (val === null && key === 'passPercent') val = DEFAULTS.passPercent;
+      S.save({ [key]: val }).catch(fail);
+    }));
+    textsEl.addLabel = T.addRange;
+    textsEl.newRow = () => ({ min: 0, max: 100, text: '' });
+    textsEl.canRemove = () => S.value.resultTexts.length > 1 || T.nothing;
+    textsEl.cells = (row, change) => [
+      h('input', { class: 't-input', type: 'number', min: '0', max: '100', value: row.min, 'aria-label': T.min, style: { flex: '0 1 90px' }, onChange: e => change({ min: Number(e.target.value) || 0 }) }),
+      h('input', { class: 't-input', type: 'number', min: '0', max: '100', value: row.max, 'aria-label': T.max, style: { flex: '0 1 90px' }, onChange: e => change({ max: Number(e.target.value) || 0 }) }),
+      h('input', { class: 't-input', value: row.text, 'aria-label': T.resultText, placeholder: T.resultText, onChange: e => change({ text: e.target.value.trim() }) })
+    ];
+    textsEl.addEventListener('t-change', e => { S.save({ resultTexts: e.detail.rows.map(r => ({ min: r.min, max: r.max, text: r.text })) }).catch(fail); });
+
+    // ================= data tools: questions as CSV, examples (with 3 past attempts), delete all =================
+    const tools = $('tools');
+    function exampleDocs() {
+      return T.examples.map((e, i) => ({ text: e[0], kind: e[1], points: e[2], section: e[3], explanation: e[5], active: true, order: i + 1,
+        options: e[1] === 'truefalse' ? tfOptions(e[4], T.yes, T.no) : parseOptions(e[4]) }));
+    }
+    async function addSampleAttempts() {
+      await qStore.reload();
+      const qs = qList().filter(q => q._sample);
+      if (!qs.length || aStore.records.some(r => r.data._sample)) return;
+      const scored = qs.filter(isScored), ways = ['rwhrr', 'rrwrw', 'rrrrr'], days = [6, 3, 1];   // right / wrong / half (multi)
+      for (let n = 0; n < 3; n++) {
+        const answers = scored.map((q, i) => {
+          const good = q.options.filter(o => o.correct).map(o => o.id), bad = q.options.filter(o => !o.correct).map(o => o.id), how = ways[n][i];
+          return { questionId: q.id, optionIds: how === 'r' ? good : how === 'h' ? good.slice(0, 1) : bad.slice(0, 1) };
+        }).concat(qs.filter(q => q.kind === 'open').map(q => ({ questionId: q.id, text: T.openText })));
+        const g = scoreAttempt(qs, answers), start = Date.now() - days[n] * 86400000;
+        await attempts.insert(Object.assign({ who: T.people[n], startedAt: new Date(start).toISOString(), finishedAt: new Date(start + 7 * 60000).toISOString(), order: qs.map(q => q.id), passed: isPassed(g.percent, S.value.passPercent, S.value.mode), _sample: true }, g));
+      }
+    }
+    const loadExamples = () => tkit.samples.load(questions, exampleDocs()).then(addSampleAttempts).catch(fail);
+    const clearExamples = () => Promise.all([tkit.samples.clear(questions), tkit.samples.clear(attempts)]).catch(fail);
+    tools.collection = questions; tools.noun = { one: T.qWord(1), many: T.qWord(2) }; tools.filename = T.csvQuestions; tools.fields = CSV_FIELDS; tools.examples = exampleDocs;
+    tools.exportRows = recs => recs.map(flat).sort((a, b) => (a.order || 0) - (b.order || 0)).map(q => Object.assign({}, q, { options: optionsToText(q.options) }));
+    tools.beforeInsert = doc => {   // a CSV row -> a question; rows that would not pass the editor's checks are skipped
+      const kind = KINDS.indexOf(doc.kind) >= 0 ? doc.kind : 'single', opts = parseOptions(doc.options), right = opts.findIndex(o => o.correct);
+      importOrder = Math.max(importOrder, nextOrder() - 1) + 1;
+      const q = { text: doc.text, kind, points: doc.points == null ? 1 : doc.points, section: doc.section || '', explanation: doc.explanation || '', active: true, order: importOrder,
+        options: kind === 'truefalse' ? tfOptions(right === 0 ? 'true' : right === 1 ? 'false' : '', T.yes, T.no) : kind === 'single' || kind === 'multi' ? opts : [] };
+      return validateQuestion(q) ? null : q;
+    };
+    tools.addEventListener('t-examples', e => { if (e.detail.action === 'loaded') addSampleAttempts().catch(fail); else tkit.samples.clear(attempts).catch(fail); });
+    $('empty').addEventListener('t-action', () => { app.view = 'questions'; openEditor(null); });
+    $('empty').addEventListener('t-examples', loadExamples);
+    document.querySelectorAll('.sample-banner').forEach(b => b.addEventListener('t-clear', clearExamples));
+
+    // ================= start-up =================
+    function renderAll() {
+      tkit.clear($('status'));
+      drawStart(); drawQuestions(); drawResults();
+      document.querySelectorAll('.sample-banner').forEach(b => { b.count = tkit.samples.count(qStore.records); });
+      tools.records = qStore.records;
+      setSummary();
+    }
+    function setSummary() {
+      if (loaded !== 3) return;
+      const st = attemptStats(doneList()), n = qStore.records.length;
+      tkit.context({ summary: n || st.count ? T.summary(n, st.count, st.average) : null });
+    }
+    function route(r) {
+      if (r.view !== 'take') { if (cur) cur.save.flush().catch(() => {}); cur = null; stopTimer(); }
+      if (r.view === 'take') { if (r.id) openTake(r.id); else app.view = 'start'; }
+      else if (r.view === 'result' && r.id) openResult(r.id);
+      else if (r.view === 'result') app.view = 'start';
+    }
+    app.addEventListener('t-view', () => setTimeout(setSummary, 0));
+    (async () => {
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) fail(S.error);
+      const onError = error => { tkit.clear($('status')); $('status').appendChild(h('t-state', { kind: 'error', title: T.loadFail, text: error.message }, h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => { qStore.reload(); aStore.reload(); } }))); };
+      qStore = tkit.live(questions, () => { loaded |= 1; if (loaded === 3) renderAll(); }, { limit: 5000, onError });
+      aStore = tkit.live(attempts, () => { loaded |= 2; if (loaded === 3) renderAll(); }, { limit: 5000, onError });
+      S.on(applySettings); applySettings();
+      tkit.route.on(route);
+    })();
+  </script>
+</body>
+</html>

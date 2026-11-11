@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const server = new URL('../../../../../crates/server/src/hub/apps/templates/', import.meta.url);
-const NAMES = ['clockOf', 'ymdAdd', 'ymdWeekday', 'weekStartOf', 'windowFor', 'periodFor', 'isDue', 'isLate', 'nextDue', 'groupToday', 'openRunOf', 'missingRequired', 'runProgress', 'shouldNotify'];
+const NAMES = ['createdDay', 'clockOf', 'ymdAdd', 'ymdWeekday', 'weekStartOf', 'windowFor', 'periodFor', 'isDue', 'isLate', 'nextDue', 'groupToday', 'openRunOf', 'missingRequired', 'runProgress', 'shouldNotify'];
 
 function loadLogic(file) {
   const html = readFileSync(new URL(file, server), 'utf8');
@@ -281,10 +281,80 @@ test('required steps and notification rule', () => {
   assert.equal(L.shouldNotify({ notifyLate: true, lastNotified: null }, [], '2026-11-11'), false, 'nothing late');
 });
 
+// ---- creation cut-off: routine.since is the day it was made (local 'YYYY-MM-DD'); earlier occurrences never count -------------
+test('createdDay: the local day of created_at; unreadable gives undefined', () => {
+  assert.equal(L.createdDay(new Date(2026, 10, 11, 23, 30).toISOString()), '2026-11-11', 'late evening stays on its local day');
+  assert.equal(L.createdDay(new Date(2026, 10, 12, 0, 5)), '2026-11-12');
+  assert.equal(L.createdDay('nonsense'), undefined);
+  assert.equal(L.createdDay(undefined), undefined);
+});
+
+test('since: a weekly Friday routine made on a Wednesday is not late until the first Friday after creation', () => {
+  const r = weekly([5], { since: '2026-11-11' });              // created Wednesday 2026-11-11; last Friday (11-06) is before it
+  assert.equal(L.isLate(weekly([5]), [], at('2026-11-11'), 1), true, 'without since the missed Friday would be late (old behaviour)');
+  for (const day of ['2026-11-11', '2026-11-12']) {
+    assert.equal(L.windowFor(r, day, 1), null, day);
+    assert.equal(L.isDue(r, [], at(day, '23:00'), 1), false, `${day}: not due`);
+    assert.equal(L.isLate(r, [], at(day, '23:00'), 1), false, `${day}: not late`);
+  }
+  assert.equal(L.nextDue(r, at('2026-11-11'), [], 1), '2026-11-13', 'next due is the first Friday');
+  assert.equal(L.isDue(r, [], at('2026-11-13', '08:00'), 1), true, 'Friday: due');
+  assert.equal(L.isLate(r, [], at('2026-11-13', '23:00'), 1), false, 'Friday without dueTime: not late on its day');
+  assert.equal(L.isLate(r, [], at('2026-11-14'), 1), true, 'Saturday: the Friday was missed');
+  assert.equal(L.isLate(r, [run(r, '2026-11-13')], at('2026-11-14'), 1), false, 'done Friday is not late');
+  assert.equal(L.isLate({ ...r, dueTime: '10:00' }, [], at('2026-11-13', '10:01'), 1), true, 'Friday after dueTime');
+  const g = L.groupToday([{ ...r, name: 'F' }], [], at('2026-11-12'), 1);
+  assert.equal(g.late.length + g.today.length + g.open.length, 0, 'Today shows nothing');
+});
+
+test('since: weekly Monday and Thursday made on a Wednesday starts with Thursday', () => {
+  const r = weekly([1, 4], { since: '2026-11-11' });
+  assert.equal(L.isDue(r, [], at('2026-11-11'), 1), false, 'Monday is before creation: not due on Wednesday');
+  assert.equal(L.isDue(r, [], at('2026-11-12'), 1), true);
+  assert.equal(L.nextDue(r, at('2026-11-10'), [], 1), '2026-11-12', 'even asked from a day before');
+});
+
+test('since: a daily routine made today at 15:00 with dueTime 09:00 is due today but not late today', () => {
+  const r = daily({ dueTime: '09:00', since: '2026-11-11' });
+  assert.equal(L.isDue(r, [], at('2026-11-11', '15:00'), 0), true);
+  assert.equal(L.isLate(r, [], at('2026-11-11', '15:00'), 0), false, 'dueTime already passed, but it was made after it');
+  assert.equal(L.isLate(r, [], at('2026-11-11', '23:59'), 0), false);
+  assert.equal(L.isLate(daily({ dueTime: '09:00' }), [], at('2026-11-11', '15:00'), 0), true, 'without since it would be late');
+  assert.equal(L.isLate(r, [], at('2026-11-12', '08:00'), 0), false, 'tomorrow: a new occurrence, its time has not come');
+  assert.equal(L.isLate(r, [], at('2026-11-12', '09:01'), 0), true, 'tomorrow after dueTime: late as usual');
+  assert.equal(L.isDue(r, [], at('2026-11-10'), 0), false, 'a clock before creation: nothing');
+  assert.equal(L.nextDue(r, at('2026-11-10'), [], 0), '2026-11-11', 'the first day is the creation day');
+});
+
+test('since: monthly and once routines', () => {
+  const m = monthly(5, { since: '2026-11-11', dueTime: '17:00' });
+  assert.equal(L.isDue(m, [], at('2026-11-20'), 0), false, 'November 5th was before creation');
+  assert.equal(L.isLate(m, [], at('2026-11-30'), 0), false);
+  assert.equal(L.nextDue(m, at('2026-11-20'), [], 0), '2026-12-05');
+  assert.equal(L.isDue(m, [], at('2026-12-05'), 0), true);
+  assert.equal(L.isLate(m, [], at('2026-12-06'), 0), true);
+  const same = monthly(11, { since: '2026-11-11', dueTime: '09:00' });   // the day it was made is its day
+  assert.equal(L.isDue(same, [], at('2026-11-11', '15:00'), 0), true);
+  assert.equal(L.isLate(same, [], at('2026-11-11', '15:00'), 0), false, 'made today: late only from tomorrow');
+  assert.equal(L.isLate(same, [], at('2026-11-12', '07:00'), 0), true, 'tomorrow: late');
+  assert.equal(L.nextDue(same, at('2026-11-11'), [], 0), '2026-11-11');
+  const old = once('2026-11-05', { since: '2026-11-11' });
+  assert.equal(L.isDue(old, [], at('2026-11-20'), 0), false, 'a one-off dated before creation never counts');
+  assert.equal(L.nextDue(old, at('2026-11-11'), [], 0), null);
+  const today = once('2026-11-11', { since: '2026-11-11', dueTime: '09:00' });
+  assert.equal(L.isDue(today, [], at('2026-11-11', '15:00'), 0), true);
+  assert.equal(L.isLate(today, [], at('2026-11-11', '15:00'), 0), false);
+  assert.equal(L.isLate(today, [], at('2026-11-12'), 0), true);
+  assert.equal(L.nextDue(weekly([5], { since: '2026-11-11', active: false }), at('2026-11-11'), [], 1), null, 'paused stays null');
+  assert.equal(L.nextDue({ ...manual, since: '2026-11-11' }, at('2026-11-11'), [], 1), null);
+});
+
 test('the Portuguese twin runs the same rules', () => {
   const r = weekly([1, 4]);
   assert.equal(B.periodFor(r, '2026-11-12', 1), '2026-11-12');
   assert.equal(B.periodFor(r, '2026-11-11', 1), null);
   assert.equal(B.isLate(r, [], at('2026-11-11'), 1), true);
   assert.equal(B.isLate(daily({ dueTime: '09:00' }), [], at('2026-11-11', '09:01'), 0), true);
+  assert.equal(B.isLate(weekly([5], { since: '2026-11-11' }), [], at('2026-11-12'), 1), false);
+  assert.equal(B.createdDay(new Date(2026, 10, 11, 12)), '2026-11-11');
 });

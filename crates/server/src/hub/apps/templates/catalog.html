@@ -11,32 +11,17 @@
     .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
     .settings-stack .t-card .t-card-head h2 { margin: 0; font-size: var(--t-text-md); }
     .t-actions.start { justify-content: flex-start; }
-    .shelf-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
-    .shelf-tools > .t-input { flex: 1 1 200px; max-width: 320px; }
     .shelf { display: grid; gap: var(--t-space-3); }
-    [hidden] { display: none !important; }
-    /* Items without a picture: a soft tile with the category's tone and the first letter. */
-    .tone-accent { background: var(--t-accent-soft); color: var(--t-accent-ink); }
-    .tone-ok { background: var(--t-ok-soft); color: var(--t-ok-ink); }
-    .tone-warn { background: var(--t-warn-soft); color: var(--t-warn-ink); }
-    .tone-danger { background: var(--t-danger-soft); color: var(--t-danger-ink); }
-    .tone-info { background: var(--t-app-blue-soft); color: var(--t-app-blue); }
-    .tone-violet { background: var(--t-app-violet-soft); color: var(--t-app-violet); }
-    .t-gal-media[class*="tone-"] .t-gal-empty { color: inherit; font-size: 2.5rem; font-weight: 600; }
-    .t-gal-card.off { opacity: .6; }
+    .t-filters > .t-input { flex: 0 1 240px; }
     .item-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: var(--t-space-6); align-items: start; }
-    .item-img { display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--t-radius-lg); background: var(--t-fill); font-size: 4rem; font-weight: 600; }
+    .item-img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--t-radius-lg); }
+    .item-img .t-gal-letter { font-size: 4rem; }
     .item-info { display: grid; gap: var(--t-space-3); min-width: 0; }
     .item-info > * { margin: 0; }
     .item-price { font-size: var(--t-text-xl, 1.25rem); font-weight: 600; }
     .item-tags { display: flex; flex-wrap: wrap; gap: var(--t-space-2); }
     .item-desc { margin-top: var(--t-space-6); max-width: 72ch; }
     @container t-app (max-width: 640px) { .item-grid { grid-template-columns: minmax(0, 1fr); } }
-    .order-list { display: grid; gap: var(--t-space-2); margin: 0; padding: 0; list-style: none; }
-    .order-list li { display: flex; align-items: center; gap: var(--t-space-2); padding: var(--t-space-2) var(--t-space-3); border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-elevated); }
-    .order-list li.dragging { opacity: .5; }
-    .order-list .grip { color: var(--t-faint); cursor: grab; display: inline-flex; }
-    .order-list .name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -57,27 +42,26 @@
           <t-sample-banner class="sample-banner"></t-sample-banner>
           <t-state id="loading" kind="loading"></t-state>
           <t-state id="fail" kind="error" hidden></t-state>
-          <t-empty-start id="empty" hidden></t-empty-start>
+          <t-empty-start id="empty" title="No items yet" text="Add your first item, or load a few examples to see how the catalog looks." action="New item" hidden></t-empty-start>
           <div class="shelf" id="shelf" hidden>
-            <div class="shelf-tools">
-              <span class="shelf-tools" id="filters">
-                <input type="search" class="t-input" id="q" aria-label="Search">
-                <select class="t-input" id="sort" aria-label="Sort" style="width:auto"></select>
+            <div class="t-toolbar">
+              <span class="t-filters" id="filters">
+                <input type="search" class="t-input" id="q" placeholder="Search" aria-label="Search">
+                <select class="t-input" id="sort" aria-label="Sort"></select>
                 <label class="t-switch-line"><input type="checkbox" class="t-switch" id="show-off"><span>Show unavailable</span></label>
               </span>
               <span class="t-spacer"></span>
               <button type="button" class="t-button" id="order-btn" aria-pressed="false">Reorder</button>
             </div>
             <t-pills id="pills"></t-pills>
-            <t-gallery id="gallery"></t-gallery>
-            <ul class="order-list" id="order-list" hidden></ul>
-            <t-state id="nothing" kind="empty" hidden><button type="button" class="t-button" id="clear-filters">Clear filters</button></t-state>
+            <t-gallery id="gallery" placeholder="letter"></t-gallery>
+            <t-state id="nothing" kind="empty" title="Nothing found" text="No item matches these filters." hidden><button type="button" class="t-button" id="clear-filters">Clear filters</button></t-state>
           </div>
         </div>
       </t-view>
       <t-view name="item">
         <div class="t-page">
-          <div><button type="button" class="t-button" id="back"></button></div>
+          <button type="button" class="t-back" id="back"></button>
           <div id="item-body"></div>
         </div>
       </t-view>
@@ -135,21 +119,8 @@
     </form>
   </t-modal>
 
-  <t-modal id="move-modal" title="Move items">
-    <form id="move-form" class="t-form">
-      <p id="move-text"></p>
-      <label class="t-field"><span>Move to</span><select id="move-target"></select></label>
-      <div class="t-actions">
-        <span class="t-spacer"></span>
-        <button type="button" class="t-button" id="move-cancel">Cancel</button>
-        <button type="submit" class="t-button primary">Move and delete the category</button>
-      </div>
-    </form>
-  </t-modal>
-
   <script>
-    // PAGE MAP: strings (T) -> defaults -> state -> helpers -> catalog (gallery, ordering) -> list -> item page -> editor ->
-    // settings -> start-up.
+    // PAGE MAP: strings (T) -> defaults -> state -> helpers -> catalog (gallery + reorder mode) -> list -> item page -> editor -> settings -> start-up.
     // DATA: records of the collection `items`: { name, category (option id), price (number|null), image ({path,name,type}|null),
     // summary (<=140), description (markdown), tags: [text], available: bool, order, extra: { [extra field id]: value } }.
     // Settings (tendly.data key `settings`): { v, currency, showPrice, priceLabel, categories: [{id,label,tone}],
@@ -163,16 +134,14 @@
       all: 'All', products: 'Products', services: 'Services', others: 'Others',
       fImage: 'Image', fName: 'Name', fCategory: 'Category', fPrice: 'Price', fSummary: 'Summary', fDesc: 'Description', fTags: 'Tags', fAvail: 'Available', fUpdated: 'Updated',
       helpSummary: 'One line, up to 140 characters.', helpDesc: 'Optional. You can use **bold**, lists and links.', helpTags: 'Separate with commas.',
-      newItem: 'New item', editItem: 'Edit item', edit: 'Edit', duplicate: 'Duplicate', del: 'Delete', copySuffix: ' (copy)',
+      newItem: 'New item', editItem: 'Edit item', edit: 'Edit', duplicate: 'Duplicate', del: 'Delete', copySuffix: ' (copy)', moreActions: 'More actions',
       unavailable: 'Unavailable', available: 'Available', backToCatalog: 'Back to the catalog', backToList: 'Back to the list',
-      orderBy: { order: 'Manual order', name: 'Name', price: 'Price' }, moveUp: 'Move up', moveDown: 'Move down', drag: 'Drag to reorder',
-      nothingTitle: 'Nothing found', nothingText: 'No item matches these filters.',
-      emptyTitle: 'No items yet', emptyText: 'Add your first item, or load a few examples to see how the catalog looks.',
+      orderBy: { order: 'Manual order', name: 'Name', price: 'Price' },
       loadFail: 'Could not load the catalog', retry: 'Try again', notFound: 'That item no longer exists.',
       conflict: 'Someone changed this meanwhile; it was reloaded.',
       deleteQ: name => 'Delete "' + name + '"?', deleteImgQ: 'Also delete the image file of this item?', delImg: 'Delete image', keepImg: 'Keep image',
-      keepOne: 'Keep at least one category.', addCategory: 'Add category', search: 'Search',
-      moveAsk: (names, n) => n + ' ' + T.itemWord(n) + ' in ' + names + '. Where should they go?',
+      keepOne: 'Keep at least one category.', addCategory: 'Add category',
+      moveTitle: 'Move items', moveConfirm: 'Move and delete the category', moveAsk: (name, n) => n + ' ' + T.itemWord(n) + ' in ' + name + '. Where should they go?',
       summary: (n, cat, q) => 'Catalog: ' + n + ' ' + T.itemWord(n) + (cat ? ' (' + cat + ')' : '') + (q ? ', search "' + q + '"' : ''),
       summaryEmpty: 'Catalog: no items yet', sel: name => 'Item: ' + name, csvName: 'Items',
       // Examples: [name, category 0|1|2 (first, second, third), price, available, summary, tags, description]
@@ -198,12 +167,12 @@
     const items = tendly.db.collection('items');
     const $ = id => document.getElementById(id);
     const app = document.querySelector('t-app');
-    const gallery = $('gallery'), pills = $('pills'), table = $('table'), orderList = $('order-list');
+    const gallery = $('gallery'), pills = $('pills'), table = $('table');
     const editor = $('editor'), recordForm = $('record-form'), tools = $('tools');
-    const catsEditor = $('cats-editor'), fieldsEditor = $('fields-editor'), moveModal = $('move-modal');
+    const catsEditor = $('cats-editor'), fieldsEditor = $('fields-editor');
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    let S, store, loaded = false, editing = null, formOpen = false, moveResolve = null, backView = 'catalog', importOrder = 0;
-    let cat = '', ordering = false, dragId = null;
+    let S, store, loaded = false, editing = null, formOpen = false, backView = 'catalog', importOrder = 0;
+    let cat = '', ordering = false;
 
     // ---- helpers -----------------------------------------------------------------------------
     const cats = () => S.value.categories;
@@ -216,17 +185,16 @@
     const extraForm = () => S.value.extraFields.map(f => Object.assign({}, f, { id: 'x_' + f.id }));
     // The form's schema: fixed fields first (image on top), then the extra fields.
     function formFields() {
-      const list = [
+      return [
         { id: 'image', label: T.fImage, type: 'image' },
         { id: 'name', label: T.fName, type: 'text', required: true },
         { id: 'category', label: T.fCategory, type: 'choice', options: cats(), creatable: true }
-      ];
-      if (S.value.showPrice) list.push({ id: 'price', label: S.value.priceLabel || T.fPrice, type: 'money' });
-      list.push({ id: 'summary', label: T.fSummary, type: 'text', help: T.helpSummary });
-      list.push({ id: 'description', label: T.fDesc, type: 'longtext', help: T.helpDesc });
-      list.push({ id: 'tags', label: T.fTags, type: 'text', help: T.helpTags });
-      list.push({ id: 'available', label: T.fAvail, type: 'checkbox' });
-      return list.concat(extraForm());
+      ].concat(S.value.showPrice ? [{ id: 'price', label: S.value.priceLabel || T.fPrice, type: 'money' }] : [], [
+        { id: 'summary', label: T.fSummary, type: 'text', help: T.helpSummary },
+        { id: 'description', label: T.fDesc, type: 'longtext', help: T.helpDesc },
+        { id: 'tags', label: T.fTags, type: 'text', help: T.helpTags },
+        { id: 'available', label: T.fAvail, type: 'checkbox' }
+      ], extraForm());
     }
     // Stored data <-> the flat form value (tags as one text, extras as x_<id>).
     function toForm(d) {
@@ -267,82 +235,34 @@
       const q = $('q').value.trim();
       return store.records.filter(r => ($('show-off').checked || r.data.available !== false) && (!q || tkit.search.match(haystack(r), q)));
     }
-    const filtersOn = () => !!($('q').value.trim() || cat);
-    const tile = (r, extra) => {
-      const c = catOf(r.data.category);
-      return tkit.h('div', { class: 'item-img ' + extra + (c && c.tone ? ' tone-' + c.tone : ''), 'aria-hidden': 'true', text: (r.data.name || '?').trim().charAt(0).toUpperCase() });
-    };
 
-    // ---- catalog: gallery and ordering mode --------------------------------------------------
+    // ---- catalog: gallery; "Reorder" turns it into a sortable gallery of every item -----------
     function drawCatalog() {
       const all = store.records, base = searched();
       $('empty').hidden = all.length > 0;
       $('shelf').hidden = all.length === 0;
       if (!all.length) return;
       if (cat && !catOf(cat)) cat = '';
-      $('filters').hidden = ordering;
-      pills.hidden = ordering;
+      $('filters').hidden = pills.hidden = ordering;
       pills.options = [{ value: '', label: T.all, count: base.length }].concat(cats().map(c => ({ value: c.id, label: c.label, count: base.filter(r => r.data.category === c.id).length })));
       pills.value = cat;
       const list = sorted(ordering ? all : base.filter(r => !cat || r.data.category === cat), ordering ? 'order' : $('sort').value);
-      gallery.hidden = ordering || !list.length;
-      orderList.hidden = !ordering;
+      gallery.hidden = !ordering && !list.length;
       $('nothing').hidden = ordering || list.length > 0;
       $('order-btn').setAttribute('aria-pressed', String(ordering));
-      if (ordering) drawOrder(list);
-      else {
-        gallery.items = list.map(r => {
-          const c = catOf(r.data.category), off = r.data.available === false;
-          return { id: r.id, title: r.data.name, subtitle: priceText(r) || r.data.summary, image: imgUrl(r), badge: c ? c.label : '', tone: c ? c.tone : '', meta: off ? T.unavailable : '' };
-        });
-        Array.prototype.forEach.call(gallery.querySelectorAll('.t-gal-card'), card => {
-          const r = byId(card.dataset.id), media = card.querySelector('.t-gal-media'), c = r && catOf(r.data.category);
-          if (!r) return;
-          card.classList.toggle('off', r.data.available === false);
-          const empty = media.querySelector('.t-gal-empty');   // KIT-CANDIDATE: <t-gallery> placeholder with the first letter and a tone
-          if (empty) { empty.textContent = (r.data.name || '?').trim().charAt(0).toUpperCase(); if (c && c.tone) media.classList.add('tone-' + c.tone); }
-        });
-      }
-    }
-    function drawOrder(list) {
-      tkit.clear(orderList);
-      list.forEach((r, i) => {
-        const btn = (dir, icon, label, off) => tkit.h('button', { type: 'button', class: 't-button', 'aria-label': label, dataset: { move: dir }, disabled: off }, tkit.icon(icon, 16));
-        orderList.appendChild(tkit.h('li', { draggable: 'true', dataset: { id: r.id } },
-          tkit.h('span', { class: 'grip', title: T.drag }, tkit.icon('drag', 16)),
-          tkit.h('span', { class: 'name', text: r.data.name }),
-          btn('-1', 'chevron-down', T.moveUp, i === 0), btn('1', 'chevron-down', T.moveDown, i === list.length - 1)));
+      gallery.sortable = ordering;
+      gallery.items = list.map(r => {
+        const c = catOf(r.data.category), off = r.data.available === false;
+        const badges = (c ? [{ text: c.label, tone: c.tone }] : []).concat(off ? [{ text: T.unavailable, tone: 'warn' }] : []);
+        return { id: r.id, title: r.data.name, subtitle: priceText(r) || r.data.summary, image: imgUrl(r), tone: c ? c.tone : '', badges, muted: off };
       });
-      // The "up" arrow is the same chevron turned over.
-      Array.prototype.forEach.call(orderList.querySelectorAll('[data-move="-1"] svg'), s => { s.style.transform = 'rotate(180deg)'; });
     }
-    // New position for one item: renumber 1..n and write only the items whose number changed.
-    async function moveTo(id, to) {
-      const ids = sorted(store.records, 'order').map(r => r.id), from = ids.indexOf(id);
-      if (from < 0 || to < 0 || to >= ids.length || from === to) return;
-      ids.splice(to, 0, ids.splice(from, 1)[0]);
-      try {
-        for (let i = 0; i < ids.length; i++) if (orderOf(byId(ids[i])) !== i + 1) await items.update(ids[i], { order: i + 1 });
-      } catch (error) { fail(error); store.reload(); }
-    }
-    orderList.addEventListener('click', async event => {
-      const b = event.target.closest('[data-move]'), li = b && b.closest('li');
-      if (!li) return;
-      const ids = sorted(store.records, 'order').map(r => r.id), dir = Number(b.dataset.move);
-      await moveTo(li.dataset.id, ids.indexOf(li.dataset.id) + dir);
-      const again = orderList.querySelector('li[data-id="' + li.dataset.id + '"] [data-move="' + dir + '"]:not(:disabled)');
-      if (again) again.focus();
+    // The gallery tells the whole new order; renumber 1..n and write only the items whose number changed.
+    gallery.addEventListener('t-reorder', async event => {
+      try { for (const [i, id] of event.detail.ids.entries()) if (byId(id) && orderOf(byId(id)) !== i + 1) await items.update(id, { order: i + 1 }); } catch (error) { fail(error); store.reload(); }
     });
-    orderList.addEventListener('dragstart', event => { const li = event.target.closest('li'); dragId = li ? li.dataset.id : null; if (li) li.classList.add('dragging'); });
-    orderList.addEventListener('dragend', () => { dragId = null; drawCatalog(); });
-    orderList.addEventListener('dragover', event => { if (dragId) event.preventDefault(); });
-    orderList.addEventListener('drop', event => {
-      const li = event.target.closest('li');
-      event.preventDefault();
-      if (li && dragId) moveTo(dragId, sorted(store.records, 'order').map(r => r.id).indexOf(li.dataset.id));
-    });
-    $('order-btn').addEventListener('click', () => { ordering = !ordering; drawCatalog(); });
     gallery.addEventListener('t-open', event => openItem(event.detail.id, 'catalog'));
+    $('order-btn').addEventListener('click', () => { ordering = !ordering; drawCatalog(); });
     pills.addEventListener('t-change', event => { cat = event.detail.value; drawCatalog(); setSummary(); });
     ['q', 'sort', 'show-off'].forEach(id => $(id).addEventListener(id === 'q' ? 'input' : 'change', () => { drawCatalog(); setSummary(); }));
     $('clear-filters').addEventListener('click', () => { $('q').value = ''; cat = ''; $('show-off').checked = true; drawCatalog(); setSummary(); });
@@ -376,14 +296,17 @@
       if ((d.tags || []).length) info.appendChild(tkit.h('div', { class: 'item-tags' }, ...d.tags.map(t => tkit.h('span', { class: 't-badge', text: t }))));
       const rows = S.value.extraFields.filter(f => (d.extra || {})[f.id] !== undefined && d.extra[f.id] !== null);
       if (rows.length) info.appendChild(tkit.h('dl', { class: 't-kv' }, ...rows.map(f => tkit.h('div', {}, tkit.h('dt', { text: f.label }), tkit.h('dd', { text: tkit.fieldText(f, d.extra[f.id], S.value) })))));
-      info.appendChild(tkit.h('div', { class: 't-actions start' },
-        tkit.h('button', { type: 'button', class: 't-button primary', text: T.edit, onClick: () => openEditor(r) }),
-        tkit.h('button', { type: 'button', class: 't-button', text: T.duplicate, onClick: () => duplicate(r) }),
-        tkit.h('button', { type: 'button', class: 't-button danger', text: T.del, onClick: async () => { if (await removeItem(r)) app.view = backView; } })));
+      const menu = tkit.h('t-menu', { label: T.moreActions });
+      menu.items = [{ id: 'duplicate', label: T.duplicate, icon: 'copy' }, { id: 'delete', label: T.del, icon: 'trash', tone: 'danger' }];
+      menu.addEventListener('t-select', async event => { if (event.detail.id === 'duplicate') duplicate(r); else if (await removeItem(r)) app.view = backView; });
+      info.appendChild(tkit.h('div', { class: 't-actions start' }, tkit.h('button', { type: 'button', class: 't-button primary', text: T.edit, onClick: () => openEditor(r) }), menu));
+      // Without a picture: the gallery's own letter tile, in the category's tone.
+      const media = imgUrl(r) ? tkit.h('img', { class: 'item-img', src: imgUrl(r), alt: d.name })
+        : tkit.h('div', { class: 'item-img t-gal-media letter' + (c && c.tone ? ' ' + c.tone : ''), 'aria-hidden': 'true' }, tkit.h('span', { class: 't-gal-letter', text: (d.name || '?').trim().charAt(0).toUpperCase() }));
       tkit.clear(body);
-      body.appendChild(tkit.h('div', { class: 'item-grid' }, imgUrl(r) ? tkit.h('img', { class: 'item-img', src: imgUrl(r), alt: d.name }) : tile(r, ''), info));
+      body.appendChild(tkit.h('div', { class: 'item-grid' }, media, info));
       if (d.description) { const md = tkit.h('div', { class: 't-md item-desc' }); md.appendChild(tkit.markdown(d.description)); body.appendChild(md); }
-      $('back').replaceChildren(tkit.icon('arrow-left', 16), document.createTextNode(' ' + (backView === 'list' ? T.backToList : T.backToCatalog)));
+      $('back').replaceChildren(tkit.icon('arrow-left', 16), document.createTextNode(backView === 'list' ? T.backToList : T.backToCatalog));
     }
     // #item/<id> shows the page; a missing item goes back with a note.
     function syncRoute(route) {
@@ -438,34 +361,17 @@
     editor.addEventListener('t-close', () => { formOpen = false; tendly.host.holdReload(false); });
 
     // ---- settings ----------------------------------------------------------------------------
-    function askMove(gone, remaining, n) {
-      return new Promise(resolve => {
-        moveResolve = resolve;
-        $('move-text').textContent = T.moveAsk(gone.map(c => c.label).join(', '), n);
-        const select = $('move-target');
-        tkit.clear(select);
-        remaining.forEach(c => select.appendChild(tkit.h('option', { value: c.id, text: c.label })));
-        moveModal.open();
-      });
-    }
-    $('move-form').addEventListener('submit', event => { event.preventDefault(); const done = moveResolve; moveResolve = null; const target = $('move-target').value; moveModal.close(); if (done) done(target); });
-    $('move-cancel').addEventListener('click', () => moveModal.close());
-    moveModal.addEventListener('t-close', () => { const done = moveResolve; moveResolve = null; if (done) done(null); });
     catsEditor.addLabel = T.addCategory;
-    catsEditor.addEventListener('t-change', async event => {
-      const next = event.detail.items, before = cats();
-      if (!next.length) { tkit.toast(T.keepOne, { tone: 'error' }); catsEditor.items = before; return; }
-      const gone = before.filter(c => !next.some(n => n.id === c.id));
-      const stranded = gone.length ? store.records.filter(r => gone.some(g => g.id === r.data.category)) : [];
-      try {
-        if (stranded.length) {
-          const target = await askMove(gone, next, stranded.length);
-          if (!target) { catsEditor.items = before; return; }
-          for (const r of stranded) await items.update(r.id, { category: target });
-        }
-        await S.save({ categories: next });
-      } catch (error) { fail(error); catsEditor.items = cats(); }
-    });
+    // Deleting a category: its items move to a category the person picks first (the last one cannot go).
+    catsEditor.beforeRemove = async gone => {
+      const left = cats().filter(c => c.id !== gone.id), stranded = store.records.filter(r => r.data.category === gone.id);
+      if (!left.length) { tkit.toast(T.keepOne, { tone: 'error' }); return false; }
+      if (!stranded.length) return true;
+      const target = await tkit.chooseMove({ title: T.moveTitle, text: T.moveAsk(gone.label, stranded.length), options: left.map(c => ({ id: c.id, label: c.label })), confirm: T.moveConfirm });
+      if (!target) return false;
+      try { for (const r of stranded) await items.update(r.id, { category: target }); return true; } catch (error) { fail(error); return false; }
+    };
+    catsEditor.addEventListener('t-change', event => S.save({ categories: event.detail.items }).catch(error => { fail(error); catsEditor.items = cats(); }));
     fieldsEditor.addEventListener('t-change', event => S.save({ extraFields: event.detail.fields }).catch(fail));
     $('show-price').addEventListener('change', event => S.save({ showPrice: event.target.checked }).catch(fail));
     $('price-label').addEventListener('change', event => S.save({ priceLabel: event.target.value.trim() || T.fPrice }).catch(fail));
@@ -492,12 +398,8 @@
       tkit.clear(select);
       (CURRENCIES.indexOf(v.currency) >= 0 ? CURRENCIES : CURRENCIES.concat(v.currency)).forEach(code => select.appendChild(tkit.h('option', { value: code, text: code })));
       select.value = v.currency;
-      tkit.clear($('sort-default'));
-      Object.keys(T.orderBy).forEach(k => $('sort-default').appendChild(tkit.h('button', { type: 'button', 'aria-pressed': String(v.sort === k), dataset: { sort: k }, text: T.orderBy[k] })));
-      const sort = $('sort');
-      tkit.clear(sort);
-      Object.keys(T.orderBy).forEach(k => sort.appendChild(tkit.h('option', { value: k, text: T.orderBy[k] })));
-      sort.value = v.sort;
+      $('sort').value = v.sort;
+      $('sort-default').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === v.sort)));
       catsEditor.items = v.categories;
       fieldsEditor.fields = v.extraFields;
       if (formOpen) { recordForm.fields = formFields(); }   // a category made in the form comes back through here
@@ -549,13 +451,11 @@
       syncRoute();
       setSummary();
     }
-    $('empty').setAttribute('title', T.emptyTitle);
-    $('empty').setAttribute('text', T.emptyText);
-    $('empty').setAttribute('action', T.newItem);
-    $('q').placeholder = T.search;
-    $('nothing').setAttribute('title', T.nothingTitle);
-    $('nothing').setAttribute('text', T.nothingText);
     $('show-off').checked = true;
+    Object.keys(T.orderBy).forEach(k => {   // the sort menu and the default-order segment
+      $('sort').appendChild(tkit.h('option', { value: k, text: T.orderBy[k] }));
+      $('sort-default').appendChild(tkit.h('button', { type: 'button', dataset: { sort: k }, text: T.orderBy[k] }));
+    });
     document.querySelectorAll('.sample-banner').forEach(b => b.addEventListener('t-clear', () => tkit.samples.clear(items).catch(fail)));
     app.addEventListener('t-view', () => setTimeout(setSummary, 0));
     tkit.route.on(syncRoute);

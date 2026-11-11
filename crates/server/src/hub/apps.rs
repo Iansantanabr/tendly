@@ -75,13 +75,16 @@ pub(crate) const TEMPLATES: &[(&str, &str)] = &[
     ("table", include_str!("apps/templates/table.html")),
     ("catalog", include_str!("apps/templates/catalog.html")),
     ("calendar", include_str!("apps/templates/calendar.html")),
+    ("booking", include_str!("apps/templates/booking.html")),
     ("dashboard", include_str!("apps/templates/dashboard.html")),
     ("checklist", include_str!("apps/templates/checklist.html")),
     ("form", include_str!("apps/templates/form.html")),
+    ("quiz", include_str!("apps/templates/quiz.html")),
     ("calculator", include_str!("apps/templates/calculator.html")),
     ("compare", include_str!("apps/templates/compare.html")),
     ("document", include_str!("apps/templates/document.html")),
     ("knowledge", include_str!("apps/templates/knowledge.html")),
+    ("map", include_str!("apps/templates/map.html")),
     ("issues", include_str!("apps/templates/issues.html")),
 ];
 
@@ -94,13 +97,16 @@ pub(crate) const TEMPLATES_PT_BR: &[(&str, &str)] = &[
     ("table", include_str!("apps/templates/pt-BR/table.html")),
     ("catalog", include_str!("apps/templates/pt-BR/catalog.html")),
     ("calendar", include_str!("apps/templates/pt-BR/calendar.html")),
+    ("booking", include_str!("apps/templates/pt-BR/booking.html")),
     ("dashboard", include_str!("apps/templates/pt-BR/dashboard.html")),
     ("checklist", include_str!("apps/templates/pt-BR/checklist.html")),
     ("form", include_str!("apps/templates/pt-BR/form.html")),
+    ("quiz", include_str!("apps/templates/pt-BR/quiz.html")),
     ("calculator", include_str!("apps/templates/pt-BR/calculator.html")),
     ("compare", include_str!("apps/templates/pt-BR/compare.html")),
     ("document", include_str!("apps/templates/pt-BR/document.html")),
     ("knowledge", include_str!("apps/templates/pt-BR/knowledge.html")),
+    ("map", include_str!("apps/templates/pt-BR/map.html")),
 ];
 
 /// Fork: template names that now mean another page. The document editor grew

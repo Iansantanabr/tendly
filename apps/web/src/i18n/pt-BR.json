@@ -3030,5 +3030,11 @@
  "Calculator / Simulator": "Calculadora / Simulador",
  "Inputs, your own formulas and the result as you type; save and compare scenarios.": "Entradas, suas fórmulas e o resultado enquanto você digita; salve e compare cenários.",
  "Comparison": "Comparador",
- "Options side by side, weighted criteria and a clear winner.": "Opções lado a lado, critérios com peso e um vencedor claro."
+ "Options side by side, weighted criteria and a clear winner.": "Opções lado a lado, critérios com peso e um vencedor claro.",
+ "Bookings": "Reservas",
+ "Rooms, cars and equipment by time slot or by day, without double booking.": "Salas, carros e equipamentos por horário ou por dia, sem reserva dupla.",
+ "Quiz / Assessment": "Quiz / Avaliação",
+ "Questions in order, a score at the end and the history of attempts.": "Perguntas em sequência, nota no final e o histórico de tentativas.",
+ "Map / Places": "Mapa / Locais",
+ "Places on a map linked to a list, with categories and visits.": "Locais num mapa ligados a uma lista, com categorias e visitas."
 }

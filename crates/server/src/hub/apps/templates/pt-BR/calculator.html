@@ -22,16 +22,15 @@
     .res-formula { display: none; grid-column: 1 / -1; font: var(--t-text-sm) var(--t-mono); color: var(--t-muted); overflow-wrap: anywhere; }
     .res:hover .res-formula, .res:focus .res-formula, .res.err .res-formula { display: block; }
     .res.err .res-formula { color: var(--t-danger-ink); }
-    .bar { display: none; }
+    t-action-bar { display: none; }
+    #bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--t-space-3); }
+    #bar strong { font-size: var(--t-text-xl); font-variant-numeric: tabular-nums; }
     .toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
     .sc-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-3); }
     .sc-main { display: grid; gap: 2px; flex: 1 1 200px; min-width: 0; }
     .sc-main small { color: var(--t-muted); }
-    .out-row { display: grid; gap: var(--t-space-2); padding: var(--t-space-3) 0; border-bottom: 1px solid var(--t-line); }
-    .out-row:last-child { border-bottom: 0; }
-    .out-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
-    .out-line > .t-input { flex: 1 1 140px; width: auto; }
     .mono { font-family: var(--t-mono); }
+    .out-formula { flex: 1 1 100%; display: grid; gap: 4px; }
     .extra-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--t-space-2); }
     .cmp td.diff { background: var(--t-app-soft); }
     .cmp th, .cmp td { white-space: nowrap; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--t-line); }
@@ -42,8 +41,7 @@
     @container t-app (max-width: 640px) {
       .calc-cols { grid-template-columns: minmax(0, 1fr); }
       .res-formula { display: none !important; }
-      .bar { display: flex; align-items: baseline; justify-content: space-between; gap: var(--t-space-3); position: sticky; bottom: 0; padding: var(--t-space-3); border: 1px solid var(--t-line); border-radius: var(--t-radius-lg); background: var(--t-elevated); box-shadow: var(--t-shadow-md); }
-      .bar strong { font-size: var(--t-text-xl); font-variant-numeric: tabular-nums; }
+      t-action-bar { display: flex; }
     }
   </style>
 </head>
@@ -72,7 +70,7 @@
             <section class="t-card stack" aria-label="Entradas"><div id="inputs" class="stack"></div></section>
             <section class="t-card stack" aria-label="Resultados"><div id="results"></div></section>
           </div>
-          <div class="bar" id="bar" aria-live="polite"></div>
+          <t-action-bar><span slot="summary" id="bar" aria-live="polite"></span></t-action-bar>
         </div>
       </t-view>
       <t-view name="scenarios">
@@ -98,13 +96,12 @@
             <section class="t-card">
               <div class="t-card-head"><h2>Entradas</h2></div>
               <p class="t-muted">O que você digita. Abra uma linha para definir o padrão, os limites, o passo e a unidade.</p>
-              <t-fields-editor id="inputs-editor" types="number,money,choice,checkbox,date"></t-fields-editor>
+              <t-fields-editor id="inputs-editor" hide-required types="number,money,choice,checkbox,date"></t-fields-editor>
             </section>
             <section class="t-card">
               <div class="t-card-head"><h2>Resultados</h2></div>
               <p class="t-muted">Calculados de cima para baixo: uma fórmula pode usar entradas e os resultados acima dela. Operadores + - * / ^ e funções como if(), round(), min(), max(), sum().</p>
-              <div id="outputs-editor"></div>
-              <div class="t-actions start"><button type="button" class="t-button" id="add-output">Adicionar resultado</button></div>
+              <t-row-editor id="outputs-editor"></t-row-editor>
             </section>
             <section class="t-card">
               <div class="t-card-head"><h2>Moeda</h2></div>
@@ -157,7 +154,7 @@
       resName: 'Nome do resultado', resFormula: 'Fórmula', resFormat: 'Formato', highlight: 'Destacar', betterWhen: 'Melhor quando',
       fMoney: 'Dinheiro', fNumber: 'Número', fPercent: 'Percentual', fText: 'Texto', bNone: 'Não comparar', bLower: 'Menor', bHigher: 'Maior',
       available: ids => 'Você pode usar: ' + ids.join(', '), newResult: 'Novo resultado', keepOne: 'Mantenha pelo menos um resultado.',
-      up: 'Mover para cima', down: 'Mover para baixo', remove: 'Remover', nameField: 'Nome',
+      addResult: 'Adicionar resultado', actionsFor: name => 'Ações para ' + name, nameField: 'Nome',
       summary: (out, name) => 'Calculadora: ' + out + (name ? ' (Cenário: ' + name + ')' : ''),
       // Examples: [name, input overrides]; the rest comes from each input's default.
       examples: [['Pedido pequeno', { quantity: 10 }], ['Pedido médio', { quantity: 50, discount: 8 }], ['Pedido grande', { quantity: 200, discount: 12, shipping: 0 }]]
@@ -188,7 +185,7 @@
     const clone = x => JSON.parse(JSON.stringify(x));
     const numText = v => v === null || v === undefined ? '' : String(v).replace('.', DEC);
     const isNum = v => typeof v === 'number' && isFinite(v);
-    let S, store, ready = false, values = {}, pristine = true, loadedId = null, picked = [], model = [], inputsKey = '', drawnOutputs = '', nameMode = null, nameRecord = null;
+    let S, store, ready = false, values = {}, pristine = true, loadedId = null, picked = [], model = [], inputsKey = '', nameMode = null, nameRecord = null;
 
     // ---- formula model ------------------------------------------------------------------------
     const inputs = () => S.value.inputs, outputs = () => S.value.outputs;
@@ -355,6 +352,9 @@
       if (!await tkit.confirm(T.deleteQ(rec.data.name), { confirm: T.del, tone: 'danger' })) return;
       try { await scenarios.remove(rec.id); } catch (error) { fail(error); }
     }
+    const MENU = [{ id: 'open', label: T.open }, { id: 'rename', label: T.rename }, { id: 'duplicate', label: T.duplicate }, { id: 'del', label: T.del, tone: 'danger' }];
+    const ACTIONS = { open: openScenario, rename: rec => askName('rename', rec, rec.data.name), del: removeScenario,
+      duplicate: rec => scenarios.insert({ name: T.copyOf(rec.data.name), values: Object.assign({}, rec.data.values), order: nextOrder() }).catch(fail) };
     function drawList(recs) {
       const box = $('sc-list');
       tkit.clear(box);
@@ -375,12 +375,10 @@
           $('compare-btn').disabled = picked.length < 2;
         });
         const sum = highlighted().map(m => m.out.label + ' ' + show(m.out, res[m.out.id])).join(' · ');
-        const btn = (text, fn, kind) => h('button', { type: 'button', class: 't-button small ' + (kind || 'ghost'), text: text, onClick: fn });
+        const menu = h('t-menu', { label: T.actionsFor(rec.data.name), items: MENU });
+        menu.addEventListener('t-select', event => ACTIONS[event.detail.id](rec));
         box.appendChild(h('div', { class: 't-card sc-row' }, pick,
-          h('div', { class: 'sc-main' }, h('strong', { text: rec.data.name }), h('small', { text: sum + ' · ' + tkit.ago(rec.updated_at) })),
-          btn(T.open, () => openScenario(rec), ''), btn(T.rename, () => askName('rename', rec, rec.data.name)),
-          btn(T.duplicate, () => scenarios.insert({ name: T.copyOf(rec.data.name), values: Object.assign({}, rec.data.values), order: nextOrder() }).catch(fail)),
-          btn(T.del, () => removeScenario(rec), 'danger')));
+          h('div', { class: 'sc-main' }, h('strong', { text: rec.data.name }), h('small', { text: sum + ' · ' + tkit.ago(rec.updated_at) })), menu));
       });
     }
     $('compare-btn').addEventListener('click', () => { location.hash = '#compare/' + picked.join(','); });
@@ -439,43 +437,31 @@
     };
     inputsEditor.addEventListener('t-change', event => { S.save({ inputs: event.detail.fields }).catch(fail); });
 
-    const saveOutputs = (list, redraw) => { drawnOutputs = JSON.stringify(list); S.save({ outputs: list }).catch(fail); if (redraw) drawOutputs(); };
-    const patchOutput = (i, patch) => { const list = clone(outputs()); Object.assign(list[i], patch); saveOutputs(list, false); };
-    function outputRow(o, i, list) {
-      const error = h('small', { class: 't-error', hidden: true }), ids = inputs().map(f => f.id).concat(list.slice(0, i).map(x => x.id));
-      const label = h('input', { class: 't-input', type: 'text', 'aria-label': T.resName }); label.value = o.label;
-      const formula = h('input', { class: 't-input mono', type: 'text', spellcheck: 'false', autocapitalize: 'off', 'aria-label': T.resFormula }); formula.value = o.formula;
-      const select = (labelText, options, value) => { const s = h('select', { class: 't-input', 'aria-label': labelText }); options.forEach(x => s.appendChild(h('option', { value: x[0], text: x[1] }))); s.value = value || ''; return s; };
-      const format = select(T.resFormat, [['money', T.fMoney], ['number', T.fNumber], ['percent', T.fPercent], ['text', T.fText]], o.format);
-      const better = select(T.betterWhen, [['', T.bNone], ['lower', T.bLower], ['higher', T.bHigher]], o.better);
-      const hi = h('input', { type: 'checkbox', class: 't-switch' }); hi.checked = !!o.highlight;
-      const check = () => { const r = checkFormula(formula.value, list.map((x, k) => k === i ? Object.assign({}, x, { formula: formula.value }) : x), i); error.hidden = !r.error; error.textContent = r.error || ''; return !r.error; };
-      formula.addEventListener('input', check);
-      formula.addEventListener('change', () => { if (check()) patchOutput(i, { formula: formula.value.trim() }); });   // an invalid formula is not saved
-      label.addEventListener('change', () => { if (label.value.trim()) patchOutput(i, { label: label.value.trim() }); else label.value = o.label; });
-      format.addEventListener('change', () => patchOutput(i, { format: format.value }));
-      better.addEventListener('change', () => patchOutput(i, { better: better.value }));
-      hi.addEventListener('change', () => patchOutput(i, { highlight: hi.checked }));
-      const move = (to) => { const l = clone(outputs()); l.splice(to, 0, l.splice(i, 1)[0]); saveOutputs(l, true); };
-      const icon = (name, text, fn, disabled) => h('button', { type: 'button', class: 't-icon-button', 'aria-label': text + ': ' + o.label, disabled: !!disabled, onClick: fn }, tkit.icon(name, 14));
-      setTimeout(() => { if (formula.isConnected && model[i] && model[i].error) { error.hidden = false; error.textContent = model[i].error; } }, 0);
-      return h('div', { class: 'out-row' },
-        h('div', { class: 'out-line' }, label, format, better, h('label', { class: 't-switch-line' }, hi, h('span', { text: T.highlight })),
-          icon('arrowUp', T.up, () => move(i - 1), i === 0), icon('arrowDown', T.down, () => move(i + 1), i === list.length - 1),
-          icon('trash', T.remove, () => { if (list.length < 2) { tkit.toast(T.keepOne); return; } const l = clone(outputs()); l.splice(i, 1); saveOutputs(l, true); })),
-        formula, error, h('small', { class: 't-muted', text: T.available(ids) }));
+    const outputsEd = $('outputs-editor');
+    function outputCells(o, change) {
+      const rows = outputsEd.rows, i = rows.findIndex(r => r.id === o.id), error = h('small', { class: 't-error', hidden: true });
+      const showError = text => { error.hidden = !text; error.textContent = text || ''; };
+      const check = text => checkFormula(text, rows.map((r, k) => k === i ? Object.assign({}, r, { formula: text }) : r), i).error;   // outputs above only
+      const sel = (label, items, value, key) => {
+        const el = h('select', { class: 't-input', 'aria-label': label, onChange: () => change({ [key]: el.value }) }, items.map(x => h('option', { value: x[0], text: x[1] })));
+        el.value = value || '';
+        return el;
+      };
+      const label = h('input', { class: 't-input', type: 'text', 'aria-label': T.resName, onChange: () => { const t = label.value.trim(); if (t) change({ label: t }); else label.value = o.label; } });
+      const formula = h('input', { class: 't-input mono', type: 'text', spellcheck: 'false', autocapitalize: 'off', 'aria-label': T.resFormula,
+        onInput: () => showError(check(formula.value)), onChange: () => { if (!check(formula.value)) change({ formula: formula.value.trim() }); } });   // an invalid formula is not saved
+      const hi = h('input', { type: 'checkbox', class: 't-switch', onChange: () => change({ highlight: hi.checked }) });
+      label.value = o.label; formula.value = o.formula; hi.checked = !!o.highlight;
+      showError(model[i] && model[i].error);
+      const ids = inputs().map(f => f.id).concat(rows.slice(0, i).map(r => r.id));
+      return [label, sel(T.resFormat, [['money', T.fMoney], ['number', T.fNumber], ['percent', T.fPercent], ['text', T.fText]], o.format, 'format'),
+        sel(T.betterWhen, [['', T.bNone], ['lower', T.bLower], ['higher', T.bHigher]], o.better, 'better'), h('label', { class: 't-switch-line' }, hi, h('span', { text: T.highlight })),
+        h('div', { class: 'out-formula' }, formula, error, h('small', { class: 't-muted', text: T.available(ids) }))];
     }
-    function drawOutputs() {
-      const box = $('outputs-editor'), list = clone(outputs());
-      drawnOutputs = JSON.stringify(list);
-      tkit.clear(box);
-      list.forEach((o, i) => box.appendChild(outputRow(o, i, list)));
-    }
-    $('add-output').addEventListener('click', () => {
-      const list = clone(outputs()), taken = inputs().map(f => f.id).concat(list.map(o => o.id));
-      list.push({ id: tkit.slug(T.newResult, taken), label: T.newResult, formula: '0', format: 'number', highlight: false, better: '' });
-      saveOutputs(list, true);
-    });
+    outputsEd.cells = outputCells; outputsEd.addLabel = T.addResult;
+    outputsEd.canRemove = () => outputsEd.rows.length > 1 || T.keepOne;
+    outputsEd.newRow = () => ({ id: tkit.slug(T.newResult, inputs().map(f => f.id).concat(outputsEd.rows.map(o => o.id))), label: T.newResult, formula: '0', format: 'number', highlight: false, better: '' });
+    outputsEd.addEventListener('t-change', event => { S.save({ outputs: event.detail.rows }).catch(fail); });
     $('currency').addEventListener('change', event => { S.save({ currency: event.target.value }).catch(fail); });
 
     // Data tools (export / import / examples / delete all). CSV: one row per scenario, every input then every result.
@@ -492,7 +478,8 @@
 
     function applySettings() {
       const v = S.value, key = JSON.stringify([v.inputs, v.currency]);
-      if (key !== inputsKey) {
+      const inputsChanged = key !== inputsKey;
+      if (inputsChanged) {
         inputsKey = key;
         const fresh = defaultsOf(), kept = {};
         inputs().forEach(f => { kept[f.id] = !pristine && f.id in values ? values[f.id] : fresh[f.id]; });
@@ -502,7 +489,8 @@
         drawInputs();
       }
       buildModel();
-      if (JSON.stringify(v.outputs) !== drawnOutputs) drawOutputs();
+      outputsEd.rows = clone(v.outputs);
+      if (inputsChanged) outputsEd.refresh();   // its hints list the inputs
       const select = $('currency');
       tkit.clear(select);
       (CURRENCIES.indexOf(v.currency) >= 0 ? CURRENCIES : CURRENCIES.concat(v.currency)).forEach(code => select.appendChild(h('option', { value: code, text: code })));

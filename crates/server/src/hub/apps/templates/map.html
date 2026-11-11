@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <link rel="stylesheet" href="/api/hub/apps/vendor/leaflet.css">
+  <script src="/api/hub/apps/vendor/leaflet.js"></script>
+  <style>
+    [hidden] { display: none !important; }
+    .map-page { display: flex; flex-direction: column; max-width: none; height: 100%; gap: var(--t-space-3); }
+    .map-body { flex: 1 1 auto; min-height: 360px; display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: var(--t-space-3); }
+    .list-pane { display: flex; flex-direction: column; gap: var(--t-space-2); min-height: 0; }
+    .list-pane .t-input { flex: 1 1 100%; }
+    .place-list { display: grid; gap: 2px; align-content: start; overflow: auto; min-height: 0; flex: 1; }
+    .place-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--t-space-2); width: 100%; min-height: 44px; padding: var(--t-space-2) var(--t-space-3); border: 1px solid transparent; border-radius: var(--t-radius-md); background: none; color: var(--t-ink); font: inherit; text-align: left; cursor: pointer; }
+    .place-row:hover, .place-row.hot { background: var(--t-fill); }
+    .place-row.on { background: var(--t-accent-soft); border-color: var(--t-accent); }
+    .place-row .t-muted { flex-basis: 100%; font-size: var(--t-text-sm); }
+    .map-pane { position: relative; isolation: isolate; min-height: 300px; border: 1px solid var(--t-line); border-radius: var(--t-radius-md); overflow: hidden; }
+    #map { position: absolute; inset: 0; background: var(--t-fill); }
+    #map.picking, #map.picking .leaflet-grab, #map.picking .leaflet-interactive { cursor: crosshair !important; }
+    .map-float { position: absolute; z-index: 1000; }
+    #fit { left: 10px; bottom: 22px; }
+    .pick-bar { top: 10px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 100px); display: flex; align-items: center; gap: var(--t-space-2); padding: var(--t-space-2) var(--t-space-3); background: var(--t-elevated); border: 1px solid var(--t-accent); border-radius: var(--t-radius-md); box-shadow: var(--t-shadow-md); }
+    .map-error { inset: 0; display: grid; place-items: center; background: var(--t-surface); }
+    .pane-switch { display: none; align-self: flex-start; }
+    .preview { height: 160px; border: 1px solid var(--t-line); border-radius: var(--t-radius-md); overflow: hidden; isolation: isolate; }
+    .results { display: grid; gap: 2px; }
+    @container t-app (max-width: 640px) {
+      .pane-switch { display: inline-flex; }
+      .map-body { grid-template-columns: minmax(0, 1fr); }
+      .map-body[data-pane="map"] .list-pane, .map-body[data-pane="list"] .map-pane { display: none; }
+    }
+    .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
+    .settings-stack > .t-card { display: grid; gap: var(--t-space-3); }
+    .settings-stack .t-card-head h2 { margin: 0; font-size: var(--t-text-lg); }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Sections">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="map" data-icon="map">Map</button>
+      <button data-view="list" data-icon="table">List</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Settings</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="map">
+        <div class="t-page map-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+            <button type="button" class="t-button primary new-place">New place</button>
+          </header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <div id="status"><t-state kind="loading"></t-state></div>
+          <t-empty-start id="empty" hidden title="No places yet" text="Add your first place, or look around with examples first." action="New place"></t-empty-start>
+          <div class="t-segment pane-switch" id="pane-switch" role="group" aria-label="Show">
+            <button type="button" aria-pressed="true" data-pane="map">Map</button>
+            <button type="button" aria-pressed="false" data-pane="list">List</button>
+          </div>
+          <div class="map-body" id="map-body" data-pane="map" hidden>
+            <section class="list-pane">
+              <div class="t-filters"><input class="t-input" id="search" type="search" placeholder="Search places" aria-label="Search places"></div>
+              <t-pills id="cats"></t-pills>
+              <div class="place-list" id="place-list"></div>
+            </section>
+            <section class="map-pane">
+              <div id="map"></div>
+              <button type="button" class="t-button map-float" id="fit">Fit to places</button>
+              <div class="pick-bar map-float" id="pick-bar" role="status" hidden><span>Click the map to set the point. Esc cancels.</span><button type="button" class="t-button" id="pick-cancel">Cancel</button></div>
+              <div class="map-error map-float" id="map-error" hidden>
+                <t-state kind="error" title="No connection to the map" text="The places list still works. Check your connection and try again.">
+                  <button type="button" class="t-button primary" id="to-list">See list</button>
+                  <button type="button" class="t-button" id="retry-map">Try again</button>
+                </t-state>
+              </div>
+            </section>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="list">
+        <div class="t-page">
+          <header class="t-page-head">
+            <h1 class="t-title">All places</h1>
+            <button type="button" class="t-button primary new-place">New place</button>
+          </header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <t-table id="table" searchable empty-text="No places yet"></t-table>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Settings</h1></header>
+          <div class="settings-stack">
+            <section class="t-card">
+              <div class="t-card-head"><h2>Categories</h2></div>
+              <p class="t-muted">The kinds of place. Each one has a colour on the map. Deleting a category lets you choose where its places go.</p>
+              <t-list-editor id="cat-editor" tones></t-list-editor>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Statuses</h2></div>
+              <p class="t-muted">Optional. Where a place stands, such as active or paused.</p>
+              <t-list-editor id="status-editor" tones></t-list-editor>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Starting point of the map</h2></div>
+              <p class="t-muted" id="center-text"></p>
+              <label class="t-switch-line"><input type="checkbox" class="t-switch" id="fit-open"><span>Fit the map to the places when it opens</span></label>
+              <div><button type="button" class="t-button" id="use-view">Use the map's current view</button></div>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>About the map</h2></div>
+              <p class="t-muted">The map comes from OpenStreetMap: the map images and the addresses you search for go through their servers.</p>
+            </section>
+            <t-data-tools id="tools"></t-data-tools>
+          </div>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-detail id="detail" title-field="name">
+    <a slot="actions" class="t-button" id="d-osm" target="_blank" rel="noopener noreferrer">Open in OpenStreetMap</a>
+    <a slot="actions" class="t-button" id="d-route" target="_blank" rel="noopener noreferrer">Route in Google Maps</a>
+    <button type="button" slot="actions" class="t-button" id="d-visit">Log visit today</button>
+    <button type="button" slot="actions" class="t-button" id="d-edit">Edit</button>
+    <button type="button" slot="actions" class="t-button danger" id="d-delete">Delete</button>
+  </t-detail>
+
+  <t-modal id="editor" title="Place">
+    <form id="place-form" class="t-form" novalidate>
+      <label class="t-field"><span>Name</span><input id="f-name" required></label>
+      <div class="t-form-row">
+        <label class="t-field"><span>Category</span><select id="f-category"></select></label>
+        <label class="t-field"><span>Status</span><select id="f-status"></select></label>
+      </div>
+      <label class="t-field"><span>Address</span><input id="f-address" autocomplete="off"></label>
+      <div class="t-toolbar">
+        <button type="button" class="t-button" id="search-address">Search address</button>
+        <button type="button" class="t-button" id="pick">Mark on the map</button>
+      </div>
+      <div class="results" id="results" aria-live="polite"></div>
+      <div class="t-form-row">
+        <label class="t-field"><span>Latitude</span><input id="f-lat" inputmode="decimal" placeholder="41.88"></label>
+        <label class="t-field"><span>Longitude</span><input id="f-lng" inputmode="decimal" placeholder="-87.63"></label>
+      </div>
+      <div class="preview" id="preview" hidden></div>
+      <div class="t-form-row">
+        <label class="t-field"><span>Phone</span><input id="f-phone" type="tel"></label>
+        <label class="t-field"><span>Contact</span><input id="f-contact"></label>
+      </div>
+      <label class="t-field"><span>Last visit</span><input id="f-lastVisit" type="date"></label>
+      <label class="t-field"><span>Notes</span><textarea id="f-notes"></textarea></label>
+      <div class="t-actions">
+        <button type="button" class="t-button danger" id="e-delete" hidden>Delete</button>
+        <span class="t-spacer"></span>
+        <button type="button" class="t-button" id="cancel">Cancel</button>
+        <button type="submit" class="t-button primary" id="save">Save</button>
+      </div>
+    </form>
+  </t-modal>
+
+  <script>
+    // PAGE MAP: text (T) -> defaults -> state -> helpers -> map (Leaflet, markers, tiles) -> render (list, table) ->
+    // editor (address search, pick on map, coordinates) -> detail -> settings -> data tools -> start-up.
+    // DATA: places are records in the collection `places` { name, category, status, address, lat, lng, phone, contact, notes, lastVisit, order }.
+    // lat/lng are numbers or null (null = "No location": the place shows in the lists only). Settings: one tendly.data key `settings`.
+    // NETWORK (the only template that leaves GCore): OSM tiles always; Nominatim only when "Search address" is pressed, 1 request per second.
+
+    const T = {
+      lang: 'en', placeWord: n => n === 1 ? 'place' : 'places', all: 'All', yes: 'Yes', no: 'No', noLocation: 'No location', noStatus: 'No status',
+      fName: 'Name', fCategory: 'Category', fStatus: 'Status', fAddress: 'Address', fLocation: 'Location', fPhone: 'Phone', fContact: 'Contact', fNotes: 'Notes', fLastVisit: 'Last visit',
+      unit: 'Unit', client: 'Client', site: 'Job site', active: 'Active', paused: 'Paused', closed: 'Closed', csvName: 'Places',
+      newPlace: 'New place', editPlace: 'Edit place', nothing: 'Nothing found', nothingText: 'No place matches the search or the category.', clear: 'Clear filter',
+      loadFail: 'Could not load the places', retry: 'Try again', conflict: 'Someone changed this place meanwhile; it was reloaded.', notFound: 'That place no longer exists.',
+      deleteQ: n => 'Delete "' + n + '"?', del: 'Delete', needName: 'Give the place a name.', badCoords: 'Enter both latitude and longitude (latitude -90 to 90, longitude -180 to 180), or leave both empty.',
+      typeAddress: 'Type an address first.', searching: 'Searching...', noResults: 'No address found. Mark the point on the map or paste the coordinates.',
+      searchFail: "Couldn't search the address right now. Mark it on the map or paste the coordinates.", mapDown: 'No connection to the map. Paste the coordinates instead.',
+      nothingToFit: 'No place with a location to fit.', visitLogged: 'Visit logged.', viewSaved: 'Starting point saved.', keepOne: 'Keep at least one category.',
+      moveTitle: 'Move places', moveText: n => n + ' ' + T.placeWord(n) + ' use this. Where should they go?', moveConfirm: 'Move and delete',
+      center: c => 'Now: latitude ' + c.lat + ', longitude ' + c.lng + ', zoom ' + c.zoom + '.',
+      summary: (n, per, no) => 'Map: ' + n + ' ' + T.placeWord(n) + ' (' + per + ')' + (no ? ', ' + no + ' without location' : ''), summaryEmpty: 'Map: no places yet',
+      sel: name => 'Place: ' + name,
+      // Examples: [name, category 0|1|2, status 0|1, address, lat, lng, phone, contact, notes, days since the last visit]
+      examples: [
+        ['Downtown office', 0, 0, '210 S Example St, Chicago, IL', 41.8827, -87.6233, '', 'Dana', 'Main desk and meeting rooms.', 4],
+        ['South Loop depot', 0, 1, '1500 S Sample Ave, Chicago, IL', 41.857, -87.627, '', 'Chris', 'Closed on weekends.', 21],
+        ['Maple Street client', 1, 0, '2900 N Maple St, Chicago, IL', 41.9217, -87.697, '(555) 010-0142', 'Priya', 'Prefers a call before any visit.', 9],
+        ['Hyde Park clinic', 1, 1, '5300 S Elm Ave, Chicago, IL', 41.7943, -87.5907, '(555) 010-0177', 'Marcus', 'Waiting for the new contract.', 35],
+        ['Airport road job site', 2, 0, '10000 W Terminal Rd, Chicago, IL', 41.9742, -87.9073, '', 'Site manager', 'Gate code in the shared notes.', 2],
+        ['Pier renovation', 2, 0, '600 E Harbor Dr, Chicago, IL', 41.8917, -87.605, '', 'Elena', 'Inspection every Thursday.', 6],
+        ['Corner shop (address to confirm)', 1, 0, '', null, null, '(555) 010-0199', 'Sam', 'Ask for the exact address on the next call.', null],
+        ['Lot on 63rd (to be located)', 2, 1, '63rd St, Chicago, IL', null, null, '', '', 'Still looking for the right entrance.', null]
+      ]
+    };
+    const DEFAULTS = {
+      v: 1,
+      categories: [{ id: 'unit', label: T.unit, tone: 'accent' }, { id: 'client', label: T.client, tone: 'info' }, { id: 'site', label: T.site, tone: 'warn' }],
+      statuses: [{ id: 'active', label: T.active, tone: 'ok' }, { id: 'paused', label: T.paused, tone: 'warn' }, { id: 'closed', label: T.closed, tone: '' }],
+      center: { lat: 39.5, lng: -98.35, zoom: 4 },
+      fitOnOpen: true
+    };
+    const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>';
+    const TONE_VAR = { '': '--t-muted', accent: '--t-accent', ok: '--t-ok', warn: '--t-warn', danger: '--t-danger', info: '--t-app-blue', violet: '--t-app-violet' };
+    const FORM = ['name', 'category', 'status', 'address', 'lat', 'lng', 'phone', 'contact', 'notes', 'lastVisit'];
+
+    const places = tendly.db.collection('places');
+    const $ = id => document.getElementById(id);
+    const app = document.querySelector('t-app');
+    const status = $('status'), empty = $('empty'), body = $('map-body'), listEl = $('place-list'), search = $('search'), pills = $('cats'), table = $('table');
+    const editor = $('editor'), placeForm = $('place-form'), detail = $('detail'), tools = $('tools'), catEditor = $('cat-editor'), statusEditor = $('status-editor');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let S, store, loaded = false, editing = null, selected = null, hotId = null, catFilter = '', shown = [], importOrder = 0;
+    let map, layer, tiles, markers = {}, sized = false, viewDone = false, fails = 0, mapDown = false, picking = false, pmap, pdot, lastSearch = 0;
+
+    // ---- helpers -----------------------------------------------------------------------------
+    const cats = () => S.value.categories, statuses = () => S.value.statuses;
+    const catOf = r => cats().find(c => c.id === r.data.category) || cats()[0];
+    const statusOf = r => statuses().find(s => s.id === r.data.status) || null;
+    const located = r => typeof r.data.lat === 'number' && typeof r.data.lng === 'number';
+    const byName = (a, b) => String(a.data.name).localeCompare(String(b.data.name));
+    const num = s => { s = String(s == null ? '' : s).trim().replace(/[−–]/g, '-').replace(',', '.'); return s === '' ? null : Number(s); };
+    const validCoords = (lat, lng) => lat !== null && lng !== null && isFinite(lat) && isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    // "-23.55, -46.63" or "-23,55 -46,63" pasted in one box -> [lat, lng] (a lone "-23,55" is just one number)
+    function splitCoords(text) {
+      const s = String(text).replace(/[()−–]/g, m => m === '(' || m === ')' ? '' : '-').trim();
+      const m = s.match(/^(-?\d+(?:[.,]\d+)?)\s*(?:;|,\s|\s)\s*(-?\d+(?:[.,]\d+)?)$/) || s.match(/^(-?\d+\.\d+),(-?\d+\.\d+)$/);
+      return m ? [num(m[1]), num(m[2])] : null;
+    }
+    function fieldsNow() {
+      return [{ id: 'name', label: T.fName, type: 'text', required: true }, { id: 'category', label: T.fCategory, type: 'choice', required: true, options: cats() },
+        { id: 'status', label: T.fStatus, type: 'choice', options: statuses() }, { id: 'address', label: T.fAddress, type: 'text' },
+        { id: 'lat', label: 'Latitude', type: 'text' }, { id: 'lng', label: 'Longitude', type: 'text' }, { id: 'phone', label: T.fPhone, type: 'phone' },
+        { id: 'contact', label: T.fContact, type: 'text' }, { id: 'lastVisit', label: T.fLastVisit, type: 'date' }, { id: 'notes', label: T.fNotes, type: 'longtext' }];
+    }
+    // The detail shows a "Location" line instead of the two number fields.
+    const detailFields = () => fieldsNow().filter(f => f.id !== 'lat' && f.id !== 'lng').concat([{ id: 'where', label: T.fLocation, type: 'text' }]);
+    const detailRecord = r => Object.assign({}, r, { data: Object.assign({}, r.data, { where: located(r) ? r.data.lat.toFixed(5) + ', ' + r.data.lng.toFixed(5) : T.noLocation }) });
+    function visible() {
+      const q = search.value.trim();
+      return store.records.slice().sort(byName).filter(r => (!catFilter || catOf(r).id === catFilter) && (!q || tkit.search.match([r.data.name, r.data.address, r.data.contact, r.data.notes].join(' '), q)));
+    }
+
+    // ---- the map: Leaflet, markers coloured by category tone, tiles with an offline state ----------
+    function addTiles(m) { return L.tileLayer(TILES, { maxZoom: 19, attribution: ATTRIBUTION }).addTo(m); }
+    // Maps inside hidden views start at 0x0: redraw whenever their box changes size.
+    function watch(el, m, first) {
+      new ResizeObserver(() => { if (el.clientWidth) { m.invalidateSize(); if (first) first(); } }).observe(el);
+    }
+    function setDown(on) { mapDown = on; $('map-error').hidden = !on; }
+    function initMap() {
+      if (typeof L === 'undefined') { setDown(true); $('retry-map').hidden = true; return; }
+      map = L.map($('map'), { zoomControl: true, attributionControl: true });
+      map.setView([S.value.center.lat, S.value.center.lng], S.value.center.zoom);
+      tiles = addTiles(map);
+      layer = L.layerGroup().addTo(map);
+      tiles.on('tileload', () => { fails = 0; setDown(false); });
+      tiles.on('tileerror', () => { if (++fails >= 3) setDown(true); });
+      window.addEventListener('offline', () => setDown(true));
+      window.addEventListener('online', () => { fails = 0; setDown(false); tiles.redraw(); });
+      map.on('click', event => { if (picking) endPick(event.latlng); });
+      watch($('map'), map, () => { sized = true; initialView(); });
+      // Marker colours are resolved from the kit variables when drawn: redraw if the theme flips.
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => drawMarkers(shown));
+      new MutationObserver(() => drawMarkers(shown)).observe(document.documentElement, { attributes: true });
+    }
+    function paint(id) {
+      const m = markers[id];
+      if (!m) return;
+      const on = id === selected || id === hotId;
+      m.setStyle({ radius: on ? 12 : 8, weight: on ? 3 : 2 });
+      if (on) m.bringToFront();
+    }
+    function drawMarkers(list) {
+      if (!map) return;
+      layer.clearLayers();
+      markers = {};
+      const css = getComputedStyle(document.documentElement);
+      const edge = css.getPropertyValue('--t-surface').trim() || 'white';
+      list.filter(located).forEach(r => {
+        const fill = css.getPropertyValue(TONE_VAR[catOf(r).tone] || TONE_VAR['']).trim() || 'gray';
+        const m = L.circleMarker([r.data.lat, r.data.lng], { radius: 8, color: edge, fillColor: fill, fillOpacity: 0.9, weight: 2 }).bindTooltip(r.data.name);
+        m.on('click', event => { if (picking) endPick(event.latlng); else showDetail(store.records.find(x => x.id === r.id)); });
+        m.on('mouseover', () => hot(r.id));
+        m.on('mouseout', () => hot(null));
+        m.addTo(layer);
+        markers[r.id] = m;
+        paint(r.id);
+      });
+    }
+    function fit() {
+      const points = shown.filter(located).map(r => [r.data.lat, r.data.lng]);
+      if (!map || !points.length) return false;
+      map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
+      return true;
+    }
+    function initialView() {
+      if (viewDone || !sized || !loaded || body.hidden) return;
+      viewDone = true;
+      if (S.value.fitOnOpen) fit();
+    }
+    function hot(id) {
+      const was = hotId;
+      hotId = id;
+      [was, id].forEach(x => { if (x) paint(x); });
+      listEl.querySelectorAll('.place-row').forEach(b => b.classList.toggle('hot', b.dataset.id === hotId));
+    }
+    function markSelected() {
+      Object.keys(markers).forEach(paint);
+      listEl.querySelectorAll('.place-row').forEach(b => b.classList.toggle('on', b.dataset.id === selected));
+    }
+    function setPane(pane) {
+      body.dataset.pane = pane;
+      document.querySelectorAll('#pane-switch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pane === pane)));
+    }
+    document.querySelectorAll('#pane-switch button').forEach(b => b.addEventListener('click', () => setPane(b.dataset.pane)));
+    $('fit').addEventListener('click', () => { if (!fit()) tkit.toast(T.nothingToFit); });
+    $('to-list').addEventListener('click', () => { app.view = 'list'; });
+    $('retry-map').addEventListener('click', () => { fails = 0; setDown(false); if (tiles) tiles.redraw(); });
+
+    // ---- render: list, markers, table --------------------------------------------------------
+    function drawList(list) {
+      tkit.clear(listEl);
+      if (!list.length) {
+        listEl.appendChild(tkit.h('t-state', { kind: 'empty', title: T.nothing, text: T.nothingText },
+          tkit.h('button', { type: 'button', class: 't-button', text: T.clear, onClick: () => { search.value = ''; catFilter = ''; pills.value = ''; render(); } })));
+        return;
+      }
+      list.forEach(r => {
+        const c = catOf(r);
+        listEl.appendChild(tkit.h('button', { type: 'button', class: 'place-row' + (r.id === selected ? ' on' : ''), dataset: { id: r.id }, onClick: () => showDetail(r), onMouseenter: () => hot(r.id), onMouseleave: () => hot(null) },
+          tkit.h('strong', { text: r.data.name }), tkit.h('span', { class: 't-badge ' + c.tone, text: c.label }),
+          located(r) ? null : tkit.h('span', { class: 't-badge warn', text: T.noLocation }),
+          r.data.address ? tkit.h('span', { class: 't-muted', text: r.data.address }) : null));
+      });
+    }
+    function drawTable(sorted) {
+      const catTones = {}, stTones = {};
+      cats().forEach(c => { catTones[c.label] = c.tone; });
+      statuses().forEach(s => { stTones[s.label] = s.tone; });
+      table.columns = [{ key: 'name', label: T.fName }, { key: 'category', label: T.fCategory, type: 'badge', tones: catTones }, { key: 'status', label: T.fStatus, type: 'badge', tones: stTones },
+        { key: 'address', label: T.fAddress }, { key: 'lastVisit', label: T.fLastVisit, type: 'date' }, { key: 'located', label: T.fLocation }];
+      table.rows = sorted.map(r => ({ id: r.id, name: r.data.name, category: catOf(r).label, status: statusOf(r) ? statusOf(r).label : '', address: r.data.address || '', lastVisit: r.data.lastVisit || '', located: located(r) ? T.yes : T.no }));
+    }
+    function setSummary() {
+      if (!loaded) return;
+      const all = store.records;
+      if (!all.length) { tkit.context({ summary: T.summaryEmpty }); return; }
+      const per = cats().map(c => [c.label, all.filter(r => catOf(r).id === c.id).length]).filter(p => p[1]).map(p => p[0] + ': ' + p[1]).join(', ');
+      tkit.context({ summary: T.summary(all.length, per, all.filter(r => !located(r)).length) });
+    }
+    function render() {
+      loaded = true;
+      tkit.clear(status);
+      const all = store.records, list = shown = visible();
+      empty.hidden = all.length > 0;
+      body.hidden = !all.length;
+      pills.options = [{ value: '', label: T.all, count: all.length }].concat(cats().map(c => ({ value: c.id, label: c.label, count: all.filter(r => catOf(r).id === c.id).length })));
+      drawList(list);
+      drawMarkers(list);
+      drawTable(all.slice().sort(byName));
+      document.querySelectorAll('.sample-banner').forEach(b => { b.count = tkit.samples.count(all); });
+      tools.fields = fieldsNow();
+      tools.records = all;
+      if (detail.opened) {
+        const fresh = detail.record && all.find(r => r.id === detail.record.id);
+        if (fresh) { detail.fields = detailFields(); detail.record = detailRecord(fresh); linkDetail(fresh); } else detail.close();
+      }
+      initialView();
+      setSummary();
+      syncRoute();
+    }
+    search.addEventListener('input', () => { if (loaded) render(); });
+    pills.addEventListener('t-change', event => { catFilter = event.detail.value; render(); });
+    table.addEventListener('t-open', event => showDetail(store.records.find(r => r.id === event.detail.id)));
+    empty.addEventListener('t-action', () => openEditor(null));
+    empty.addEventListener('t-examples', () => tkit.samples.load(places, exampleDocs()).catch(fail));
+    document.querySelectorAll('.new-place').forEach(b => b.addEventListener('click', () => openEditor(null)));
+    document.querySelectorAll('.sample-banner').forEach(b => b.addEventListener('t-clear', () => tkit.samples.clear(places).catch(fail)));
+
+    // ---- editor: fields, address search (button only), pick on the map, coordinates ---------------
+    function fillSelect(select, items, blank) {
+      tkit.clear(select);
+      if (blank) select.appendChild(tkit.h('option', { value: '', text: blank }));
+      items.forEach(i => select.appendChild(tkit.h('option', { value: i.id, text: i.label })));
+    }
+    function openEditor(record) {
+      editing = record || null;
+      fillSelect($('f-category'), cats());
+      fillSelect($('f-status'), statuses(), T.noStatus);
+      const d = record ? record.data : {};
+      FORM.forEach(k => { $('f-' + k).value = d[k] == null ? '' : d[k]; });
+      $('f-category').value = record ? catOf(record).id : cats()[0].id;
+      tkit.clear($('results'));
+      $('e-delete').hidden = !record;
+      editor.title = record ? T.editPlace : T.newPlace;
+      editor.open();
+      tendly.host.holdReload(true);
+      updatePreview();
+      $('f-name').focus();
+    }
+    function currentCoords() {
+      const lat = num($('f-lat').value), lng = num($('f-lng').value);
+      return validCoords(lat, lng) ? { lat, lng } : null;
+    }
+    function setCoords(lat, lng) {
+      $('f-lat').value = Number(lat).toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+      $('f-lng').value = Number(lng).toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+      updatePreview();
+    }
+    // A small map under the coordinates; the same OSM tiles.
+    function updatePreview() {
+      const c = currentCoords(), box = $('preview');
+      box.hidden = !c || typeof L === 'undefined';
+      if (box.hidden) return;
+      if (!pmap) {
+        pmap = L.map(box, { zoomControl: false, attributionControl: true });
+        addTiles(pmap);
+        pdot = L.circleMarker([c.lat, c.lng], { radius: 8, weight: 2, fillOpacity: 0.9 }).addTo(pmap);
+        watch(box, pmap);
+      }
+      pmap.setView([c.lat, c.lng], 15);
+      pdot.setLatLng([c.lat, c.lng]);
+      setTimeout(() => pmap.invalidateSize(), 50);
+    }
+    ['f-lat', 'f-lng'].forEach(id => {
+      const box = $(id);
+      const split = () => { const pair = splitCoords(box.value); if (pair && validCoords(pair[0], pair[1])) setCoords(pair[0], pair[1]); else updatePreview(); };
+      box.addEventListener('paste', () => setTimeout(split, 0));
+      box.addEventListener('change', split);
+    });
+    $('search-address').addEventListener('click', async () => {
+      const q = $('f-address').value.trim(), results = $('results'), button = $('search-address');
+      tkit.clear(results);
+      if (!q) { results.appendChild(tkit.h('p', { class: 't-muted', text: T.typeAddress })); return; }
+      results.appendChild(tkit.h('p', { class: 't-muted', text: T.searching }));
+      button.disabled = true;
+      try {
+        const wait = lastSearch + 1100 - Date.now();   // Nominatim allows at most one request per second
+        if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+        lastSearch = Date.now();
+        const response = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=' + encodeURIComponent(q) + '&accept-language=' + T.lang);
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const found = await response.json();
+        tkit.clear(results);
+        if (!found.length) results.appendChild(tkit.h('p', { class: 't-muted', text: T.noResults }));
+        found.forEach(item => results.appendChild(tkit.h('button', { type: 'button', class: 'place-row', text: item.display_name, onClick: () => {
+          setCoords(Number(item.lat), Number(item.lon));
+          if (!$('f-address').value.trim()) $('f-address').value = item.display_name;
+          tkit.clear(results);
+        } })));
+      } catch (_) {
+        tkit.clear(results);
+        results.appendChild(tkit.h('p', { class: 't-muted', text: T.searchFail }));
+      } finally { button.disabled = false; }
+    });
+    // Pick mode: the editor closes (its inputs keep their text), the person clicks or taps the map, Esc cancels.
+    $('pick').addEventListener('click', () => {
+      if (!map || mapDown) { tkit.toast(T.mapDown, { tone: 'error' }); return; }
+      picking = true;
+      editor.close();
+      if (detail.opened) detail.close();
+      app.view = 'map';
+      setPane('map');
+      $('pick-bar').hidden = false;
+      $('map').classList.add('picking');
+    });
+    function endPick(latlng) {
+      if (!picking) return;
+      picking = false;
+      $('pick-bar').hidden = true;
+      $('map').classList.remove('picking');
+      if (latlng) setCoords(latlng.lat, latlng.lng);
+      editor.open();
+      updatePreview();
+    }
+    $('pick-cancel').addEventListener('click', () => endPick(null));
+    document.addEventListener('keydown', event => { if (picking && event.key === 'Escape') { event.preventDefault(); endPick(null); } });
+    placeForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const v = {};
+      FORM.forEach(k => { v[k] = $('f-' + k).value.trim(); });
+      if (!v.name) { tkit.toast(T.needName, { tone: 'error' }); $('f-name').focus(); return; }
+      let lat = num(v.lat), lng = num(v.lng);
+      if (lat === null && lng === null) { /* no location */ } else if (!validCoords(lat, lng)) { tkit.toast(T.badCoords, { tone: 'error' }); return; }
+      const data = { name: v.name, category: v.category, status: v.status || null, address: v.address, lat, lng, phone: v.phone, contact: v.contact, notes: v.notes, lastVisit: v.lastVisit || null };
+      $('save').disabled = true;
+      try {
+        if (editing) await places.update(editing.id, data, { rev: editing.rev });
+        else { data.order = Math.max.apply(null, [0].concat(store.records.map(r => r.data.order || 0))) + 1; await places.insert(data); }
+        editor.close();
+      } catch (error) {
+        if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); openEditor(error.current); } else fail(error);
+      } finally { $('save').disabled = false; }
+    });
+    $('cancel').addEventListener('click', () => editor.close());
+    placeForm.addEventListener('input', () => { tendly.host.holdReload(true); });
+    editor.addEventListener('t-close', () => { if (!picking) tendly.host.holdReload(false); });
+    async function deletePlace(record) {
+      if (!record || !await tkit.confirm(T.deleteQ(record.data.name), { confirm: T.del, tone: 'danger' })) return false;
+      try { await places.remove(record.id); return true; } catch (error) { fail(error); return false; }
+    }
+    $('e-delete').addEventListener('click', async () => { if (await deletePlace(editing)) editor.close(); });
+
+    // ---- detail drawer (#map/<id> or #list/<id>) ---------------------------------------------
+    function linkDetail(r) {
+      const ok = located(r), lat = r.data.lat, lng = r.data.lng;
+      $('d-osm').hidden = $('d-route').hidden = !ok;
+      if (ok) {
+        $('d-osm').href = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lng + '#map=17/' + lat + '/' + lng;
+        $('d-route').href = 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng;
+      }
+    }
+    function showDetail(record) {
+      if (!record) return;
+      selected = record.id;
+      detail.fields = detailFields();
+      detail.settings = {};
+      detail.record = detailRecord(record);
+      linkDetail(record);
+      detail.open();
+      tkit.context({ selection: T.sel(record.data.name) });
+      markSelected();
+      const row = listEl.querySelector('.place-row.on');
+      if (row) row.scrollIntoView({ block: 'nearest' });
+      if (map && located(record)) map.panTo([record.data.lat, record.data.lng]);
+    }
+    detail.addEventListener('t-close', () => { selected = null; markSelected(); });
+    $('d-edit').addEventListener('click', () => openEditor(store.records.find(r => r.id === detail.record.id)));
+    $('d-delete').addEventListener('click', async () => { if (await deletePlace(detail.record)) detail.close(); });
+    $('d-visit').addEventListener('click', () => {
+      const record = store.records.find(r => r.id === detail.record.id);
+      places.update(record.id, { lastVisit: tkit.today() }, { rev: record.rev }).then(() => tkit.toast(T.visitLogged)).catch(fail);
+    });
+    function syncRoute(route) {
+      route = route || tkit.route.get();
+      if (!loaded) return;
+      if (route.id && (route.view === 'map' || route.view === 'list')) {
+        const record = store.records.find(r => r.id === route.id);
+        if (!record) { tkit.toast(T.notFound); tkit.route.close(); }
+        else if (!(detail.opened && detail.record && detail.record.id === record.id)) showDetail(record);
+      } else if (detail.opened) detail.close();
+    }
+
+    // ---- settings ----------------------------------------------------------------------------
+    // Deleting a category or status that places use: choose where they go first (statuses may go to "No status").
+    function removalGuard(field, list, optional) {
+      return async item => {
+        if (!optional && list().length < 2) { tkit.toast(T.keepOne, { tone: 'error' }); return false; }
+        const mine = store.records.filter(r => r.data[field] === item.id);
+        if (!mine.length) return true;
+        const options = list().filter(x => x.id !== item.id).map(x => ({ id: x.id, label: x.label })).concat(optional ? [{ id: '__none', label: T.noStatus }] : []);
+        const target = await tkit.chooseMove({ title: T.moveTitle, text: T.moveText(mine.length), options, confirm: T.moveConfirm });
+        if (!target) return false;
+        try { for (const r of mine) await places.update(r.id, { [field]: target === '__none' ? null : target }); return true; } catch (error) { fail(error); return false; }
+      };
+    }
+    catEditor.beforeRemove = removalGuard('category', cats, false);
+    statusEditor.beforeRemove = removalGuard('status', statuses, true);
+    catEditor.addEventListener('t-change', event => S.save({ categories: event.detail.items }).catch(fail));
+    statusEditor.addEventListener('t-change', event => S.save({ statuses: event.detail.items }).catch(fail));
+    $('fit-open').addEventListener('change', event => S.save({ fitOnOpen: event.target.checked }).catch(fail));
+    $('use-view').addEventListener('click', () => {
+      if (!map || mapDown) { tkit.toast(T.mapDown, { tone: 'error' }); return; }
+      const c = map.getCenter();
+      S.save({ center: { lat: Number(c.lat.toFixed(5)), lng: Number(c.lng.toFixed(5)), zoom: map.getZoom() } }).then(() => tkit.toast(T.viewSaved)).catch(fail);
+    });
+    function applySettings() {
+      const v = S.value;
+      catEditor.items = v.categories;
+      statusEditor.items = v.statuses;
+      $('fit-open').checked = !!v.fitOnOpen;
+      $('center-text').textContent = T.center(v.center);
+      if (store && loaded) render();
+    }
+
+    // ---- data tools: CSV (with lat/lng columns), examples, delete all ------------------------------
+    function exampleDocs() {
+      const c = cats(), s = statuses();
+      return T.examples.map((e, i) => ({ name: e[0], category: c[Math.min(e[1], c.length - 1)].id, status: s.length ? s[Math.min(e[2], s.length - 1)].id : null, address: e[3], lat: e[4], lng: e[5], phone: e[6], contact: e[7], notes: e[8], lastVisit: e[9] === null ? null : tkit.daysFromToday(-e[9]), order: i + 1 }));
+    }
+    tools.collection = places;
+    tools.noun = { one: T.placeWord(1), many: T.placeWord(2) };
+    tools.filename = T.csvName;
+    tools.examples = exampleDocs;
+    // Imported rows: lat/lng come as text; keep them only if both are valid, and never leave a place without a category.
+    tools.beforeInsert = doc => {
+      const lat = num(doc.lat), lng = num(doc.lng), ok = validCoords(lat, lng);
+      importOrder = Math.max(importOrder, ...store.records.map(r => r.data.order || 0)) + 1;
+      return Object.assign({}, doc, { lat: ok ? lat : null, lng: ok ? lng : null, order: importOrder, category: cats().some(c => c.id === doc.category) ? doc.category : cats()[0].id });
+    };
+
+    // ---- start-up ----------------------------------------------------------------------------
+    app.addEventListener('t-view', () => setTimeout(() => { if (map) map.invalidateSize(); setSummary(); }, 0));
+    tkit.route.on(syncRoute);
+    (async () => {
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) fail(S.error);
+      initMap();
+      S.on(applySettings);
+      applySettings();
+      store = tkit.live(places, render, { limit: 5000, onError: error => {
+        tkit.clear(status);
+        empty.hidden = true; body.hidden = true;
+        status.appendChild(tkit.h('t-state', { kind: 'error', title: T.loadFail, text: error.message },
+          tkit.h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => store.reload() })));
+      } });
+    })();
+  </script>
+</body>
+</html>
