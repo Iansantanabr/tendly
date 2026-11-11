@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .cmp-page { grid-template-columns: minmax(0, 1fr); }
+    .cmp-scroll { min-width: 0; max-width: 100%; overflow-x: auto; border: 1px solid var(--t-line); border-radius: var(--t-radius-lg); background: var(--t-elevated); }
+    .cmp-table { border-collapse: separate; border-spacing: 0; width: 100%; }
+    .cmp-table th, .cmp-table td { min-width: 150px; padding: var(--t-space-3); border-bottom: 1px solid var(--t-line); text-align: left; vertical-align: top; font-weight: 400; }
+    .cmp-table tr:last-child > * { border-bottom: 0; }
+    .cmp-table .cmp-key { position: sticky; left: 0; z-index: 1; min-width: 132px; max-width: 160px; background: var(--t-elevated); border-right: 1px solid var(--t-line); font-weight: 600; }
+    .cmp-table thead .cmp-key { z-index: 2; }
+    .cmp-table td.best { background: var(--t-ok-soft); }
+    .cmp-table th.winner { box-shadow: inset 0 3px 0 var(--t-accent); }
+    .cmp-head { display: flex; align-items: center; gap: var(--t-space-2); }
+    .cmp-name { font-weight: 600; }
+    .cmp-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+    .cmp-badges:empty { display: none; }
+    .cmp-menu { width: auto; max-width: 100%; margin-top: 4px; font-size: var(--t-text-sm); }
+    .cmp-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 4px 6px; border: 1px solid transparent; border-radius: var(--t-radius-sm); background: none; color: inherit; font: inherit; text-align: left; cursor: text; }
+    .cmp-cell:hover { border-color: var(--t-line-input); }
+    .cmp-w { width: 72px; margin-top: 4px; }
+    .cmp-bar { display: block; height: 6px; margin-top: 6px; border-radius: 3px; background: var(--t-fill); overflow: hidden; }
+    .cmp-bar > span { display: block; height: 100%; background: var(--t-accent); }
+    .cmp-score strong { font-size: var(--t-text-lg); }
+    .cmp-list { margin: 0; padding-left: 18px; }
+    .cmp-cards { display: grid; gap: var(--t-space-3); }
+    .cmp-cards .t-card { display: grid; gap: var(--t-space-3); }
+    .cmp-rank { display: grid; gap: var(--t-space-3); margin: 0 0 var(--t-space-4); padding: 0; list-style: none; }
+    .cmp-rank-row { display: flex; align-items: center; gap: var(--t-space-3); padding: var(--t-space-3) var(--t-space-4); border: 1px solid var(--t-line); border-radius: var(--t-radius-lg); background: var(--t-elevated); }
+    .cmp-pos { flex: none; width: 28px; font-size: var(--t-text-xl); font-weight: 600; color: var(--t-muted); }
+    .cmp-rank-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+    .cmp-rank-top { display: flex; align-items: center; gap: var(--t-space-2); }
+    .cmp-rank-top .cmp-total { margin-left: auto; }
+    .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
+    .settings-stack .t-card { display: grid; gap: var(--t-space-3); }
+    .crit { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--t-space-2); align-items: end; padding: var(--t-space-3); border: 1px solid var(--t-line); border-radius: var(--t-radius-md); }
+    .crit .t-actions { justify-content: flex-start; flex-wrap: nowrap; }
+    .crit-up svg { transform: rotate(180deg); }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Sections">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="compare" data-icon="scale">Compare</button>
+      <button data-view="ranking" data-icon="chart">Ranking</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Settings</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="compare">
+        <div class="t-page cmp-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted" id="sub">{{DESCRIPTION}}</p></div>
+            <div class="t-toolbar">
+              <button type="button" class="t-button" id="new-criterion">New criterion</button>
+              <button type="button" class="t-button primary new-option">New option</button>
+            </div>
+          </header>
+          <t-sample-banner class="sample-banner"></t-sample-banner>
+          <div id="status"></div>
+          <t-empty-start id="start" title="No options yet" text="Add the options you are choosing between, or load a few examples to see how the comparison works." action="New option" hidden></t-empty-start>
+          <div id="compare-body" hidden>
+            <div class="t-toolbar">
+              <div class="t-segment" role="group" aria-label="Layout" id="mode"><button type="button" aria-pressed="true" data-mode="matrix">Matrix</button><button type="button" aria-pressed="false" data-mode="cards">By option</button></div>
+              <span class="t-muted">Select a value to edit it. Enter saves, Esc cancels.</span>
+            </div>
+            <div class="cmp-scroll" id="matrix"></div>
+            <div class="cmp-cards" id="cards" hidden></div>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="ranking">
+        <div class="t-page">
+          <header class="t-page-head">
+            <h1 class="t-title">Ranking</h1>
+            <button type="button" class="t-button primary" id="choose-top" hidden></button>
+          </header>
+          <p id="decided" class="t-toolbar" hidden><span id="decided-text"></span><button type="button" class="t-button small" id="clear-choice">Clear choice</button></p>
+          <t-state id="rank-empty" kind="empty" title="Nothing to rank" text="Add options in Compare and they are ranked here by weighted score."></t-state>
+          <div id="rank-body" hidden>
+            <ol class="cmp-rank" id="rank-list"></ol>
+            <section class="t-card"><t-chart id="chart" type="bar" label="Score by option"></t-chart></section>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Settings</h1></header>
+          <div class="settings-stack">
+            <section class="t-card">
+              <div class="t-card-head"><h2>Decision</h2></div>
+              <label class="t-field"><span>What are you deciding?</span><input id="title-input" maxlength="80" placeholder="Cleaning supplier 2027"></label>
+              <label class="t-field"><span>Currency</span><select id="currency"></select></label>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Criteria</h2><button type="button" class="t-button small" id="add-criterion">Add criterion</button></div>
+              <p class="t-muted">Weight says how much a criterion counts (0 to 10). Deleting a criterion keeps the values already typed in the options.</p>
+              <div id="criteria" class="settings-stack"></div>
+            </section>
+            <section class="t-card" id="archived-card" hidden>
+              <div class="t-card-head"><h2>Archived options</h2></div>
+              <ul class="t-list" id="archived"></ul>
+            </section>
+            <t-data-tools id="tools" filename="Options"></t-data-tools>
+          </div>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-modal id="editor" title="Option">
+    <form id="option-form" class="t-form" novalidate>
+      <t-record-form id="record-form"></t-record-form>
+      <div class="t-actions">
+        <button type="button" class="t-button danger" id="delete" hidden>Delete</button>
+        <span class="t-spacer"></span>
+        <button type="button" class="t-button" id="cancel">Cancel</button>
+        <button type="submit" class="t-button primary" id="save">Save</button>
+      </div>
+    </form>
+  </t-modal>
+
+  <script>
+    // PAGE MAP: strings (T) -> defaults -> LOGIC (pure scoring, unit-tested) -> state -> render (matrix, cards, ranking) ->
+    // in-place cell editing -> option editor and route -> settings (criteria, archived) -> data tools -> start-up.
+    // DATA: options are records in the collection `options` { name, link, note, values: { [criterionId]: number | boolean | null },
+    // pros: [text], cons: [text], order, archived }. Settings are one tendly.data key `settings`:
+    // { v, currency, title, decided: optionId | null, criteria: [{ id, label, kind: money|number|score|yesno, weight 0-10, better: higher|lower, unit? }] }.
+    // Criterion ids never change; deleting a criterion leaves its values inside the options. The score of an option is computed, never stored.
+
+    // All visible text of the script lives here (the pt-BR twin of this file only changes this block, the markup and lang).
+    const T = {
+      untitled: 'Untitled option', noData: 'No data', notSet: 'Not set', best: 'Best', bestScore: 'Best score', chosen: 'Chosen',
+      criterion: 'Criterion', score: 'Score', pros: 'Pros', cons: 'Cons', weight: 'Weight', higher: 'Higher is better', lower: 'Lower is better',
+      matrixLabel: 'Comparison of options by criterion', openLink: 'Open link', editHint: 'Press Enter to edit',
+      weightOf: label => 'Weight of ' + label, actionsFor: name => 'Actions for ' + name,
+      menu: { '': 'Actions…', edit: 'Edit', choose: 'Choose this one', archive: 'Archive', del: 'Delete' },
+      kinds: [['money', 'Money'], ['number', 'Number'], ['score', 'Score 1 to 5'], ['yesno', 'Yes or no']],
+      scoreOf: n => n + ' / 5', fName: 'Name', fLink: 'Link', fNote: 'Notes', onePerLine: 'One per line.',
+      newOption: 'New option', editOption: 'Edit option', newCriterion: 'New criterion', sel: name => 'Option: ' + name,
+      cLabel: 'Name', cKind: 'Type', cUnit: 'Unit', cBetter: 'Better when', cWeight: 'Weight', up: 'Move up', down: 'Move down', remove: 'Delete criterion',
+      loadFail: 'Could not load the options', retry: 'Try again', allArchived: 'All options are archived. Restore one in Settings.',
+      conflict: 'Someone changed this meanwhile; it was reloaded.', notFound: 'That option no longer exists.',
+      deleteQ: name => 'Delete "' + name + '"?', del: 'Delete', restore: 'Restore',
+      deleteCritQ: (label, n) => 'Delete the criterion "' + label + '"?' + (n ? ' ' + n + (n === 1 ? ' option keeps' : ' options keep') + ' the value typed for it, but it stops showing.' : ''),
+      choose: 'Choose', chooseName: name => 'Choose ' + name, decidedIs: name => 'Chosen: ' + name, bestOn: list => 'Best at ' + list, noStandout: 'No standout criterion',
+      examplesTitle: 'Cleaning supplier 2027',
+      summary: (title, n, name, score) => 'Comparison "' + title + '": ' + n + ' options, best: ' + name + ' (' + tkit.number(score, 1) + ')',
+      summaryEmpty: title => 'Comparison "' + title + '": no options yet',
+      // Examples: [name, note, [price, quality 1-5, days to start, 24h support], pros, cons]
+      examples: [
+        ['Limpa Bem Services', 'Family company, four years on the market.', [4800, 4, 7, false], ['Good references', 'Same team every week'], ['Highest price', 'Support only in business hours']],
+        ['Brilho Total', 'Larger company with its own supplies.', [4500, 5, 5, true], ['Best quality', 'Support at any hour'], ['Contract of 12 months']],
+        ['Casa & Cia Facilities', 'Cheapest quote, new team.', [4200, 2, 10, false], ['Lowest price', 'Flexible contract'], ['Slow to start', 'Several complaints online']]
+      ]
+    };
+    const DEFAULTS = {
+      v: 1, currency: 'BRL', title: '', decided: null,
+      criteria: [
+        { id: 'preco', label: 'Monthly price', kind: 'money', weight: 8, better: 'lower' },
+        { id: 'qualidade', label: 'Quality', kind: 'score', weight: 7, better: 'higher' },
+        { id: 'prazo', label: 'Days to start', kind: 'number', unit: 'days', weight: 4, better: 'lower' },
+        { id: 'suporte', label: '24h support', kind: 'yesno', weight: 3, better: 'higher' }
+      ]
+    };
+    const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP'];
+
+    // LOGIC START
+    // Pure scoring: no DOM, no SDK. Options are { id, archived?, values: { [criterionId]: value } }, criteria are the settings' list.
+    // Each criterion turns the options' values into 0..1 (money/number: min-max over the options that have a value, inverted when
+    // `better` is lower, 1 when there is one value or all are equal; score: (v-1)/4; yesno: 1 or 0); a missing value counts 0 and is flagged.
+    function hasValue(v) { return v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && !isFinite(v)); }
+    function criterionNorms(criterion, list) {
+      const kind = criterion.kind, lower = criterion.better === 'lower', ranged = kind === 'money' || kind === 'number';
+      const base = list.map(o => {
+        const v = (o.values || {})[criterion.id];
+        if (!hasValue(v)) return null;
+        if (kind === 'yesno') return v === true ? 1 : 0;
+        if (kind === 'score') return Math.min(1, Math.max(0, (Number(v) - 1) / 4));
+        const n = Number(v);
+        return isFinite(n) ? n : null;
+      });
+      let lo = Infinity, hi = -Infinity;
+      if (ranged) base.forEach(n => { if (n !== null) { lo = Math.min(lo, n); hi = Math.max(hi, n); } });
+      return base.map(n => {
+        if (n === null) return { norm: 0, missing: true };
+        if (ranged) return { norm: hi === lo ? 1 : lower ? (hi - n) / (hi - lo) : (n - lo) / (hi - lo), missing: false };
+        return { norm: lower ? 1 - n : n, missing: false };
+      });
+    }
+    // Archived options are left out. Returns, in the input order, { id, score (0-100, one decimal), cells: { [criterionId]: { norm, missing, best } } }.
+    function scoreOptions(options, criteria) {
+      const list = options.filter(o => !o.archived);
+      const weights = criteria.map(c => Math.max(0, Number(c.weight) || 0));
+      const total = weights.reduce((a, b) => a + b, 0);
+      const columns = criteria.map(c => criterionNorms(c, list));
+      const tops = columns.map(col => {
+        const have = col.filter(x => !x.missing).map(x => x.norm);
+        const max = have.length ? Math.max.apply(null, have) : 0;
+        return { max, distinct: col.some(x => x.missing || x.norm !== max) };   // all equal: nobody is "best"
+      });
+      return list.map((o, i) => {
+        const cells = {};
+        let sum = 0;
+        criteria.forEach((c, j) => {
+          const x = columns[j][i];
+          cells[c.id] = { norm: x.norm, missing: x.missing, best: !x.missing && tops[j].distinct && x.norm === tops[j].max };
+          sum += weights[j] * x.norm;
+        });
+        return { id: o.id, score: total > 0 ? Math.round(sum / total * 1000) / 10 : 0, cells };
+      });
+    }
+    // Highest score first; ties keep the input order. Adds rank (1 = first).
+    function rankOptions(scored) {
+      return scored.map((s, i) => ({ s, i })).sort((a, b) => b.s.score - a.s.score || a.i - b.i).map((e, k) => Object.assign({}, e.s, { rank: k + 1 }));
+    }
+    // Labels of the criteria an option is best at, heaviest first (weight 0 never counts).
+    function reasonsFor(item, criteria, limit) {
+      return criteria.map((c, i) => ({ c, i })).filter(e => item.cells[e.c.id] && item.cells[e.c.id].best && Number(e.c.weight) > 0)
+        .sort((a, b) => Number(b.c.weight) - Number(a.c.weight) || a.i - b.i).slice(0, limit).map(e => e.c.label);
+    }
+    // LOGIC END
+
+    const options = tendly.db.collection('options');
+    const $ = id => document.getElementById(id);
+    const editor = $('editor'), optionForm = $('option-form'), recordForm = $('record-form'), tools = $('tools');
+    const DESC = $('sub').textContent, TITLE = document.querySelector('.t-title').textContent;
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let S, store, loaded = false, mode = 'matrix', editing = null, cellEditing = false, pendingFocus = '', model = { act: [], by: {}, ranked: [], winner: null };
+    let nextOrder = 1, forceCrit = false, focusCrit = '', weightTimer = null, fixingDecided = false;
+
+    // ---- state ---------------------------------------------------------------------------------
+    const criteria = () => S.value.criteria;
+    const orderOf = r => r.data.order || 0;
+    const nameOf = r => r.data.name || T.untitled;
+    const recOf = id => store.records.find(r => r.id === id);
+    const decisionTitle = () => S.value.title || TITLE;
+    const lines = text => String(text || '').split('\n').map(x => x.trim()).filter(Boolean);
+    function compute() {
+      const act = store.records.filter(r => !r.data.archived).sort((a, b) => orderOf(a) - orderOf(b) || a.created_at.localeCompare(b.created_at));
+      const scored = scoreOptions(act.map(r => ({ id: r.id, values: r.data.values || {} })), criteria());
+      const ranked = rankOptions(scored), by = {};
+      scored.forEach(s => { by[s.id] = s; });
+      model = { act, by, ranked, winner: ranked.length ? ranked[0].id : null };
+      nextOrder = Math.max(0, ...store.records.map(orderOf)) + 1;
+    }
+    function formatValue(c, v) {
+      if (!hasValue(v)) return '';
+      if (c.kind === 'money') return tkit.money(v, S.value.currency);
+      if (c.kind === 'score') return T.scoreOf(v);
+      if (c.kind === 'yesno') return v ? tkit.t('yes') : tkit.t('no');
+      return tkit.number(v) + (c.unit ? ' ' + c.unit : '');
+    }
+
+    // ---- render: matrix, cards, ranking ----------------------------------------------------------
+    function cellNode(rec, c) {
+      const text = formatValue(c, (rec.data.values || {})[c.id]);
+      const button = tkit.h('button', { type: 'button', class: 'cmp-cell', dataset: { key: rec.id + ':' + c.id }, 'aria-label': c.label + ', ' + nameOf(rec) + ': ' + (text || T.noData) + '. ' + T.editHint, onClick: () => editCell(button, rec, c) },
+        tkit.h('span', { class: text ? '' : 't-muted', text: text || T.noData }),
+        model.by[rec.id].cells[c.id].best ? tkit.h('span', { class: 't-badge ok', text: T.best }) : null);
+      return button;
+    }
+    function menuFor(rec) {
+      return tkit.h('select', { class: 't-input cmp-menu', 'aria-label': T.actionsFor(nameOf(rec)), onChange: event => { const act = event.target.value; event.target.value = ''; optionAction(act, rec); } },
+        Object.keys(T.menu).map(k => tkit.h('option', { value: k, text: T.menu[k] })));
+    }
+    function bullets(list) {
+      return Array.isArray(list) && list.length ? tkit.h('ul', { class: 'cmp-list' }, list.map(x => tkit.h('li', { text: x }))) : tkit.h('span', { class: 't-muted', text: T.notSet });
+    }
+    function scoreBar(score) {
+      return [tkit.h('strong', { text: tkit.number(score, 1) }), tkit.h('span', { class: 'cmp-bar', 'aria-hidden': 'true' }, tkit.h('span', { style: { width: score + '%' } }))];
+    }
+    function optionHead(rec) {
+      const win = model.act.length > 1 && rec.id === model.winner, url = /^https?:\/\//i.test(rec.data.link || '') ? rec.data.link : '';
+      return tkit.h('th', { scope: 'col', class: win ? 'winner' : '' },
+        tkit.h('div', { class: 'cmp-head' }, tkit.h('span', { class: 'cmp-name', text: nameOf(rec) }),
+          url ? tkit.h('a', { href: url, target: '_blank', rel: 'noopener', 'aria-label': T.openLink }, tkit.icon('external', 14)) : null),
+        tkit.h('div', { class: 'cmp-badges' }, win ? tkit.h('span', { class: 't-badge accent', text: T.bestScore }) : null, S.value.decided === rec.id ? tkit.h('span', { class: 't-badge ok', text: T.chosen }) : null),
+        menuFor(rec));
+    }
+    function criterionHead(c) {
+      const input = tkit.h('input', { class: 't-input cmp-w', type: 'number', min: '0', max: '10', step: '1', 'aria-label': T.weightOf(c.label), dataset: { key: 'w:' + c.id },
+        onChange: event => setWeight(c.id, event.target.value) });
+      input.value = c.weight;
+      return tkit.h('th', { class: 'cmp-key', scope: 'row' }, c.label, tkit.h('div', { class: 't-muted' }, c.unit && c.kind === 'number' ? c.unit + ', ' : '', c.better === 'lower' ? T.lower : T.higher),
+        tkit.h('label', { class: 't-muted' }, T.weight + ' ', input));
+    }
+    function drawMatrix() {
+      const wrap = $('matrix'), act = model.act;
+      tkit.clear(wrap);
+      if (!act.length) { wrap.appendChild(tkit.h('t-state', { kind: 'empty', title: T.allArchived })); return; }
+      const rows = criteria().map(c => tkit.h('tr', {}, criterionHead(c), act.map(rec => tkit.h('td', { class: model.by[rec.id].cells[c.id].best ? 'best' : '' }, cellNode(rec, c)))));
+      const score = tkit.h('tr', { class: 'cmp-score' }, tkit.h('th', { class: 'cmp-key', scope: 'row', text: T.score }), act.map(rec => tkit.h('td', {}, scoreBar(model.by[rec.id].score))));
+      const lists = [['pros', T.pros], ['cons', T.cons]].map(p => tkit.h('tr', {}, tkit.h('th', { class: 'cmp-key', scope: 'row', text: p[1] }), act.map(rec => tkit.h('td', {}, bullets(rec.data[p[0]])))));
+      wrap.appendChild(tkit.h('table', { class: 'cmp-table', 'aria-label': T.matrixLabel },
+        tkit.h('thead', {}, tkit.h('tr', {}, tkit.h('th', { class: 'cmp-key', scope: 'col', text: T.criterion }), act.map(optionHead))), tkit.h('tbody', {}, rows, score, lists)));
+    }
+    function drawCards() {
+      const box = $('cards');
+      tkit.clear(box);
+      model.act.forEach(rec => box.appendChild(tkit.h('section', { class: 't-card' },
+        tkit.h('div', { class: 't-card-head' }, tkit.h('h2', { text: nameOf(rec) }), tkit.h('span', { class: 't-badge' + (model.act.length > 1 && rec.id === model.winner ? ' accent' : ''), text: tkit.number(model.by[rec.id].score, 1) }), menuFor(rec)),
+        tkit.h('dl', { class: 't-kv' }, criteria().map(c => tkit.h('div', {}, tkit.h('dt', { text: c.label }), tkit.h('dd', {}, cellNode(rec, c))))),
+        rec.data.note ? tkit.h('div', { class: 't-md' }, tkit.markdown(rec.data.note)) : null,
+        [['pros', T.pros], ['cons', T.cons]].map(p => tkit.h('div', {}, tkit.h('strong', { text: p[1] }), bullets(rec.data[p[0]]))))));
+    }
+    function drawRanking() {
+      const list = $('rank-list'), has = model.ranked.length > 0, decided = S.value.decided && recOf(S.value.decided);
+      $('rank-empty').hidden = has;
+      $('rank-body').hidden = !has;
+      tkit.clear(list);
+      model.ranked.forEach(s => {
+        const rec = recOf(s.id), why = reasonsFor(s, criteria(), 3);
+        list.appendChild(tkit.h('li', { class: 'cmp-rank-row' }, tkit.h('span', { class: 'cmp-pos', text: String(s.rank) }),
+          tkit.h('div', { class: 'cmp-rank-main' },
+            tkit.h('div', { class: 'cmp-rank-top' }, tkit.h('strong', { text: nameOf(rec) }), S.value.decided === rec.id ? tkit.h('span', { class: 't-badge ok', text: T.chosen }) : null, tkit.h('strong', { class: 'cmp-total', text: tkit.number(s.score, 1) })),
+            tkit.h('span', { class: 'cmp-bar', 'aria-hidden': 'true' }, tkit.h('span', { style: { width: s.score + '%' } })),
+            tkit.h('small', { class: 't-muted', text: why.length ? T.bestOn(why.join(', ')) : T.noStandout })),
+          tkit.h('button', { type: 'button', class: 't-button small', text: T.choose, disabled: S.value.decided === rec.id, 'aria-label': T.chooseName(nameOf(rec)), onClick: () => decide(rec.id) })));
+      });
+      $('chart').data = model.ranked.map(s => ({ label: nameOf(recOf(s.id)), value: s.score }));
+      $('decided').hidden = !decided;
+      if (decided) $('decided-text').textContent = T.decidedIs(nameOf(decided));
+      const top = has && recOf(model.winner);
+      $('choose-top').hidden = !top || S.value.decided === model.winner;
+      if (top) $('choose-top').textContent = T.chooseName(nameOf(top));
+    }
+    function setSummary() {
+      if (!loaded) return;
+      const best = model.winner && model.by[model.winner];
+      tkit.context({ summary: best ? T.summary(decisionTitle(), model.act.length, nameOf(recOf(model.winner)), best.score) : T.summaryEmpty(decisionTitle()) });
+    }
+    function render() {
+      loaded = true;
+      if (cellEditing) return;   // finishing the edit redraws
+      compute();
+      const none = store.records.length === 0;
+      $('status').hidden = true;
+      $('start').hidden = !none;
+      $('compare-body').hidden = none;
+      if (S.value.decided && !model.by[S.value.decided] && !fixingDecided) {
+        fixingDecided = true;   // the chosen option was archived or deleted
+        S.save({ decided: null }).catch(fail).then(() => { fixingDecided = false; });
+      }
+      const key = pendingFocus || (document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.key : '');
+      pendingFocus = '';
+      drawMatrix(); drawCards(); drawRanking(); drawArchived();
+      document.querySelectorAll('.sample-banner').forEach(b => { b.count = tkit.samples.count(store.records); });
+      tools.records = store.records;
+      tools.fields = importFields();
+      if (key) { const el = Array.prototype.find.call(document.querySelectorAll('[data-key]'), e => e.dataset.key === key); if (el) el.focus(); }
+      setSummary();
+      syncRoute();
+    }
+
+    // ---- editing a value in place (keyboard only works: Enter saves, Esc cancels) --------------------
+    function editCell(button, rec, c) {
+      const current = (rec.data.values || {})[c.id], pick = c.kind === 'score' || c.kind === 'yesno';
+      const items = c.kind === 'score' ? [1, 2, 3, 4, 5].map(n => [String(n), T.scoreOf(n)]) : [['y', tkit.t('yes')], ['n', tkit.t('no')]];
+      const input = pick ? tkit.h('select', { class: 't-input', 'aria-label': c.label }, [['', T.notSet]].concat(items).map(o => tkit.h('option', { value: o[0], text: o[1] })))
+        : tkit.h('input', { class: 't-input', type: 'number', step: 'any', 'aria-label': c.label });
+      input.value = !hasValue(current) ? '' : c.kind === 'yesno' ? (current ? 'y' : 'n') : String(current);
+      let done = false;
+      cellEditing = true;
+      const finish = async save => {
+        if (done) return;
+        done = true; cellEditing = false;
+        pendingFocus = rec.id + ':' + c.id;
+        const value = input.value === '' ? null : c.kind === 'yesno' ? input.value === 'y' : Number(input.value);
+        if (save && value !== (hasValue(current) ? current : null)) await saveValue(rec, c, value);
+        render();
+      };
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+        else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
+      if (pick) input.addEventListener('change', () => finish(true));
+      button.replaceWith(input);
+      input.focus();
+    }
+    async function saveValue(rec, c, value) {
+      try { await options.update(rec.id, { values: Object.assign({}, rec.data.values, { [c.id]: value }) }, { rev: rec.rev }); }
+      catch (error) { if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); store.reload(); } else fail(error); }
+    }
+    function setWeight(id, raw) {
+      const weight = Math.min(10, Math.max(0, Math.round(Number(raw)) || 0));
+      clearTimeout(weightTimer);
+      weightTimer = setTimeout(() => saveCriteria(criteria().map(c => c.id === id ? Object.assign({}, c, { weight }) : c)), 120);
+    }
+    const saveCriteria = list => S.save({ criteria: list }).catch(fail);
+    function decide(id) { S.save({ decided: id }).catch(fail); }
+    async function optionAction(act, rec) {
+      if (act === 'edit') openEditor(rec);
+      else if (act === 'choose') decide(rec.id);
+      else if (act === 'archive') options.update(rec.id, { archived: true }).catch(fail);
+      else if (act === 'del') deleteOption(rec);
+    }
+    async function deleteOption(rec) {
+      if (!rec || !await tkit.confirm(T.deleteQ(nameOf(rec)), { confirm: T.del, tone: 'danger' })) return false;
+      try { await options.remove(rec.id); return true; } catch (error) { fail(error); return false; }
+    }
+
+    // ---- option editor and the #compare/<id> link ----------------------------------------------------
+    function editorFields() {
+      const list = [{ id: 'name', label: T.fName, type: 'text', required: true }, { id: 'link', label: T.fLink, type: 'url' }];
+      criteria().forEach(c => {
+        const f = { id: 'v_' + c.id, label: c.label, type: c.kind === 'money' ? 'money' : 'number' };
+        if (c.kind === 'number' && c.unit) f.label += ' (' + c.unit + ')';
+        if (c.kind === 'score') Object.assign(f, { type: 'choice', options: [1, 2, 3, 4, 5].map(n => ({ id: String(n), label: T.scoreOf(n) })) });
+        if (c.kind === 'yesno') Object.assign(f, { type: 'choice', options: [{ id: 'y', label: tkit.t('yes') }, { id: 'n', label: tkit.t('no') }] });
+        list.push(f);
+      });
+      return list.concat([{ id: 'note', label: T.fNote, type: 'longtext' }, { id: 'pros', label: T.pros, type: 'longtext', help: T.onePerLine }, { id: 'cons', label: T.cons, type: 'longtext', help: T.onePerLine }]);
+    }
+    function formValue(rec) {
+      const value = rec ? { name: rec.data.name, link: rec.data.link, note: rec.data.note, pros: (rec.data.pros || []).join('\n'), cons: (rec.data.cons || []).join('\n') } : {};
+      criteria().forEach(c => { const v = rec && (rec.data.values || {})[c.id]; value['v_' + c.id] = !hasValue(v) ? null : c.kind === 'yesno' ? (v ? 'y' : 'n') : c.kind === 'score' ? String(v) : v; });
+      return value;
+    }
+    function openEditor(rec) {
+      editing = rec || null;
+      recordForm.fields = editorFields();
+      recordForm.settings = { currency: S.value.currency };
+      recordForm.value = formValue(rec);
+      $('delete').hidden = !rec;
+      editor.title = rec ? T.editOption : T.newOption;
+      editor.open();
+      recordForm.focus();
+      if (rec) { tkit.route.open(rec.id); tkit.context({ selection: T.sel(nameOf(rec)) }); }
+    }
+    optionForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      let data;
+      try { data = await recordForm.submit(); } catch (error) { if (error.code !== 'invalid') fail(error); return; }
+      const values = Object.assign({}, editing && editing.data.values);
+      criteria().forEach(c => { const raw = data['v_' + c.id]; values[c.id] = raw === null || raw === undefined || raw === '' ? null : c.kind === 'score' ? Number(raw) : c.kind === 'yesno' ? raw === 'y' : raw; });
+      const doc = { name: data.name, link: data.link || null, note: data.note || '', values, pros: lines(data.pros), cons: lines(data.cons) };
+      $('save').disabled = true;
+      try {
+        if (editing) await options.update(editing.id, doc, { rev: editing.rev });
+        else await options.insert(Object.assign(doc, { order: nextOrder, archived: false }));
+        editor.close();
+      } catch (error) {
+        if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); editing = error.current; recordForm.value = formValue(editing); } else fail(error);
+      } finally { $('save').disabled = false; }
+    });
+    $('cancel').addEventListener('click', () => editor.close());
+    $('delete').addEventListener('click', async () => { if (await deleteOption(editing)) editor.close(); });
+    recordForm.addEventListener('t-input', () => { tendly.host.holdReload(true); });
+    editor.addEventListener('t-close', () => {
+      tendly.host.holdReload(false);
+      editing = null;
+      tkit.context({ selection: null });
+      if (tkit.route.get().id) tkit.route.close();
+    });
+    document.querySelectorAll('.new-option').forEach(b => b.addEventListener('click', () => openEditor(null)));
+    $('start').addEventListener('t-action', () => openEditor(null));
+    $('start').addEventListener('t-examples', () => loadExamples());
+    function syncRoute(route) {
+      route = route || tkit.route.get();
+      if (!loaded) return;
+      if (route.id && route.view === 'compare') {
+        const rec = recOf(route.id);
+        if (!rec) { tkit.toast(T.notFound); tkit.route.close(); }
+        else if (!editing || editing.id !== rec.id) openEditor(rec);
+      } else if (editing && !route.id) editor.close();
+    }
+
+    // ---- display mode, ranking buttons ------------------------------------------------------------
+    $('mode').addEventListener('click', event => {
+      const b = event.target.closest('button[data-mode]');
+      if (!b) return;
+      mode = b.dataset.mode;
+      $('mode').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      $('matrix').hidden = mode !== 'matrix';
+      $('cards').hidden = mode !== 'cards';
+    });
+    $('choose-top').addEventListener('click', () => decide(model.winner));
+    $('clear-choice').addEventListener('click', () => decide(null));
+
+    // ---- settings: decision, criteria, archived ---------------------------------------------------------
+    const fieldBox = (label, control) => tkit.h('label', { class: 't-field' }, tkit.h('span', { text: label }), control);
+    function selectOf(items, value, label, on) {
+      const s = tkit.h('select', { 'aria-label': label, onChange: event => on(event.target.value) }, items.map(i => tkit.h('option', { value: i[0], text: i[1] })));
+      s.value = value;
+      return s;
+    }
+    function criterionRow(c, i, n) {
+      const patch = (p, redraw) => { forceCrit = !!redraw; saveCriteria(criteria().map(x => x.id === c.id ? Object.assign({}, x, p) : x)); };
+      const label = tkit.h('input', { maxlength: '60', dataset: { crit: c.id }, onChange: event => patch({ label: event.target.value.trim() || c.label }) });
+      const unit = tkit.h('input', { maxlength: '12', onChange: event => patch({ unit: event.target.value.trim() }) });
+      const out = tkit.h('output', { text: String(c.weight) });
+      const range = tkit.h('input', { type: 'range', min: '0', max: '10', step: '1', onInput: event => { out.textContent = event.target.value; setWeight(c.id, event.target.value); } });
+      label.value = c.label; unit.value = c.unit || ''; range.value = c.weight;
+      const move = d => { const list = criteria().slice(); list.splice(i + d, 0, list.splice(i, 1)[0]); forceCrit = true; saveCriteria(list); };
+      const btn = (cls, text, icon, on, disabled) => tkit.h('button', { type: 'button', class: 't-icon-button ' + cls, 'aria-label': text, title: text, disabled, onClick: on }, tkit.icon(icon, 16));
+      return tkit.h('div', { class: 'crit' }, fieldBox(T.cLabel, label), fieldBox(T.cKind, selectOf(T.kinds, c.kind, T.cKind, v => patch({ kind: v }, true))),
+        c.kind === 'number' ? fieldBox(T.cUnit, unit) : null, fieldBox(T.cBetter, selectOf([['higher', T.higher], ['lower', T.lower]], c.better || 'higher', T.cBetter, v => patch({ better: v }))),
+        fieldBox(T.cWeight, tkit.h('span', { class: 't-toolbar' }, range, out)),
+        tkit.h('div', { class: 't-actions' }, btn('crit-up', T.up, 'chevron-down', () => move(-1), i === 0), btn('', T.down, 'chevron-down', () => move(1), i === n - 1), btn('', T.remove, 'trash', () => removeCriterion(c))));
+    }
+    async function removeCriterion(c) {
+      const used = store ? store.records.filter(r => hasValue((r.data.values || {})[c.id])).length : 0;
+      if (!await tkit.confirm(T.deleteCritQ(c.label, used), { confirm: T.del, tone: 'danger' })) return;
+      forceCrit = true;
+      saveCriteria(criteria().filter(x => x.id !== c.id));
+    }
+    function drawCriteria(force) {
+      const box = $('criteria');
+      if (!force && box.contains(document.activeElement)) return;   // do not pull a slider from under the finger
+      tkit.clear(box);
+      criteria().forEach((c, i) => box.appendChild(criterionRow(c, i, criteria().length)));
+      if (focusCrit) { const el = box.querySelector('[data-crit="' + focusCrit + '"]'); focusCrit = ''; if (el) { el.focus(); el.select(); } }
+    }
+    function addCriterion() {
+      const id = tkit.slug(T.newCriterion, criteria().map(c => c.id));
+      forceCrit = true; focusCrit = id;
+      document.querySelector('t-app').view = 'settings';
+      saveCriteria(criteria().concat([{ id, label: T.newCriterion, kind: 'number', unit: '', weight: 5, better: 'higher' }]));
+    }
+    $('new-criterion').addEventListener('click', addCriterion);
+    $('add-criterion').addEventListener('click', addCriterion);
+    $('title-input').addEventListener('change', event => { S.save({ title: event.target.value.trim() }).catch(fail); });
+    $('currency').addEventListener('change', event => { S.save({ currency: event.target.value }).catch(fail); });
+    function drawArchived() {
+      const archived = store.records.filter(r => r.data.archived), list = $('archived');
+      $('archived-card').hidden = !archived.length;
+      tkit.clear(list);
+      archived.forEach(rec => list.appendChild(tkit.h('li', { class: 't-row' }, tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: nameOf(rec) })),
+        tkit.h('button', { type: 'button', class: 't-button small', text: T.restore, onClick: () => options.update(rec.id, { archived: false, order: nextOrder }).catch(fail) }),
+        tkit.h('button', { type: 'button', class: 't-button small danger', text: T.del, onClick: () => deleteOption(rec) }))));
+    }
+    function applySettings() {
+      const v = S.value, title = $('title-input'), select = $('currency');
+      if (document.activeElement !== title) title.value = v.title;
+      $('sub').textContent = v.title || DESC;
+      tkit.clear(select);
+      (CURRENCIES.indexOf(v.currency) >= 0 ? CURRENCIES : CURRENCIES.concat(v.currency)).forEach(code => select.appendChild(tkit.h('option', { value: code, text: code })));
+      select.value = v.currency;
+      drawCriteria(forceCrit); forceCrit = false;
+      if (store && loaded) render();
+    }
+
+    // ---- data tools: CSV (one row per option, one column per criterion + score), examples, delete all ----
+    function importFields() {
+      return [{ id: 'name', label: T.fName, type: 'text', required: true }, { id: 'link', label: T.fLink, type: 'url' }, { id: 'note', label: T.fNote, type: 'longtext' }].concat(criteria().map(c =>
+        ({ id: 'v_' + c.id, label: c.label, type: c.kind === 'money' ? 'money' : c.kind === 'yesno' ? 'checkbox' : 'number' })));
+    }
+    tools.noun = { one: 'option', many: 'options' };
+    tools.exportRows = records => records.map(r => {
+      const row = { name: r.data.name, link: r.data.link, note: r.data.note, score: model.by[r.id] ? model.by[r.id].score : '' };
+      criteria().forEach(c => { row['v_' + c.id] = (r.data.values || {})[c.id]; });
+      return row;
+    });
+    tools.exportColumns = () => [{ key: 'name', label: T.fName }, { key: 'link', label: T.fLink }, { key: 'note', label: T.fNote }].concat(criteria().map(c => ({ key: 'v_' + c.id, label: c.label,
+      format: c.kind === 'yesno' ? v => (v === true ? tkit.t('yes') : v === false ? tkit.t('no') : '') : undefined })), [{ key: 'score', label: T.score }]);
+    tools.beforeInsert = doc => {
+      if (!doc.name) return null;
+      const values = {};
+      criteria().forEach(c => { const v = doc['v_' + c.id]; values[c.id] = v === undefined || v === '' ? null : v; });
+      return { name: doc.name, link: doc.link || null, note: doc.note || '', values, pros: [], cons: [], order: nextOrder++, archived: false };
+    };
+    async function seedCriteria() {   // the examples use the four default criteria: make sure they exist
+      const have = criteria().map(c => c.id), missing = DEFAULTS.criteria.filter(c => have.indexOf(c.id) < 0), patch = {};
+      if (missing.length) patch.criteria = criteria().concat(missing);
+      if (!S.value.title) patch.title = T.examplesTitle;
+      if (Object.keys(patch).length) await S.save(patch);
+    }
+    tools.beforeExamples = seedCriteria;
+    tools.examples = () => T.examples.map((e, i) => ({ name: e[0], link: null, note: e[1], values: { preco: e[2][0], qualidade: e[2][1], prazo: e[2][2], suporte: e[2][3] }, pros: e[3], cons: e[4], order: i + 1, archived: false }));
+    async function loadExamples() {
+      try { await seedCriteria(); await tkit.samples.load(options, tools.examples()); } catch (error) { fail(error); }
+    }
+    const clearExamples = () => tkit.samples.clear(options).catch(fail);
+    document.querySelectorAll('.sample-banner').forEach(b => b.addEventListener('t-clear', clearExamples));
+
+    // ---- start-up ----------------------------------------------------------------------------------------
+    document.querySelector('t-app').addEventListener('t-view', () => setTimeout(setSummary, 0));
+    tkit.route.on(syncRoute);
+    (async () => {
+      $('status').appendChild(tkit.h('t-state', { kind: 'loading' }));
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) fail(S.error);
+      S.on(applySettings);
+      applySettings();
+      store = tkit.live(options, render, { limit: 5000, onError: error => {
+        tkit.clear($('status'));
+        $('status').hidden = false;
+        $('compare-body').hidden = true;
+        $('status').appendChild(tkit.h('t-state', { kind: 'error', title: T.loadFail, text: error.message }, tkit.h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => { tkit.clear($('status')); store.reload(); } })));
+      } });
+    })();
+  </script>
+</body>
+</html>

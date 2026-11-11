@@ -13,7 +13,6 @@
     .intro { margin: 0; white-space: pre-wrap; }
     .settings-page { max-width: 760px; }
     .settings-note { margin: 0 0 var(--t-space-3); }
-    .settings-buttons { display: flex; flex-wrap: wrap; gap: var(--t-space-2); }
     .status-pick { display: inline-grid; gap: 2px; margin-right: auto; }
   </style>
 </head>
@@ -38,6 +37,7 @@
           <header class="t-page-head"><h1 class="t-title">Submissions</h1><span class="t-badge" id="count"></span></header>
           <t-sample-banner id="banner"></t-sample-banner>
           <div id="list-state"><t-state kind="loading"></t-state></div>
+          <t-empty-start id="empty" hidden title="No submissions yet" text="When someone fills in the form, their answer shows up here." action="Open the form"></t-empty-start>
           <div id="list-body" hidden>
             <t-pills id="status-filter"></t-pills>
             <t-table id="table" searchable empty-text="Nothing found"></t-table>
@@ -73,29 +73,7 @@
             <t-list-editor id="status-editor" tones></t-list-editor>
           </section>
 
-          <section class="t-card">
-            <div class="t-card-head"><h2>Data</h2></div>
-            <div class="settings-buttons">
-              <button type="button" class="t-button" id="export-csv">Export CSV</button>
-              <button type="button" class="t-button" id="import-csv">Import CSV</button>
-            </div>
-            <t-import id="importer"></t-import>
-          </section>
-
-          <section class="t-card">
-            <div class="t-card-head"><h2>Examples</h2></div>
-            <p class="t-muted settings-note" id="samples-note"></p>
-            <div class="settings-buttons">
-              <button type="button" class="t-button" id="samples-load">See with examples</button>
-              <button type="button" class="t-button" id="samples-clear">Delete examples</button>
-            </div>
-          </section>
-
-          <section class="t-card">
-            <div class="t-card-head"><h2>Danger zone</h2></div>
-            <p class="t-muted settings-note">Deletes every submission. This cannot be undone.</p>
-            <div class="settings-buttons"><button type="button" class="t-button danger" id="delete-all">Delete all submissions</button></div>
-          </section>
+          <t-data-tools id="tools"></t-data-tools>
         </div>
       </t-view>
     </main>
@@ -133,9 +111,6 @@
     const LEGACY_SUBJECT = { question: 'question', duvida: 'question', request: 'request', pedido: 'request', feedback: 'feedback', sugestao: 'feedback', other: 'other', outro: 'other' };
     const RESERVED_IDS = ['status', '_sample'];   // keys of a record the form owns: no field may take them
     const TEXT = {
-      emptyTitle: 'No submissions yet',
-      emptyText: 'When someone fills in the form, their answer shows up here.',
-      openForm: 'Open the form',
       someoneChanged: 'Someone changed this meanwhile; it was reloaded.',
       keepOneStatus: 'Keep at least one status.'
     };
@@ -145,7 +120,7 @@
     const $ = id => document.getElementById(id);
     const rf = tkit.h('t-record-form');
     const table = $('table'), pills = $('status-filter'), banner = $('banner'), detail = $('detail');
-    const fieldsEditor = $('fields-editor'), statusEditor = $('status-editor'), importer = $('importer');
+    const fieldsEditor = $('fields-editor'), statusEditor = $('status-editor'), tools = $('tools'), empty = $('empty');
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
     let S, store, viewingId = null, wantedId = null, statusFilter = '', loaded = false, lastFieldsJson = '', lastUseJson = '';
 
@@ -195,31 +170,6 @@
         });
       });
       return { fields, options, statuses };
-    }
-
-    // KIT-CANDIDATE: a copy(text) helper -> Promise<boolean>. Clipboard API first, hidden-textarea fallback (frames often block the API).
-    async function copyText(text) {
-      try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); return true; } } catch (_) { /* fall through */ }
-      const area = tkit.h('textarea', { style: 'position:fixed;top:0;left:0;opacity:0', 'aria-hidden': 'true' });
-      area.value = text;
-      document.body.appendChild(area);
-      area.select();
-      let ok = false;
-      try { ok = document.execCommand('copy'); } catch (_) { /* no way to copy */ }
-      area.remove();
-      return ok;
-    }
-
-    // KIT-CANDIDATE: a csv.columnsFor(fields) helper -> csv columns for a field schema (numbers with ".", dates ISO, choices by label).
-    function csvColumns() {
-      const cols = S.value.fields.map(field => ({
-        key: field.id, label: field.label,
-        format: v => v === undefined || v === null ? '' : (field.type === 'number' || field.type === 'money') && typeof v === 'number' ? String(v)
-          : field.type === 'date' || field.type === 'datetime' ? String(v) : tkit.fieldText(field, v, {})
-      }));
-      cols.push({ key: 'status', label: 'Status', format: v => statusOf({ status: v }).label });
-      cols.push({ key: 'created_at', label: 'Received', format: v => localDate(v) });
-      return cols;
     }
 
     // ---- Render: form view ----
@@ -285,13 +235,9 @@
       $('count').textContent = countText(list.length);
       banner.count = tkit.samples.count(store.records);
       tkit.clear(state);
+      empty.hidden = list.length > 0;
       body.hidden = !list.length;
-      if (!list.length) {
-        state.appendChild(tkit.h('t-state', { kind: 'empty', title: TEXT.emptyTitle, text: TEXT.emptyText },
-          tkit.h('button', { type: 'button', class: 't-button primary', text: TEXT.openForm, onClick: () => { document.querySelector('t-app').view = 'form'; } }),
-          tkit.h('button', { type: 'button', class: 't-button', text: 'See with examples', onClick: loadSamples })));
-        return;
-      }
+      if (!list.length) return;
       if (statusFilter && !statusesOf().some(s => s.id === statusFilter)) statusFilter = '';
       pills.options = [{ value: '', label: 'All', count: list.length }].concat(statusesOf().map(s => ({ value: s.id, label: s.label, count: list.filter(r => r.data.status === s.id).length })));
       pills.value = statusFilter;
@@ -305,11 +251,8 @@
       if (useJson !== lastUseJson) { lastUseJson = useJson; fieldsEditor.optionsInUse = use.options; }
       fieldsEditor.inUse = use.fields;
       statusEditor.inUse = use.statuses;
-      const samples = store ? tkit.samples.count(store.records) : 0;
-      $('samples-note').textContent = samples ? samples + (samples === 1 ? ' example is in the list.' : ' examples are in the list.') : 'Fill the list with made-up submissions to see how it works.';
-      $('samples-load').hidden = samples > 0;
-      $('samples-clear').hidden = samples === 0;
-      importer.fields = s.fields.concat([statusField()]);
+      tools.fields = detailFields();
+      tools.records = store ? store.records : [];
     }
     function render() {
       if (!store) return;
@@ -325,14 +268,14 @@
     function detailFields() { return S.value.fields.concat([statusField()]); }
     function showDetail(record) {
       viewingId = record.id;
-      detail.fields = detailFields();
       detail.settings = {};
       detail.siblings = table.visible().map(r => r.id);
-      detail.record = record;
-      fillStatusSelect(record);
+      fillDetail(record);
       detail.open();
     }
-    function fillStatusSelect(record) {
+    function fillDetail(record) {
+      detail.fields = detailFields();
+      detail.record = record;
       const select = $('status-select');
       tkit.clear(select);
       statusesOf().forEach(s => select.appendChild(tkit.h('option', { value: s.id, text: s.label })));
@@ -342,9 +285,7 @@
       if (!detail.opened || !viewingId) return;
       const record = records().find(r => r.id === viewingId);
       if (!record) { detail.close(); return; }
-      detail.fields = detailFields();
-      detail.record = record;
-      fillStatusSelect(record);
+      fillDetail(record);
     }
     function applyRoute() {   // open the record named in the address, once the data is here
       if (!loaded) return;
@@ -362,9 +303,6 @@
     const viewing = () => records().find(r => r.id === viewingId);
 
     // ---- Data actions ----
-    async function loadSamples() {
-      try { await tkit.samples.load(submissions, sampleDocs()); } catch (error) { fail(error); }
-    }
     function sampleDocs() {   // made-up, in the default field ids; statuses are ids of the default statuses
       const rows = [
         ['Maria Santos', 'maria@example.com', '(555) 010-2001', 'question', 'Do you deliver on Saturdays? I would like to order for a small event.', 'new'],
@@ -377,29 +315,6 @@
       ];
       return rows.map(r => ({ name: r[0], email: r[1], phone: r[2], subject: r[3], message: r[4], status: r[5] }));
     }
-    async function clearSamples() {
-      try { await tkit.samples.clear(submissions); } catch (error) { fail(error); }
-    }
-    async function insertAll(rows) {
-      const fresh = statusesOf()[0].id;
-      let done = 0;
-      for (const data of rows) {
-        await submissions.insert(Object.assign({ status: fresh }, data));
-        done += 1;
-        if (done % 50 === 0 && done < rows.length) tkit.toast('Imported ' + done + ' of ' + rows.length + '…');
-      }
-      return done;
-    }
-    async function removeAll() {
-      const all = await submissions.list({ limit: 5000 });
-      if (!all.length) return;
-      if (!await tkit.confirm('Delete all ' + all.length + ' submissions? This cannot be undone.', { confirm: 'Delete all', tone: 'danger' })) return;
-      try {
-        for (const record of all) await submissions.remove(record.id);
-        tkit.toast('Deleted ' + all.length + ' submissions.');
-      } catch (error) { fail(error); }
-    }
-
     // ---- Handlers ----
     rf.addEventListener('t-input', () => { tendly.host.holdReload(true); });
     pills.addEventListener('t-change', event => {
@@ -420,32 +335,16 @@
     });
     $('copy-answers').addEventListener('click', async () => {
       const record = viewing();
-      if (record) tkit.toast(await copyText(answersText(record)) ? 'Answers copied.' : 'Could not copy.', { tone: 'info' });
+      if (record && !await tkit.copy(answersText(record))) tkit.toast('Could not copy.', { tone: 'error' });
     });
     $('delete-one').addEventListener('click', async () => {
       const record = viewing();
       if (!record || !await tkit.confirm('Delete this submission?', { confirm: 'Delete', tone: 'danger' })) return;
       try { await submissions.remove(record.id); detail.close(); } catch (error) { fail(error); }
     });
-    banner.addEventListener('t-clear', clearSamples);
-    $('samples-load').addEventListener('click', loadSamples);
-    $('samples-clear').addEventListener('click', clearSamples);
-    $('delete-all').addEventListener('click', removeAll);
-    $('export-csv').addEventListener('click', () => {
-      const list = records();
-      const text = tkit.csv.stringify(list.map(r => Object.assign({ created_at: r.created_at }, r.data)), csvColumns(), { delimiter: tkit.csv.delimiter() });
-      const name = (S.value.title || appName).replace(/[\\/:*?"<>|]+/g, '');
-      tkit.csv.download(text, name + ' - Submissions - ' + tkit.today() + '.csv');
-      tkit.toast('Exported: ' + countText(list.length));
-    });
-    $('import-csv').addEventListener('click', async () => {
-      const rows = await importer.open();
-      if (!rows || !rows.length) return;
-      try {
-        const n = await insertAll(rows);
-        tkit.toast('Imported ' + n + (n === 1 ? ' row.' : ' rows.'));
-      } catch (error) { fail(error); }
-    });
+    banner.addEventListener('t-clear', () => tkit.samples.clear(submissions).catch(fail));
+    empty.addEventListener('t-action', () => { document.querySelector('t-app').view = 'form'; });
+    empty.addEventListener('t-examples', () => tkit.samples.load(submissions, sampleDocs()).catch(fail));
 
     // Settings inputs save on change (not per keystroke); the editors save on their own t-change.
     [['set-title', 'title'], ['set-intro', 'intro'], ['set-thanks', 'thanks']].forEach(([id, key]) => {
@@ -478,6 +377,12 @@
       statusEditor.items = S.value.statuses;
       statusEditor.addLabel = 'Add status';
       table.columns = tableColumns();
+      Object.assign(tools, {   // Dados / Exemplos / Zona de perigo: all in the kit
+        collection: submissions, noun: { one: 'submission', many: 'submissions' }, filename: 'Submissions', examples: sampleDocs,
+        exportRows: () => records().map(r => Object.assign({ created_at: r.created_at }, r.data)),
+        exportColumns: () => tkit.csv.columnsFor(detailFields()).concat([{ key: 'created_at', label: 'Received', format: localDate }]),
+        beforeInsert: doc => Object.assign({ status: statusesOf()[0].id }, doc)   // imported rows start with the first status
+      });
       renderFormView();
       S.on(() => { syncForm(); render(); });
       document.querySelector('t-app').addEventListener('t-view', () => { if (store) updateSummary(); });

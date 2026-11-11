@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .calc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--t-space-4); align-items: start; }
+    .stack { display: grid; gap: var(--t-space-3); min-width: 0; }
+    .t-card.stack { padding: var(--t-space-4); }
+    .range-row { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem; gap: var(--t-space-3); align-items: center; }
+    .range-row input[type=range] { width: 100%; min-height: 44px; }
+    .unit { font-weight: 400; color: var(--t-faint); }
+    .res { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--t-space-3); align-items: baseline; padding: var(--t-space-2) 0; border-bottom: 1px solid var(--t-line); }
+    .res:last-child { border-bottom: 0; }
+    .res-label { color: var(--t-muted); }
+    .res-value { font-variant-numeric: tabular-nums; text-align: right; }
+    .res.hi .res-value { font-size: var(--t-text-2xl); }
+    .res-formula { display: none; grid-column: 1 / -1; font: var(--t-text-sm) var(--t-mono); color: var(--t-muted); overflow-wrap: anywhere; }
+    .res:hover .res-formula, .res:focus .res-formula, .res.err .res-formula { display: block; }
+    .res.err .res-formula { color: var(--t-danger-ink); }
+    .bar { display: none; }
+    .toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
+    .sc-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-3); }
+    .sc-main { display: grid; gap: 2px; flex: 1 1 200px; min-width: 0; }
+    .sc-main small { color: var(--t-muted); }
+    .out-row { display: grid; gap: var(--t-space-2); padding: var(--t-space-3) 0; border-bottom: 1px solid var(--t-line); }
+    .out-row:last-child { border-bottom: 0; }
+    .out-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
+    .out-line > .t-input { flex: 1 1 140px; width: auto; }
+    .mono { font-family: var(--t-mono); }
+    .extra-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: var(--t-space-2); }
+    .cmp td.diff { background: var(--t-app-soft); }
+    .cmp th, .cmp td { white-space: nowrap; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--t-line); }
+    .cmp tr.sect th { background: var(--t-surface); color: var(--t-muted); font-size: var(--t-text-sm); }
+    .settings-stack { display: grid; gap: var(--t-space-3); max-width: 760px; }
+    .settings-stack .t-card { display: grid; gap: var(--t-space-3); }
+    .settings-stack .t-card-head h2 { margin: 0; font-size: var(--t-text-lg); }
+    @container t-app (max-width: 640px) {
+      .calc-cols { grid-template-columns: minmax(0, 1fr); }
+      .res-formula { display: none !important; }
+      .bar { display: flex; align-items: baseline; justify-content: space-between; gap: var(--t-space-3); position: sticky; bottom: 0; padding: var(--t-space-3); border: 1px solid var(--t-line); border-radius: var(--t-radius-lg); background: var(--t-elevated); box-shadow: var(--t-shadow-md); }
+      .bar strong { font-size: var(--t-text-xl); font-variant-numeric: tabular-nums; }
+    }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Seções">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="calc" data-icon="calculator">Calcular</button>
+      <button data-view="scenarios" data-icon="list">Cenários</button>
+      <button data-view="compare" data-icon="scale">Comparar</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Ajustes</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="calc">
+        <div class="t-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+          </header>
+          <div class="toolbar-row">
+            <span class="t-badge accent" id="chip" hidden></span>
+            <button type="button" class="t-button primary" id="save-changes" hidden>Salvar alterações</button>
+            <button type="button" class="t-button" id="save-new">Salvar cenário</button>
+            <button type="button" class="t-button ghost" id="restore">Restaurar padrões</button>
+          </div>
+          <div class="calc-cols">
+            <section class="t-card stack" aria-label="Entradas"><div id="inputs" class="stack"></div></section>
+            <section class="t-card stack" aria-label="Resultados"><div id="results"></div></section>
+          </div>
+          <div class="bar" id="bar" aria-live="polite"></div>
+        </div>
+      </t-view>
+      <t-view name="scenarios">
+        <div class="t-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">Cenários</h1><p class="t-muted">Conjuntos de entradas salvos. Marque de 2 a 4 para comparar.</p></div>
+            <button type="button" class="t-button primary" id="compare-btn" disabled>Comparar</button>
+          </header>
+          <t-sample-banner id="banner"></t-sample-banner>
+          <div id="sc-list" class="stack"></div>
+        </div>
+      </t-view>
+      <t-view name="compare">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Comparar</h1></header>
+          <div id="cmp"></div>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Ajustes</h1></header>
+          <div class="settings-stack">
+            <section class="t-card">
+              <div class="t-card-head"><h2>Entradas</h2></div>
+              <p class="t-muted">O que você digita. Abra uma linha para definir o padrão, os limites, o passo e a unidade.</p>
+              <t-fields-editor id="inputs-editor" types="number,money,choice,checkbox,date"></t-fields-editor>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Resultados</h2></div>
+              <p class="t-muted">Calculados de cima para baixo: uma fórmula pode usar entradas e os resultados acima dela. Operadores + - * / ^ e funções como if(), round(), min(), max(), sum().</p>
+              <div id="outputs-editor"></div>
+              <div class="t-actions start"><button type="button" class="t-button" id="add-output">Adicionar resultado</button></div>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Moeda</h2></div>
+              <label class="t-field"><span>Moeda dos valores em dinheiro</span><select id="currency"></select></label>
+            </section>
+            <t-data-tools id="tools"></t-data-tools>
+          </div>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-modal id="name-modal" title="Nome do cenário">
+    <form id="name-form" class="t-form" novalidate>
+      <label class="t-field"><span>Nome</span><input id="name-input" class="t-input" type="text" autocomplete="off"></label>
+      <div class="t-actions">
+        <span class="t-spacer"></span>
+        <button type="button" class="t-button" id="name-cancel">Cancelar</button>
+        <button type="submit" class="t-button primary">Salvar</button>
+      </div>
+    </form>
+  </t-modal>
+
+  <script>
+    // PAGE MAP: strings (T) -> defaults -> state -> formula model -> Calculate (inputs, results) -> scenarios ->
+    // compare -> settings (inputs, results editor) -> start-up.
+    // DATA: scenarios are records in the collection `scenarios` { name, values: { [inputId]: value }, order }.
+    // Settings are one tendly.data key `settings`: { v, currency, inputs, outputs } (see DEFAULTS). Input ids and
+    // output ids share one namespace (formulas use them as names), so never reuse an id. Formulas run only through
+    // tkit.formula (no eval); an output may use inputs and outputs ABOVE it, never itself or later ones.
+
+    // All visible text lives here (the pt-BR twin changes this block, DEFAULTS' labels, the markup text and lang).
+    const T = {
+      noun: { one: 'cenário', many: 'cenários' }, csvName: 'Cenários', untitled: 'Sem nome',
+      dash: '—', noResult: 'Não dá para calcular com esses valores.',
+      later: 'Use só resultados acima deste.', dup: 'Este nome já é usado por uma entrada ou um resultado.',
+      chip: (name, changed) => 'Cenário: ' + name + (changed ? ' · alterado' : ''),
+      saveNew: 'Salvar cenário', saveAsNew: 'Salvar como novo',
+      nameNew: 'Dê um nome ao cenário', nameRename: 'Renomear cenário', nameNeeded: 'Digite um nome.',
+      invalid: 'Não é um número válido.', outOfRange: (min, max) => 'Entre ' + min + ' e ' + max + '.',
+      noInputs: 'Nenhuma entrada ainda. Adicione em Ajustes.',
+      saved: name => 'Salvo: ' + name, conflict: 'Alguém mudou este cenário enquanto isso; recarreguei.',
+      deleteQ: name => 'Apagar "' + name + '"?', del: 'Apagar', copyOf: name => name + ' (cópia)',
+      max4: 'Compare até 4 cenários.', open: 'Abrir', rename: 'Renomear', duplicate: 'Duplicar', pick: name => 'Marcar ' + name,
+      loadFail: 'Não foi possível carregar os cenários', retry: 'Tentar de novo',
+      emptyTitle: 'Nenhum cenário salvo', emptyText: 'Preencha as entradas em Calcular e salve como cenário, ou carregue alguns exemplos.', saveCurrent: 'Salvar entradas atuais',
+      cmpEmptyTitle: 'Nada para comparar ainda', cmpEmptyText: 'Marque de 2 a 4 cenários em Cenários e toque em Comparar.', goScenarios: 'Ir para Cenários',
+      inputsHead: 'Entradas', resultsHead: 'Resultados', scenarioCol: 'Cenário', best: 'melhor',
+      yes: 'Sim', no: 'Não', minTxt: 'Mínimo', maxTxt: 'Máximo', stepTxt: 'Passo', unitTxt: 'Unidade', defTxt: 'Padrão',
+      resName: 'Nome do resultado', resFormula: 'Fórmula', resFormat: 'Formato', highlight: 'Destacar', betterWhen: 'Melhor quando',
+      fMoney: 'Dinheiro', fNumber: 'Número', fPercent: 'Percentual', fText: 'Texto', bNone: 'Não comparar', bLower: 'Menor', bHigher: 'Maior',
+      available: ids => 'Você pode usar: ' + ids.join(', '), newResult: 'Novo resultado', keepOne: 'Mantenha pelo menos um resultado.',
+      up: 'Mover para cima', down: 'Mover para baixo', remove: 'Remover', nameField: 'Nome',
+      summary: (out, name) => 'Calculadora: ' + out + (name ? ' (Cenário: ' + name + ')' : ''),
+      // Examples: [name, input overrides]; the rest comes from each input's default.
+      examples: [['Pedido pequeno', { quantity: 10 }], ['Pedido médio', { quantity: 50, discount: 8 }], ['Pedido grande', { quantity: 200, discount: 12, shipping: 0 }]]
+    };
+
+    const DEFAULTS = {
+      v: 1, currency: 'BRL',
+      inputs: [  // schema fields (number | money | choice | checkbox | date) + default, min, max, step, unit
+        { id: 'quantity', label: 'Quantidade', type: 'number', default: 10, min: 0, step: 1, unit: 'un.' },
+        { id: 'unit_price', label: 'Preço unitário', type: 'money', default: 150 },
+        { id: 'discount', label: 'Desconto', type: 'number', default: 5, min: 0, max: 100, unit: '%' },
+        { id: 'shipping', label: 'Frete', type: 'money', default: 80 }
+      ],
+      outputs: [ // { id, label, formula, format: money|number|percent|text, highlight, better: ''|lower|higher }
+        { id: 'subtotal', label: 'Subtotal', formula: 'quantity * unit_price', format: 'money', highlight: false, better: '' },
+        { id: 'discount_amount', label: 'Desconto', formula: 'subtotal * discount / 100', format: 'money', highlight: false, better: '' },
+        { id: 'total', label: 'Total', formula: 'subtotal - discount_amount + shipping', format: 'money', highlight: true, better: 'lower' },
+        { id: 'per_unit', label: 'Custo por unidade', formula: 'total / quantity', format: 'money', highlight: false, better: 'lower' }
+      ]
+    };
+    const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP'];
+
+    const scenarios = tendly.db.collection('scenarios');
+    const $ = id => document.getElementById(id);
+    const h = tkit.h;
+    const DEC = document.documentElement.lang.indexOf('pt') === 0 ? ',' : '.';
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    const clone = x => JSON.parse(JSON.stringify(x));
+    const numText = v => v === null || v === undefined ? '' : String(v).replace('.', DEC);
+    const isNum = v => typeof v === 'number' && isFinite(v);
+    let S, store, ready = false, values = {}, pristine = true, loadedId = null, picked = [], model = [], inputsKey = '', drawnOutputs = '', nameMode = null, nameRecord = null;
+
+    // ---- formula model ------------------------------------------------------------------------
+    const inputs = () => S.value.inputs, outputs = () => S.value.outputs;
+    const money = v => tkit.money(v, S.value.currency);
+    function defaultsOf() {
+      const out = {};
+      inputs().forEach(f => {
+        if (f.type === 'checkbox') out[f.id] = !!f.default;
+        else if (f.type === 'choice') out[f.id] = f.default || (f.options && f.options[0] ? f.options[0].id : null);
+        else if (f.type === 'date') out[f.id] = f.default || null;
+        else out[f.id] = isNum(f.default) ? f.default : null;
+      });
+      return out;
+    }
+    // Compiles output `index` against the inputs and the outputs above it; a later one gets a friendly error.
+    function checkFormula(text, list, index) {
+      const inIds = inputs().map(f => f.id), before = list.slice(0, index).map(o => o.id), after = list.slice(index).map(o => o.id);
+      const c = tkit.formula.compile(text, inIds.concat(before));
+      if (c.ok) return { c: c };
+      const wide = tkit.formula.compile(text, inIds.concat(before, after));
+      return { error: wide.ok && wide.deps.some(d => after.indexOf(d) >= 0) ? T.later : c.error };
+    }
+    function buildModel() {
+      const list = outputs();
+      model = list.map((out, i) => {
+        const dup = inputs().some(f => f.id === out.id) || list.slice(0, i).some(o => o.id === out.id);
+        const r = checkFormula(out.formula, list, i);
+        return { out: out, c: dup ? null : r.c, error: dup ? T.dup : r.error || '' };
+      });
+    }
+    function evaluate(vals) {  // { outputId: number | text | null }; never throws
+      const env = Object.assign({}, vals), res = {};
+      model.forEach(m => {
+        let v = null;
+        if (m.c) { try { v = m.c.run(env); } catch (_) { v = null; } }
+        if (v === undefined || (typeof v === 'number' && !isFinite(v))) v = null;
+        res[m.out.id] = v; env[m.out.id] = v;
+      });
+      return res;
+    }
+    function show(out, v) {
+      if (v === null || v === undefined) return T.dash;
+      if (out.format === 'money') return money(v);
+      if (out.format === 'percent') return tkit.number(v) + '%';
+      return typeof v === 'number' ? tkit.number(v) : String(v);
+    }
+    const highlighted = () => { const hi = model.filter(m => m.out.highlight); return hi.length ? hi : model.slice(-1); };
+    const sorted = () => store.records.slice().sort((a, b) => (a.data.order || 0) - (b.data.order || 0) || a.created_at.localeCompare(b.created_at));
+    const nextOrder = () => Math.max.apply(null, [0].concat(store.records.map(r => r.data.order || 0))) + 1;
+    const valuesOf = rec => Object.assign(defaultsOf(), rec.data.values || {});
+    const loadedRecord = () => store && loadedId ? store.records.find(r => r.id === loadedId) : null;
+
+    // ---- Calculate: inputs and results --------------------------------------------------------
+    function control(f) {
+      const label = h('span', { text: f.label }), id = 'in_' + f.id;
+      if (f.unit || f.type === 'money') label.appendChild(h('span', { class: 'unit', text: ' ' + (f.type === 'money' ? S.value.currency : f.unit) }));
+      if (f.type === 'checkbox') {
+        const box = h('input', { type: 'checkbox', class: 't-switch', id: id });
+        box.checked = !!values[f.id];
+        box.addEventListener('change', () => edit(f.id, box.checked));
+        return h('label', { class: 't-switch-line' }, box, h('span', { text: f.label }));
+      }
+      let field, error = h('small', { class: 't-error', hidden: true });
+      if (f.type === 'choice') {
+        field = h('select', { class: 't-input', id: id });
+        (f.options || []).forEach(o => field.appendChild(h('option', { value: o.id, text: o.label })));
+        field.value = values[f.id] || '';
+        field.addEventListener('change', () => edit(f.id, field.value));
+        return h('label', { class: 't-field' }, label, field);
+      }
+      if (f.type === 'date') {
+        field = h('input', { class: 't-input', id: id, type: 'date' });
+        field.value = values[f.id] || '';
+        field.addEventListener('input', () => edit(f.id, field.value || null));
+        return h('label', { class: 't-field' }, label, field);
+      }
+      field = h('input', { class: 't-input', id: id, type: 'text', inputmode: 'decimal', autocomplete: 'off' });
+      field.value = numText(values[f.id]);
+      const slider = isNum(f.min) && isNum(f.max) ? h('input', { type: 'range', min: String(f.min), max: String(f.max), step: isNum(f.step) ? String(f.step) : 'any', 'aria-label': f.label }) : null;
+      if (slider) slider.value = values[f.id] === null ? f.min : values[f.id];
+      field.addEventListener('input', () => {    // an unreadable number keeps the last good value and flags the box
+        const raw = field.value.trim(), n = raw === '' ? null : tkit.parseNumber(raw);
+        const bad = raw !== '' && n === null, range = n !== null && ((isNum(f.min) && n < f.min) || (isNum(f.max) && n > f.max));
+        field.setAttribute('aria-invalid', bad || range ? 'true' : 'false');
+        error.hidden = !(bad || range);
+        error.textContent = bad ? T.invalid : range ? T.outOfRange(isNum(f.min) ? f.min : '…', isNum(f.max) ? f.max : '…') : '';
+        if (bad) return;
+        if (slider && n !== null) slider.value = n;
+        edit(f.id, n);
+      });
+      if (slider) slider.addEventListener('input', () => { const n = Number(slider.value); field.value = numText(n); field.setAttribute('aria-invalid', 'false'); error.hidden = true; edit(f.id, n); });
+      return h('label', { class: 't-field' }, label, slider ? h('div', { class: 'range-row' }, slider, field) : field, error);
+    }
+    function edit(id, value) { values[id] = value; pristine = false; recalc(); drawChip(); }
+    function drawInputs() {
+      const box = $('inputs');
+      tkit.clear(box);
+      if (!inputs().length) box.appendChild(h('p', { class: 't-muted', text: T.noInputs }));
+      inputs().forEach(f => box.appendChild(control(f)));
+    }
+    function recalc() {
+      const res = evaluate(values), box = $('results'), bar = $('bar');
+      tkit.clear(box); tkit.clear(bar);
+      model.forEach(m => {
+        const v = res[m.out.id], bad = v === null;
+        box.appendChild(h('div', { class: 'res' + (m.out.highlight ? ' hi' : '') + (m.error ? ' err' : ''), tabindex: '0', title: bad ? m.error || T.noResult : '' },
+          h('span', { class: 'res-label', text: m.out.label }), h('strong', { class: 'res-value', text: show(m.out, v) }),
+          h('small', { class: 'res-formula', text: m.error || '= ' + m.out.formula })));
+      });
+      highlighted().forEach(m => { bar.appendChild(h('span', { class: 't-muted', text: m.out.label })); bar.appendChild(h('strong', { text: show(m.out, res[m.out.id]) })); });
+      setSummary(res);
+    }
+    function setSummary(res) {
+      res = res || evaluate(values);
+      const top = highlighted()[0], rec = loadedRecord();
+      tkit.context({ summary: top ? T.summary(top.out.label + ' ' + show(top.out, res[top.out.id]), rec ? rec.data.name : '') : null });
+    }
+    function changed() {
+      const rec = loadedRecord();
+      return !!rec && JSON.stringify(inputs().map(f => values[f.id])) !== JSON.stringify(inputs().map(f => valuesOf(rec)[f.id]));
+    }
+    function drawChip() {
+      const rec = loadedRecord(), diff = changed();
+      $('chip').hidden = !rec; $('chip').textContent = rec ? T.chip(rec.data.name, diff) : '';
+      $('save-changes').hidden = !diff;
+      $('save-new').textContent = rec ? T.saveAsNew : T.saveNew;
+    }
+    $('restore').addEventListener('click', () => { values = defaultsOf(); pristine = true; drawInputs(); recalc(); drawChip(); });
+
+    // ---- scenarios: save, open, rename, duplicate, delete -------------------------------------
+    function askName(mode, record, prefill) {
+      nameMode = mode; nameRecord = record || null;
+      $('name-modal').title = mode === 'rename' ? T.nameRename : T.nameNew;
+      $('name-input').value = prefill || '';
+      $('name-modal').open();
+      $('name-input').focus();
+    }
+    $('name-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const name = $('name-input').value.trim();
+      if (!name) { tkit.toast(T.nameNeeded, { tone: 'error' }); return; }
+      try {
+        if (nameMode === 'rename') await scenarios.update(nameRecord.id, { name: name }, { rev: nameRecord.rev });
+        else { const rec = await scenarios.insert({ name: name, values: Object.assign({}, values), order: nextOrder() }); loadedId = rec.id; drawChip(); tkit.toast(T.saved(name), { tone: 'success' }); }
+        $('name-modal').close();
+      } catch (error) { if (error.code === 'conflict') tkit.toast(T.conflict, { tone: 'error' }); else fail(error); }
+    });
+    $('name-cancel').addEventListener('click', () => $('name-modal').close());
+    $('name-input').addEventListener('input', () => tendly.host.holdReload(true));
+    $('name-modal').addEventListener('t-close', () => tendly.host.holdReload(false));
+    $('save-new').addEventListener('click', () => askName('new', null, ''));
+    $('save-changes').addEventListener('click', async () => {
+      const rec = loadedRecord();
+      if (!rec) return;
+      try { await scenarios.update(rec.id, { values: Object.assign({}, values) }, { rev: rec.rev }); tkit.toast(T.saved(rec.data.name), { tone: 'success' }); }
+      catch (error) { if (error.code === 'conflict') tkit.toast(T.conflict, { tone: 'error' }); else fail(error); }
+    });
+    function openScenario(rec) {
+      values = valuesOf(rec); loadedId = rec.id; pristine = false;
+      drawInputs(); recalc(); drawChip();
+      document.querySelector('t-app').view = 'calc';
+    }
+    async function removeScenario(rec) {
+      if (!await tkit.confirm(T.deleteQ(rec.data.name), { confirm: T.del, tone: 'danger' })) return;
+      try { await scenarios.remove(rec.id); } catch (error) { fail(error); }
+    }
+    function drawList(recs) {
+      const box = $('sc-list');
+      tkit.clear(box);
+      $('compare-btn').disabled = picked.length < 2;
+      if (!recs.length) {
+        const empty = h('t-empty-start', { title: T.emptyTitle, text: T.emptyText, action: T.saveCurrent });
+        empty.addEventListener('t-action', () => askName('new', null, ''));
+        empty.addEventListener('t-examples', loadExamples);
+        box.appendChild(empty);
+        return;
+      }
+      recs.forEach(rec => {
+        const res = evaluate(valuesOf(rec)), pick = h('input', { type: 'checkbox', class: 't-switch', 'aria-label': T.pick(rec.data.name) });
+        pick.checked = picked.indexOf(rec.id) >= 0;
+        pick.addEventListener('change', () => {
+          if (pick.checked && picked.length >= 4) { pick.checked = false; tkit.toast(T.max4); return; }
+          picked = pick.checked ? picked.concat([rec.id]) : picked.filter(x => x !== rec.id);
+          $('compare-btn').disabled = picked.length < 2;
+        });
+        const sum = highlighted().map(m => m.out.label + ' ' + show(m.out, res[m.out.id])).join(' · ');
+        const btn = (text, fn, kind) => h('button', { type: 'button', class: 't-button small ' + (kind || 'ghost'), text: text, onClick: fn });
+        box.appendChild(h('div', { class: 't-card sc-row' }, pick,
+          h('div', { class: 'sc-main' }, h('strong', { text: rec.data.name }), h('small', { text: sum + ' · ' + tkit.ago(rec.updated_at) })),
+          btn(T.open, () => openScenario(rec), ''), btn(T.rename, () => askName('rename', rec, rec.data.name)),
+          btn(T.duplicate, () => scenarios.insert({ name: T.copyOf(rec.data.name), values: Object.assign({}, rec.data.values), order: nextOrder() }).catch(fail)),
+          btn(T.del, () => removeScenario(rec), 'danger')));
+      });
+    }
+    $('compare-btn').addEventListener('click', () => { location.hash = '#compare/' + picked.join(','); });
+
+    // ---- compare ------------------------------------------------------------------------------
+    function drawCompare(recs) {
+      const route = tkit.route.get(), box = $('cmp');
+      const ids = route.view === 'compare' && route.id ? route.id.split(',') : picked;
+      const list = ids.map(id => recs.find(r => r.id === id)).filter(Boolean).slice(0, 4);
+      tkit.clear(box);
+      if (list.length < 2) {
+        box.appendChild(h('t-state', { kind: 'empty', title: T.cmpEmptyTitle, text: T.cmpEmptyText },
+          h('button', { type: 'button', class: 't-button', text: T.goScenarios, onClick: () => { document.querySelector('t-app').view = 'scenarios'; } })));
+        return;
+      }
+      const vals = list.map(valuesOf), res = vals.map(evaluate);
+      const head = h('tr', null, h('th', { text: T.scenarioCol }));
+      list.forEach(r => head.appendChild(h('th', { text: r.data.name })));
+      const body = h('tbody');
+      const section = text => body.appendChild(h('tr', { class: 'sect' }, h('th', { colspan: String(list.length + 1), text: text })));
+      const line = (label, cells, raws, badge) => {
+        const tr = h('tr', null, h('th', { text: label }));
+        cells.forEach((text, i) => tr.appendChild(h('td', { class: i > 0 && raws[i] !== raws[0] ? 'diff' : '', text: text }, badge && badge[i] ? h('span', { class: 't-badge ok', text: ' ' + T.best }) : null)));
+        body.appendChild(tr);
+      };
+      section(T.inputsHead);
+      inputs().forEach(f => line(f.label, vals.map(v => tkit.fieldText(f, v[f.id], S.value)), vals.map(v => String(v[f.id]))));
+      section(T.resultsHead);
+      model.forEach(m => {
+        const raws = res.map(r => r[m.out.id]), nums = raws.filter(isNum);
+        const best = m.out.better && nums.length > 1 && Math.min.apply(null, nums) !== Math.max.apply(null, nums) ? Math[m.out.better === 'lower' ? 'min' : 'max'].apply(null, nums) : null;
+        line(m.out.label, raws.map(v => show(m.out, v)), raws.map(String), raws.map(v => best !== null && v === best));
+      });
+      box.appendChild(h('div', { class: 't-table-scroll' }, h('table', { class: 't-table cmp' }, h('thead', null, head), body)));
+    }
+    tkit.route.on(() => { if (ready) drawCompare(store.records); });
+
+    // ---- settings: inputs editor, results editor, currency, data tools ------------------------
+    const inputsEditor = $('inputs-editor'), tools = $('tools');
+    inputsEditor.extra = f => {   // default / range / step / unit, kept on the field next to its id
+      const set = (key, value) => inputsEditor.update(f.id, { [key]: value });
+      const numBox = key => { const box = h('input', { class: 't-input', type: 'text', inputmode: 'decimal' }); box.value = numText(f[key]); box.addEventListener('change', () => { const n = tkit.parseNumber(box.value); set(key, n === null ? undefined : n); }); return box; };
+      const cell = (text, control) => h('label', { class: 't-field' }, h('span', { text: text }), control);
+      const grid = h('div', { class: 'extra-grid' });
+      if (f.type === 'number' || f.type === 'money') {
+        grid.appendChild(cell(T.defTxt, numBox('default'))); grid.appendChild(cell(T.minTxt, numBox('min'))); grid.appendChild(cell(T.maxTxt, numBox('max'))); grid.appendChild(cell(T.stepTxt, numBox('step')));
+        if (f.type === 'number') { const unit = h('input', { class: 't-input', type: 'text', maxlength: '12' }); unit.value = f.unit || ''; unit.addEventListener('change', () => set('unit', unit.value.trim() || undefined)); grid.appendChild(cell(T.unitTxt, unit)); }
+      } else if (f.type === 'date') {
+        const d = h('input', { class: 't-input', type: 'date' }); d.value = f.default || ''; d.addEventListener('change', () => set('default', d.value || undefined)); grid.appendChild(cell(T.defTxt, d));
+      } else if (f.type === 'choice') {
+        const s = h('select', { class: 't-input' }); (f.options || []).forEach(o => s.appendChild(h('option', { value: o.id, text: o.label }))); s.value = f.default || ''; s.addEventListener('change', () => set('default', s.value || undefined)); grid.appendChild(cell(T.defTxt, s));
+      } else if (f.type === 'checkbox') {
+        const c = h('input', { type: 'checkbox', class: 't-switch' }); c.checked = !!f.default; c.addEventListener('change', () => set('default', c.checked)); grid.appendChild(h('label', { class: 't-switch-line' }, c, h('span', { text: T.defTxt + ': ' + T.yes })));
+      }
+      return grid;
+    };
+    inputsEditor.addEventListener('t-change', event => { S.save({ inputs: event.detail.fields }).catch(fail); });
+
+    const saveOutputs = (list, redraw) => { drawnOutputs = JSON.stringify(list); S.save({ outputs: list }).catch(fail); if (redraw) drawOutputs(); };
+    const patchOutput = (i, patch) => { const list = clone(outputs()); Object.assign(list[i], patch); saveOutputs(list, false); };
+    function outputRow(o, i, list) {
+      const error = h('small', { class: 't-error', hidden: true }), ids = inputs().map(f => f.id).concat(list.slice(0, i).map(x => x.id));
+      const label = h('input', { class: 't-input', type: 'text', 'aria-label': T.resName }); label.value = o.label;
+      const formula = h('input', { class: 't-input mono', type: 'text', spellcheck: 'false', autocapitalize: 'off', 'aria-label': T.resFormula }); formula.value = o.formula;
+      const select = (labelText, options, value) => { const s = h('select', { class: 't-input', 'aria-label': labelText }); options.forEach(x => s.appendChild(h('option', { value: x[0], text: x[1] }))); s.value = value || ''; return s; };
+      const format = select(T.resFormat, [['money', T.fMoney], ['number', T.fNumber], ['percent', T.fPercent], ['text', T.fText]], o.format);
+      const better = select(T.betterWhen, [['', T.bNone], ['lower', T.bLower], ['higher', T.bHigher]], o.better);
+      const hi = h('input', { type: 'checkbox', class: 't-switch' }); hi.checked = !!o.highlight;
+      const check = () => { const r = checkFormula(formula.value, list.map((x, k) => k === i ? Object.assign({}, x, { formula: formula.value }) : x), i); error.hidden = !r.error; error.textContent = r.error || ''; return !r.error; };
+      formula.addEventListener('input', check);
+      formula.addEventListener('change', () => { if (check()) patchOutput(i, { formula: formula.value.trim() }); });   // an invalid formula is not saved
+      label.addEventListener('change', () => { if (label.value.trim()) patchOutput(i, { label: label.value.trim() }); else label.value = o.label; });
+      format.addEventListener('change', () => patchOutput(i, { format: format.value }));
+      better.addEventListener('change', () => patchOutput(i, { better: better.value }));
+      hi.addEventListener('change', () => patchOutput(i, { highlight: hi.checked }));
+      const move = (to) => { const l = clone(outputs()); l.splice(to, 0, l.splice(i, 1)[0]); saveOutputs(l, true); };
+      const icon = (name, text, fn, disabled) => h('button', { type: 'button', class: 't-icon-button', 'aria-label': text + ': ' + o.label, disabled: !!disabled, onClick: fn }, tkit.icon(name, 14));
+      setTimeout(() => { if (formula.isConnected && model[i] && model[i].error) { error.hidden = false; error.textContent = model[i].error; } }, 0);
+      return h('div', { class: 'out-row' },
+        h('div', { class: 'out-line' }, label, format, better, h('label', { class: 't-switch-line' }, hi, h('span', { text: T.highlight })),
+          icon('arrowUp', T.up, () => move(i - 1), i === 0), icon('arrowDown', T.down, () => move(i + 1), i === list.length - 1),
+          icon('trash', T.remove, () => { if (list.length < 2) { tkit.toast(T.keepOne); return; } const l = clone(outputs()); l.splice(i, 1); saveOutputs(l, true); })),
+        formula, error, h('small', { class: 't-muted', text: T.available(ids) }));
+    }
+    function drawOutputs() {
+      const box = $('outputs-editor'), list = clone(outputs());
+      drawnOutputs = JSON.stringify(list);
+      tkit.clear(box);
+      list.forEach((o, i) => box.appendChild(outputRow(o, i, list)));
+    }
+    $('add-output').addEventListener('click', () => {
+      const list = clone(outputs()), taken = inputs().map(f => f.id).concat(list.map(o => o.id));
+      list.push({ id: tkit.slug(T.newResult, taken), label: T.newResult, formula: '0', format: 'number', highlight: false, better: '' });
+      saveOutputs(list, true);
+    });
+    $('currency').addEventListener('change', event => { S.save({ currency: event.target.value }).catch(fail); });
+
+    // Data tools (export / import / examples / delete all). CSV: one row per scenario, every input then every result.
+    const importFields = () => [{ id: 'name', label: T.nameField, type: 'text', required: true }].concat(inputs());
+    const loadExamples = () => tkit.samples.load(scenarios, tools.examples()).catch(fail);
+    tools.noun = T.noun; tools.filename = T.csvName; tools.collection = scenarios;
+    tools.examples = () => T.examples.map((e, i) => ({ name: e[0], values: Object.assign(defaultsOf(), e[1]), order: nextOrder() + i }));
+    tools.exportRows = records => sorted().map(r => { const v = valuesOf(r); return Object.assign({ name: r.data.name }, v, evaluate(v)); });
+    tools.exportColumns = () => tkit.csv.columnsFor(importFields(), S.value).concat(outputs().map(o => ({ key: o.id, label: o.label, format: v => v === null || v === undefined ? '' : String(v) })));
+    tools.beforeInsert = doc => {
+      const v = {}; inputs().forEach(f => { if (doc[f.id] !== null && doc[f.id] !== undefined) v[f.id] = doc[f.id]; });
+      return { name: doc.name || T.untitled, values: Object.assign(defaultsOf(), v), order: nextOrder() };
+    };
+
+    function applySettings() {
+      const v = S.value, key = JSON.stringify([v.inputs, v.currency]);
+      if (key !== inputsKey) {
+        inputsKey = key;
+        const fresh = defaultsOf(), kept = {};
+        inputs().forEach(f => { kept[f.id] = !pristine && f.id in values ? values[f.id] : fresh[f.id]; });
+        values = kept;
+        inputsEditor.fields = clone(v.inputs);
+        inputsEditor.inUse = ready ? Object.fromEntries(inputs().map(f => [f.id, store.records.filter(r => r.data.values && f.id in r.data.values).length])) : {};
+        drawInputs();
+      }
+      buildModel();
+      if (JSON.stringify(v.outputs) !== drawnOutputs) drawOutputs();
+      const select = $('currency');
+      tkit.clear(select);
+      (CURRENCIES.indexOf(v.currency) >= 0 ? CURRENCIES : CURRENCIES.concat(v.currency)).forEach(code => select.appendChild(h('option', { value: code, text: code })));
+      select.value = v.currency;
+      tools.fields = importFields();
+      recalc(); drawChip();
+      if (ready) render();
+    }
+
+    // ---- render (scenarios changed) and start-up ----------------------------------------------
+    function render() {
+      ready = true;
+      const recs = sorted();
+      if (loadedId && !recs.some(r => r.id === loadedId)) loadedId = null;
+      picked = picked.filter(id => recs.some(r => r.id === id));
+      const examples = tkit.samples.count(store.records);
+      $('banner').count = examples;
+      tools.records = store.records;
+      drawList(recs); drawCompare(recs); drawChip(); setSummary();
+    }
+    document.querySelector('t-app').addEventListener('t-view', () => setTimeout(() => setSummary(), 0));
+    (async () => {
+      $('sc-list').appendChild(h('t-state', { kind: 'loading' }));
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) fail(S.error);
+      values = defaultsOf();
+      S.on(applySettings);
+      applySettings();
+      $('banner').addEventListener('t-clear', () => tkit.samples.clear(scenarios).catch(fail));
+      store = tkit.live(scenarios, render, { limit: 5000, onError: error => {
+        tkit.clear($('sc-list'));
+        $('sc-list').appendChild(h('t-state', { kind: 'error', title: T.loadFail, text: error.message }, h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => store.reload() })));
+      } });
+    })();
+  </script>
+</body>
+</html>

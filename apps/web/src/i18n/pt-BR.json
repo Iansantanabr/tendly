@@ -3015,5 +3015,13 @@
  "Flexible base": "Base flexível",
  "Your own fields, seen as a table, a board, a gallery or a calendar.": "Seus próprios campos, vistos como tabela, quadro, galeria ou calendário.",
  "Knowledge base": "Base de conhecimento",
- "Articles by topic, with search and links between them.": "Artigos por assunto, com busca e links entre eles."
+ "Articles by topic, with search and links between them.": "Artigos por assunto, com busca e links entre eles.",
+ "Catalog": "Catálogo",
+ "Cards with a picture, categories, search and a page for each item.": "Cards com imagem, categorias, busca e uma página para cada item.",
+ "Checklist / Routine": "Checklist / Rotina",
+ "Steps to tick, who did them and when, repeated daily, weekly or monthly.": "Etapas para marcar, quem fez e quando, repetidas por dia, semana ou mês.",
+ "Calculator / Simulator": "Calculadora / Simulador",
+ "Inputs, your own formulas and the result as you type; save and compare scenarios.": "Entradas, suas fórmulas e o resultado enquanto você digita; salve e compare cenários.",
+ "Comparison": "Comparador",
+ "Options side by side, weighted criteria and a clear winner.": "Opções lado a lado, critérios com peso e um vencedor claro."
 }

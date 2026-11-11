@@ -70,9 +70,13 @@ pub(crate) const TEMPLATES: &[(&str, &str)] = &[
     ("base", include_str!("apps/templates/base.html")),
     ("kanban", include_str!("apps/templates/kanban.html")),
     ("table", include_str!("apps/templates/table.html")),
+    ("catalog", include_str!("apps/templates/catalog.html")),
     ("calendar", include_str!("apps/templates/calendar.html")),
     ("dashboard", include_str!("apps/templates/dashboard.html")),
+    ("checklist", include_str!("apps/templates/checklist.html")),
     ("form", include_str!("apps/templates/form.html")),
+    ("calculator", include_str!("apps/templates/calculator.html")),
+    ("compare", include_str!("apps/templates/compare.html")),
     ("document", include_str!("apps/templates/document.html")),
     ("knowledge", include_str!("apps/templates/knowledge.html")),
     ("issues", include_str!("apps/templates/issues.html")),
@@ -85,9 +89,13 @@ pub(crate) const TEMPLATES_PT_BR: &[(&str, &str)] = &[
     ("base", include_str!("apps/templates/pt-BR/base.html")),
     ("kanban", include_str!("apps/templates/pt-BR/kanban.html")),
     ("table", include_str!("apps/templates/pt-BR/table.html")),
+    ("catalog", include_str!("apps/templates/pt-BR/catalog.html")),
     ("calendar", include_str!("apps/templates/pt-BR/calendar.html")),
     ("dashboard", include_str!("apps/templates/pt-BR/dashboard.html")),
+    ("checklist", include_str!("apps/templates/pt-BR/checklist.html")),
     ("form", include_str!("apps/templates/pt-BR/form.html")),
+    ("calculator", include_str!("apps/templates/pt-BR/calculator.html")),
+    ("compare", include_str!("apps/templates/pt-BR/compare.html")),
     ("document", include_str!("apps/templates/pt-BR/document.html")),
     ("knowledge", include_str!("apps/templates/pt-BR/knowledge.html")),
 ];
@@ -95,6 +103,14 @@ pub(crate) const TEMPLATES_PT_BR: &[(&str, &str)] = &[
 /// Fork: template names that now mean another page. The document editor grew
 /// into the knowledge base; an old `document` request gets the new page.
 const TEMPLATE_ALIASES: &[(&str, &str)] = &[("document", "knowledge")];
+
+/// Fork: permissions a template's page uses, written into the new app's `app.json`.
+pub(crate) fn template_permissions(template: &str) -> &'static [&'static str] {
+    match template {
+        "checklist" => &["notify"],
+        _ => &[],
+    }
+}
 
 /// The template a name means today (`document` → `knowledge`).
 pub(crate) fn template_name(template: &str) -> &str {
@@ -975,6 +991,11 @@ async fn scaffold_route(
     }
     if let Some(letter) = body.letter.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
         manifest["letter"] = json!(letter);
+    }
+    // Fork: a template that needs a permission asks for it from the start (the person is asked once, on open).
+    let wanted = template_permissions(template_name(body.template.as_deref().map(str::trim).unwrap_or("blank")));
+    if !wanted.is_empty() {
+        manifest["permissions"] = json!(wanted);
     }
     let parsed = parse_manifest(&slug, &manifest.to_string()).map_err(ApiError::bad)?;
     // Written out in full so the agent sees every field it may change.

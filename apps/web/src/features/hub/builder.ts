@@ -9,7 +9,7 @@ import type { AppColor } from "./app-tile";
 import { APP_COLORS } from "./app-tile";
 import { appConvention, type HubApp } from "./apps";
 
-export type TemplateId = "base" | "blank" | "kanban" | "table" | "calendar" | "dashboard" | "form" | "knowledge";
+export type TemplateId = "base" | "blank" | "kanban" | "table" | "catalog" | "calendar" | "dashboard" | "checklist" | "form" | "calculator" | "compare" | "knowledge";
 /** Where a template sits in the "Start from" list. */
 export type TemplateGroup = "featured" | "organize" | "schedule" | "track" | "collect" | "decide" | "content";
 
@@ -29,9 +29,13 @@ export const TEMPLATES: readonly Template[] = [
   { id: "blank", label: "Blank", hint: "A page with a small list, to start from nothing.", group: "featured", color: "slate", collection: "items" },
   { id: "kanban", label: "Kanban / CRM", hint: "Cards in columns you drag between, with a list view.", group: "organize", color: "violet", collection: "cards" },
   { id: "table", label: "Table", hint: "Rows with a filter, categories and totals.", group: "organize", color: "blue", collection: "entries" },
+  { id: "catalog", label: "Catalog", hint: "Cards with a picture, categories, search and a page for each item.", group: "organize", color: "rose", collection: "items" },
   { id: "calendar", label: "Calendar", hint: "A month with events and the day's agenda.", group: "schedule", color: "teal", collection: "events" },
   { id: "dashboard", label: "Dashboard with charts", hint: "Totals and two charts over the entries you add.", group: "track", color: "amber", collection: "entries" },
+  { id: "checklist", label: "Checklist / Routine", hint: "Steps to tick, who did them and when, repeated daily, weekly or monthly.", group: "track", color: "green", collection: "routines" },
   { id: "form", label: "Form + list", hint: "A form people fill in, and the list of what came in.", group: "collect", color: "green", collection: "submissions" },
+  { id: "calculator", label: "Calculator / Simulator", hint: "Inputs, your own formulas and the result as you type; save and compare scenarios.", group: "decide", color: "blue", collection: "scenarios" },
+  { id: "compare", label: "Comparison", hint: "Options side by side, weighted criteria and a clear winner.", group: "decide", color: "violet", collection: "options" },
   { id: "knowledge", label: "Knowledge base", hint: "Articles by topic, with search and links between them.", group: "content", color: "orange", collection: "articles" },
 ];
 
@@ -44,8 +48,12 @@ export const templateById = (id: string): Template => TEMPLATES.find(template =>
 /** Words that point at a template, in Portuguese and English, as prefixes of the folded word. */
 const CLUES: Record<Exclude<TemplateId, "blank">, string[]> = {
   base: ["database", "airtable", "notion", "colecao", "collection", "campos", "fields", "galeria", "gallery", "flexivel", "flexible"],
+  catalog: ["catalogo", "catalog", "vitrine", "showcase", "produto", "product", "servico", "service", "portfolio", "equipamento", "equipment", "curso", "course", "fornecedor", "supplier", "cardapio", "menu"],
+  checklist: ["checklist", "check-list", "rotina", "routine", "inspecao", "inspection", "vistoria", "abertura", "opening", "fechamento", "closing", "onboarding", "integracao", "procedimento", "auditoria", "audit", "qualidade", "quality", "tarefa", "recorrente", "recurring"],
+  calculator: ["calculadora", "calculator", "simulador", "simulator", "simulacao", "simulation", "orcamento", "quote", "comissao", "commission", "custo", "cost", "viabilidade", "feasibility", "cenario", "scenario", "precific", "pricing", "margem", "margin"],
+  compare: ["comparador", "comparar", "compare", "comparison", "comparativo", "versus", "proposta", "proposal", "cotacao", "decisao", "decision", "escolher", "choose", "avaliar", "criterio", "criteria", "plano", "plan"],
   kanban: ["kanban", "quadro", "funil", "pipeline", "crm", "lead", "etapa", "estagio", "stage", "board", "deal", "negocio", "oportunidade", "card", "cartao", "trello", "backlog", "sprint", "prospect"],
-  table: ["tabela", "table", "planilha", "spreadsheet", "lista", "list", "inventario", "inventory", "estoque", "stock", "catalogo", "catalog", "cadastro", "registro", "record", "contato", "contact", "cliente", "customer", "produto", "product", "despesa", "expense", "gasto"],
+  table: ["tabela", "table", "planilha", "spreadsheet", "lista", "list", "inventario", "inventory", "estoque", "stock", "cadastro", "registro", "record", "contato", "contact", "cliente", "customer", "despesa", "expense", "gasto"],
   calendar: ["calendario", "calendar", "agenda", "schedule", "evento", "event", "compromisso", "appointment", "reuniao", "meeting", "escala", "shift", "prazo", "deadline", "aniversario", "birthday", "mes", "month", "semana", "week"],
   dashboard: ["painel", "dashboard", "grafico", "chart", "graph", "metrica", "metric", "indicador", "kpi", "relatorio", "report", "resumo", "summary", "acompanh", "track", "monitor", "medir", "measure", "vendas", "sales", "receita", "revenue", "estatistic", "statistic"],
   form: ["formulario", "form", "pesquisa", "survey", "inscri", "signup", "sign-up", "registration", "pedido", "order", "solicita", "request", "feedback", "questionario", "questionnaire", "enquete", "poll", "candidat", "applica", "chamado", "ticket", "coletar", "collect"],
@@ -53,6 +61,10 @@ const CLUES: Record<Exclude<TemplateId, "blank">, string[]> = {
 };
 /** A clue that beats the others when present, since it names the shape of the app. */
 const STRONG: Partial<Record<Exclude<TemplateId, "blank">, string[]>> = {
+  catalog: ["catalogo", "catalog", "vitrine", "showcase"],
+  checklist: ["checklist", "check-list", "rotina", "routine", "inspecao", "vistoria"],
+  calculator: ["calculadora", "calculator", "simulador", "simulator"],
+  compare: ["comparador", "comparar", "compare", "comparison", "comparativo"],
   kanban: ["kanban", "quadro", "funil", "pipeline", "crm", "board"],
   calendar: ["calendario", "calendar", "agenda"],
   dashboard: ["painel", "dashboard", "grafico", "chart"],

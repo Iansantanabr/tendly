@@ -577,7 +577,7 @@ async fn hub_apps_scaffold_every_template_is_a_working_kit_page() {
     let f = fixture();
     let url = format!("/api/hub/apps/{}/scaffold", f.workspace);
     for (template, collection) in [
-        ("base", "records"), ("kanban", "cards"), ("table", "entries"), ("calendar", "events"), ("dashboard", "entries"), ("form", "submissions"), ("knowledge", "articles"),
+        ("base", "records"), ("kanban", "cards"), ("table", "entries"), ("calendar", "events"), ("dashboard", "entries"), ("form", "submissions"), ("knowledge", "articles"), ("catalog", "items"), ("checklist", "routines"), ("calculator", "scenarios"), ("compare", "options"),
         // Fork: `document` grew into the knowledge base; the old name gets the new page.
         ("document", "articles"),
     ] {

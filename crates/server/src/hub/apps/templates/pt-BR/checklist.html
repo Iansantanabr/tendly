@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="pt-BR" data-app-color="{{COLOR}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{NAME}}</title>
+  <link rel="stylesheet" href="/api/hub/apps/kit.css">
+  <script src="/api/hub/apps/sdk.js"></script>
+  <script src="/api/hub/apps/kit.js"></script>
+  <style>
+    .group-title { margin: var(--t-space-3) 0 var(--t-space-2); font-size: var(--t-text-md); font-weight: 600; color: var(--t-ink-soft); }
+    .group-title.late { color: var(--t-danger-ink); }
+    .row-progress { width: 130px; flex: none; }
+    .t-row .t-switch { margin-right: var(--t-space-1); }
+    details.done-group > summary { cursor: pointer; margin-bottom: var(--t-space-2); }
+    .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
+    .settings-stack .t-card { display: grid; gap: var(--t-space-3); }
+    .run-bar { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); padding: var(--t-space-3); border-top: 1px solid var(--t-line); background: var(--t-surface); }
+    .run-hint { flex-basis: 100%; margin: 0; }
+    .days { display: flex; flex-wrap: wrap; gap: var(--t-space-1); }
+    .days .t-button[aria-pressed="true"] { background: var(--t-accent-soft); color: var(--t-accent-ink); border-color: var(--t-accent); }
+    .t-actions.start { justify-content: flex-start; }
+    .row-link { display: grid; gap: 1px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+    .row-link small { color: var(--t-muted); font-size: var(--t-text-sm); }
+    .flip { display: inline-flex; transform: rotate(180deg); }
+    .step-row { display: flex; flex-wrap: wrap; gap: var(--t-space-2); align-items: center; }
+    .step-row > input[type=text] { flex: 1 1 180px; min-width: 0; }
+    .step-row .step-tools { display: flex; align-items: center; gap: 2px; }
+    #steps-list { display: grid; gap: var(--t-space-2); }
+  </style>
+</head>
+<body>
+  <t-app>
+    <t-nav label="Seções">
+      <span class="t-nav-title"><span class="t-tile" aria-hidden="true">{{LETTER}}</span><span>{{NAME}}</span></span>
+      <button data-view="today" data-icon="check-square">Hoje</button>
+      <button data-view="routines" data-icon="repeat">Rotinas</button>
+      <button data-view="history" data-icon="clock">Histórico</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Ajustes</button>
+    </t-nav>
+    <main class="t-app-main">
+      <t-view name="today">
+        <div class="t-page">
+          <header class="t-page-head">
+            <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
+            <button type="button" class="t-button primary new-routine">Nova rotina</button>
+          </header>
+          <t-sample-banner id="banner"></t-sample-banner>
+          <p class="t-muted" id="notify-off" hidden>Os avisos no sino estão desligados para este app.</p>
+          <t-empty-start id="empty" title="Nenhuma rotina ainda" text="Crie seu primeiro checklist ou veja primeiro como funciona com exemplos." action="Nova rotina" hidden></t-empty-start>
+          <div id="today-body"><t-state kind="loading"></t-state></div>
+        </div>
+      </t-view>
+      <t-view name="run">
+        <div class="t-page">
+          <header class="t-page-head">
+            <button type="button" class="t-button" id="run-back">Voltar</button>
+            <div><h1 class="t-title" id="run-title"></h1><p class="t-muted" id="run-sub"></p></div>
+          </header>
+          <t-checklist id="run-check"></t-checklist>
+          <div class="t-actions start"><button type="button" class="t-button" id="run-note-btn">Adicionar nota a um passo</button></div>
+          <label class="t-field"><span>Nota desta execução</span><textarea id="run-note" rows="2"></textarea></label>
+          <div class="run-bar" id="run-bar">
+            <button type="button" class="t-button danger" id="run-discard">Descartar</button>
+            <span class="t-spacer"></span>
+            <button type="button" class="t-button" id="run-skip">Pular desta vez</button>
+            <button type="button" class="t-button primary" id="run-finish">Concluir</button>
+            <p class="t-muted run-hint" id="run-hint"></p>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="routines">
+        <div class="t-page">
+          <header class="t-page-head">
+            <h1 class="t-title">Rotinas</h1>
+            <button type="button" class="t-button primary new-routine">Nova rotina</button>
+          </header>
+          <t-sample-banner class="banner-copy"></t-sample-banner>
+          <div id="routine-list"></div>
+        </div>
+      </t-view>
+      <t-view name="history">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Histórico</h1></header>
+          <t-pills id="hist-pills"></t-pills>
+          <t-table id="hist-table" searchable empty-text="Nenhuma execução ainda"></t-table>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><h1 class="t-title">Ajustes</h1></header>
+          <div class="settings-stack">
+            <section class="t-card">
+              <div class="t-card-head"><h2>Você e avisos</h2></div>
+              <label class="t-field"><span>Seu nome</span><input id="person" type="text" autocomplete="name"></label>
+              <p class="t-muted">Aparece como quem fez cada execução.</p>
+              <div class="t-field"><span>A semana começa no</span>
+                <div class="t-segment" role="group" aria-label="A semana começa no" id="week-start"><button type="button" data-ws="0" aria-pressed="false">Domingo</button><button type="button" data-ws="1" aria-pressed="false">Segunda</button></div>
+              </div>
+              <label class="t-switch-line"><input type="checkbox" class="t-switch" id="notify-late"><span>Avisar no sino quando houver rotina atrasada</span></label>
+            </section>
+            <t-data-tools id="tools" hide="import"></t-data-tools>
+          </div>
+        </div>
+      </t-view>
+    </main>
+  </t-app>
+
+  <t-modal id="routine-modal" title="Rotina">
+    <form id="routine-form" class="t-form" novalidate>
+      <label class="t-field"><span>Nome</span><input id="r-name" type="text" required></label>
+      <label class="t-field"><span>Descrição</span><textarea id="r-description" rows="2"></textarea></label>
+      <label class="t-field"><span>Responsável</span><input id="r-owner" type="text"></label>
+      <div class="t-field"><span>Frequência</span>
+        <div class="t-segment" role="group" aria-label="Frequência" id="r-kind">
+          <button type="button" data-kind="daily">Diária</button><button type="button" data-kind="weekly">Semanal</button><button type="button" data-kind="monthly">Mensal</button><button type="button" data-kind="once">Uma vez</button><button type="button" data-kind="manual">Sob demanda</button>
+        </div>
+      </div>
+      <div class="t-field" id="r-weekly"><span>Dias da semana</span><div class="days" id="r-days"></div><small class="t-muted">Feita uma vez por semana. Vence a partir do primeiro dia escolhido e atrasa depois do último.</small></div>
+      <label class="t-field" id="r-monthly"><span>Dia do mês</span><input id="r-day" type="number" min="1" max="31"></label>
+      <label class="t-field" id="r-once"><span>Data</span><input id="r-date" type="date"></label>
+      <label class="t-field" id="r-time-field"><span>Horário limite (opcional)</span><input id="r-time" type="time"></label>
+      <div class="t-field"><span>Passos</span><div id="steps-list"></div>
+        <div class="t-actions start"><button type="button" class="t-button small" id="add-step">Adicionar passo</button></div>
+      </div>
+      <div class="t-actions">
+        <button type="button" class="t-button danger" id="r-delete" hidden>Apagar</button>
+        <span class="t-spacer"></span>
+        <button type="button" class="t-button" id="r-cancel">Cancelar</button>
+        <button type="submit" class="t-button primary" id="r-save">Salvar</button>
+      </div>
+    </form>
+  </t-modal>
+
+  <t-modal id="skip-modal" title="Pular desta vez">
+    <form id="skip-form" class="t-form">
+      <label class="t-field"><span>Por que você vai pular?</span><textarea id="skip-reason" rows="3"></textarea></label>
+      <div class="t-actions"><span class="t-spacer"></span><button type="button" class="t-button" id="skip-cancel">Cancelar</button><button type="submit" class="t-button primary">Pular</button></div>
+    </form>
+  </t-modal>
+
+  <t-modal id="note-modal" title="Nota em um passo">
+    <form id="note-form" class="t-form">
+      <label class="t-field"><span>Passo</span><select id="note-step"></select></label>
+      <label class="t-field"><span>Nota</span><textarea id="note-text" rows="3"></textarea></label>
+      <div class="t-actions"><span class="t-spacer"></span><button type="button" class="t-button" id="note-cancel">Cancelar</button><button type="submit" class="t-button primary">Salvar</button></div>
+    </form>
+  </t-modal>
+
+  <script>
+    // PAGE MAP: strings (T) -> LOGIC (pure due/late rules, tested in checklist-logic.test.mjs) -> state -> Today -> run screen ->
+    // routines list and editor -> history -> settings -> late notifications -> examples -> start-up.
+    // DATA: routines `routines` { name, description, steps: [{ id, label, required }], frequency: { kind, weekdays?, day?, date? }, dueTime, owner, active, order };
+    // runs `runs` { routineId, routineName, period, startedAt, finishedAt, by, items: [{ stepId, label, required, done, at, note }], status, note }.
+    // Settings: tendly.data key `settings` { v, person, weekStart, notifyLate, lastNotified }.
+    // WEEKLY: one run per week. It becomes due on the first chosen weekday and is late after the last chosen weekday (and its dueTime).
+
+    // All visible text of the script lives here (the pt-BR twin of this file only changes this block, the markup and lang).
+    const T = {
+      sDone: 'Concluída', sSkipped: 'Pulada', sOpen: 'Em andamento',
+      at: time => 'às ' + time, everyDay: 'Todo dia', everyWeekday: day => 'Toda ' + day, weekRange: (a, b) => 'Toda semana, ' + a + ' a ' + b,
+      monthly: day => 'Todo mês, dia ' + day, onceOn: date => 'Uma vez, em ' + date, manual: 'Sob demanda',
+      dayShort: ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'], dayLong: ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'],
+      weekOf: date => 'Semana de ' + date, todayComma: date => 'Hoje, ' + date, todayWord: 'hoje',
+      stepsN: n => n + (n === 1 ? ' passo' : ' passos'), late: 'Atrasada', view: 'Ver', continue: 'Continuar', start: 'Começar',
+      secLate: 'Atrasadas', secOpen: 'Em andamento', secToday: 'Para hoje', secDone: 'Feitas hoje',
+      nothingTitle: 'Nada para hoje', nothingText: 'Todas as rotinas estão em dia. Comece uma sob demanda em Rotinas.',
+      summary: (late, today, open) => 'Hoje: ' + late + (late === 1 ? ' atrasada, ' : ' atrasadas, ') + today + ' para hoje, ' + open + ' em andamento',
+      finishedInfo: (status, by, when) => status + (by ? ' por ' + by : '') + (when ? ', ' + when : ''),
+      missing: list => 'Passos obrigatórios que faltam: ' + list,
+      runSel: (name, when, done, total) => 'Execução: ' + name + ' (' + when + ', ' + done + ' de ' + total + ')',
+      notFound: 'Essa execução não existe mais.', finishedToast: 'Execução concluída', discardQ: 'Descartar esta execução? Os passos marcados se perdem.', discard: 'Descartar',
+      paused: 'Pausada', next: when => 'próxima: ' + when, active: 'Ativa', stepPlaceholder: 'O que fazer', stepN: n => 'Passo ' + n, required: 'Obrigatório',
+      delete: 'Apagar', moveUp: 'Subir', moveDown: 'Descer', editRoutine: 'Editar rotina', newRoutineTitle: 'Nova rotina',
+      needName: 'Dê um nome à rotina.', needStep: 'Adicione pelo menos um passo.', needDate: 'Escolha uma data.',
+      conflict: 'Alguém mudou isto enquanto isso; recarreguei.', deleteQ: name => 'Apagar "' + name + '"? As execuções passadas continuam no Histórico.',
+      emptyTitle: 'Nenhuma rotina ainda', emptyText: 'Crie uma rotina ou veja primeiro como funciona com exemplos.',
+      loadFail: 'Não foi possível carregar as rotinas', retry: 'Tentar de novo', all: 'Todas',
+      cRoutine: 'Rotina', cPeriod: 'Período', cStatus: 'Situação', cBy: 'Por', cStarted: 'Início', cFinished: 'Fim', cItems: 'Passos', cDone: 'Passos feitos', cTotal: 'Passos', cNote: 'Nota',
+      noun: { one: 'execução', many: 'execuções' }, csvName: 'Execuções',
+      notifyTitle: 'Rotinas atrasadas', notifyBody: (n, names) => n + (n === 1 ? ' rotina atrasada: ' : ' rotinas atrasadas: ') + names.join(', ') + (n > names.length ? '...' : ''),
+      examples: {
+        people: ['Marina', 'Rafael', 'Paulo'], skipReason: 'A loja ficou fechada por causa de um feriado.',
+        routines: [
+          { name: 'Abertura da loja', description: 'Tudo o que conferir antes de abrir as portas.', owner: 'Marina', frequency: { kind: 'daily' }, dueTime: '08:30', required: [1, 5],
+            steps: ['Ligar as luzes e o letreiro', 'Conferir o caixa', 'Verificar a temperatura das geladeiras', 'Limpar a entrada e as vitrines', 'Repor as prateleiras', 'Testar a maquininha de cartão'] },
+          { name: 'Inspeção semanal de extintores', description: 'Uma volta rápida por todos os extintores.', owner: 'Paulo', frequency: { kind: 'weekly', weekdays: [1] }, dueTime: '10:00', required: [0, 1],
+            steps: ['Manômetro na faixa verde', 'Pino de segurança e lacre no lugar', 'Sem amassados nem ferrugem', 'Data da última recarga ainda vale'] },
+          { name: 'Fechamento do mês', description: 'O que concluir antes de começar o mês novo.', owner: 'Rafael', frequency: { kind: 'monthly', day: 1 }, dueTime: '17:00', required: [0, 4],
+            steps: ['Conciliar as contas bancárias', 'Emitir as notas pendentes', 'Lançar as despesas do mês', 'Revisar as contas em aberto', 'Enviar o relatório para o dono'] }
+        ]
+      }
+    };
+
+    // LOGIC START
+    // Pure rules: no DOM, no SDK. Dates are 'YYYY-MM-DD' strings; "now" is a Date or { date, time: 'HH:MM' }.
+    // A routine here is a plain object { id, frequency, dueTime, active, ... }; a run is { routineId, period, status, startedAt, finishedAt, items }.
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function ymdParts(ymd) { const p = String(ymd).split('-'); return { y: +p[0], m: +p[1], d: +p[2] }; }
+    function ymdFormat(y, m, d) { return y + '-' + pad2(m) + '-' + pad2(d); }
+    function ymdAdd(ymd, days) {
+      const p = ymdParts(ymd), t = new Date(Date.UTC(p.y, p.m - 1, p.d + days));
+      return ymdFormat(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+    }
+    function ymdWeekday(ymd) { const p = ymdParts(ymd); return new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay(); }   // 0 = Sunday
+    function daysInMonth(y, m) { return new Date(Date.UTC(y, m, 0)).getUTCDate(); }
+    function clockOf(now) {
+      if (now && now.date) return { date: now.date, time: now.time || '00:00' };
+      const d = now || new Date();
+      return { date: ymdFormat(d.getFullYear(), d.getMonth() + 1, d.getDate()), time: pad2(d.getHours()) + ':' + pad2(d.getMinutes()) };
+    }
+    // The first day of the week that holds `ymd`. weekStart: 0 = Sunday, 1 = Monday.
+    function weekStartOf(ymd, weekStart) { return ymdAdd(ymd, -((ymdWeekday(ymd) - (weekStart || 0) + 7) % 7)); }
+    // The period around `date`: { period, opens, deadline }, or null when the routine has no schedule (manual, or "once" without a date).
+    // daily: that day. weekly: the week (period = its first day), opens on the first chosen weekday, deadline on the last one.
+    // monthly: the month (period = the 1st), opens and ends on `day` (31 becomes the last day of a short month). once: its date.
+    function windowFor(routine, date, weekStart) {
+      const f = routine.frequency || {}, ws = weekStart || 0;
+      if (f.kind === 'daily') return { period: date, opens: date, deadline: date };
+      if (f.kind === 'weekly') {
+        const start = weekStartOf(date, ws);
+        const offsets = (f.weekdays && f.weekdays.length ? f.weekdays : [1]).map(d => (d - ws + 7) % 7).sort((a, b) => a - b);
+        return { period: start, opens: ymdAdd(start, offsets[0]), deadline: ymdAdd(start, offsets[offsets.length - 1]) };
+      }
+      if (f.kind === 'monthly') {
+        const p = ymdParts(date), day = Math.min(Math.max(f.day || 1, 1), daysInMonth(p.y, p.m)), on = ymdFormat(p.y, p.m, day);
+        return { period: ymdFormat(p.y, p.m, 1), opens: on, deadline: on };
+      }
+      if (f.kind === 'once' && f.date) return { period: f.date, opens: f.date, deadline: f.date };
+      return null;
+    }
+    // The day a run counts for. A manual routine has no schedule: its runs count for the day they start.
+    function periodFor(routine, date, weekStart) {
+      const w = windowFor(routine, date, weekStart);
+      return w ? w.period : ((routine.frequency || {}).kind === 'manual' ? date : null);
+    }
+    const isFinished = run => run.status === 'done' || run.status === 'skipped';
+    function periodDone(routine, runs, period) { return (runs || []).some(r => r.routineId === routine.id && r.period === period && isFinished(r)); }
+    function openRunOf(routine, runs) {
+      const mine = (runs || []).filter(r => r.routineId === routine.id && r.status === 'open');
+      return mine.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))[0] || null;
+    }
+    // Due: active, the period has opened, and no done or skipped run exists for it.
+    function isDue(routine, runs, now, weekStart) {
+      if (routine.active === false) return false;
+      const c = clockOf(now), w = windowFor(routine, c.date, weekStart);
+      return !!w && c.date >= w.opens && !periodDone(routine, runs, w.period);
+    }
+    // Late: due and (past the deadline day, or on it with dueTime passed), or an open run left over from an earlier period.
+    function isLate(routine, runs, now, weekStart) {
+      if (routine.active === false) return false;
+      const c = clockOf(now), w = windowFor(routine, c.date, weekStart);
+      if (!w) return false;
+      if ((runs || []).some(r => r.routineId === routine.id && r.status === 'open' && r.period < w.period)) return true;
+      if (!isDue(routine, runs, now, weekStart)) return false;
+      return c.date > w.deadline || (c.date === w.deadline && !!routine.dueTime && c.time > routine.dueTime);
+    }
+    // The next day the routine needs doing (today if it is open now), or null (manual, once and done, paused). `runs` is optional.
+    function nextDue(routine, now, runs, weekStart) {
+      const f = routine.frequency || {};
+      if (routine.active === false || !f.kind || f.kind === 'manual') return null;
+      const c = clockOf(now), w = windowFor(routine, c.date, weekStart);
+      if (!w) return null;
+      if (!periodDone(routine, runs, w.period)) return c.date > w.opens ? c.date : w.opens;
+      if (f.kind === 'once') return null;
+      const p = ymdParts(w.period);
+      const next = f.kind === 'daily' ? ymdAdd(w.period, 1) : f.kind === 'weekly' ? ymdAdd(w.period, 7) : ymdAdd(w.period, daysInMonth(p.y, p.m));
+      return windowFor(routine, next, weekStart).opens;
+    }
+    // Today's screen: late / open (in progress) / today (due, not started) / done (finished today). Each entry { routine, run }.
+    function groupToday(routines, runs, now, weekStart) {
+      const c = clockOf(now), out = { late: [], open: [], today: [], done: [] };
+      const key = e => (e.routine.dueTime || '99:99') + ' ' + String(e.routine.name || '');
+      routines.forEach(routine => {
+        const run = openRunOf(routine, runs);
+        if (isLate(routine, runs, now, weekStart)) out.late.push({ routine, run });
+        else if (run) out.open.push({ routine, run });
+        else if (isDue(routine, runs, now, weekStart)) out.today.push({ routine, run: null });
+        else {
+          const fin = (runs || []).filter(r => r.routineId === routine.id && isFinished(r) && r.finishedAt && clockOf(new Date(r.finishedAt)).date === c.date)
+            .sort((a, b) => String(b.finishedAt).localeCompare(String(a.finishedAt)))[0];
+          if (fin) out.done.push({ routine, run: fin });
+        }
+      });
+      ['late', 'open', 'today', 'done'].forEach(k => out[k].sort((a, b) => key(a).localeCompare(key(b))));
+      return out;
+    }
+    const missingRequired = run => (run.items || []).filter(i => i.required && !i.done);
+    const runProgress = run => ({ done: (run.items || []).filter(i => i.done).length, total: (run.items || []).length });
+    // At most one notification a day, only when asked for and something is late.
+    const shouldNotify = (settings, lateEntries, today) => !!settings.notifyLate && lateEntries.length > 0 && settings.lastNotified !== today;
+    // LOGIC END
+
+    // ---- state and small helpers ---------------------------------------------------------------
+    const DEFAULTS = { v: 1, person: '', weekStart: 0, notifyLate: true, lastNotified: null };
+    const routinesCol = tendly.db.collection('routines'), runsCol = tendly.db.collection('runs');
+    const $ = id => document.getElementById(id);
+    const h = tkit.h, app = document.querySelector('t-app');
+    const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
+    let S, routineStore, runStore, runId = null, lastView = 'today', editing = null, draft = null, notifyDenied = false, notifying = false, doneOpen = false, starting = false;
+    const ready = { routines: false, runs: false };
+    const isReady = () => ready.routines && ready.runs;
+    const plain = rec => Object.assign({}, rec.data, { id: rec.id });
+    const routineList = () => routineStore.records.map(plain).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const runList = () => runStore.records.map(plain);
+    const runRec = id => runStore.records.find(r => r.id === id);
+    const ws = () => S.value.weekStart;
+    const clock = () => clockOf(new Date());
+    const nowIso = () => new Date().toISOString();
+    const statusLabel = s => s === 'done' ? T.sDone : s === 'skipped' ? T.sSkipped : T.sOpen;
+    function hold(modal) {
+      modal.addEventListener('input', () => tendly.host.holdReload(true));
+      modal.addEventListener('t-close', () => tendly.host.holdReload(false));
+    }
+    function freqText(r) {
+      const f = r.frequency || {}, at = r.dueTime && f.kind !== 'manual' ? ' ' + T.at(r.dueTime) : '';
+      if (f.kind === 'daily') return T.everyDay + at;
+      if (f.kind === 'weekly') {
+        const days = (f.weekdays && f.weekdays.length ? f.weekdays : [1]).slice().sort((a, b) => (a - ws() + 7) % 7 - (b - ws() + 7) % 7);
+        return (days.length === 1 ? T.everyWeekday(T.dayLong[days[0]]) : T.weekRange(T.dayShort[days[0]], T.dayShort[days[days.length - 1]])) + at;
+      }
+      if (f.kind === 'monthly') return T.monthly(f.day || 1) + at;
+      if (f.kind === 'once') return T.onceOn(tkit.date(f.date)) + at;
+      return T.manual;
+    }
+    function periodText(routine, period) {
+      const kind = routine && routine.frequency ? routine.frequency.kind : 'daily', p = ymdParts(period);
+      if (kind === 'weekly') return T.weekOf(tkit.date(period));
+      if (kind === 'monthly') return new Intl.DateTimeFormat(document.documentElement.lang, { month: 'long', year: 'numeric' }).format(new Date(p.y, p.m - 1, 1));
+      return period === clock().date ? T.todayComma(tkit.date(period)) : tkit.date(period);
+    }
+    function openRun(id) { location.hash = '#run/' + encodeURIComponent(id); }
+    async function startRun(r) {
+      if (starting) return;
+      starting = true;
+      try {
+        const c = clock();
+        const rec = await runsCol.insert({ routineId: r.id, routineName: r.name, period: periodFor(r, c.date, ws()) || c.date, startedAt: nowIso(), finishedAt: null, by: S.value.person,
+          items: (r.steps || []).map(s => ({ stepId: s.id, label: s.label, required: !!s.required, help: s.help || '', done: false, at: null, note: '' })), status: 'open', note: '' });
+        openRun(rec.id);
+      } catch (error) { fail(error); } finally { starting = false; }
+    }
+
+    // ---- Today -----------------------------------------------------------------------------------
+    function rowFor(entry, kind) {
+      const r = entry.routine, run = entry.run, meta = [T.stepsN((r.steps || []).length)];
+      if (r.dueTime) meta.push(T.at(r.dueTime));
+      if (r.owner) meta.push(r.owner);
+      const kids = [h('span', { class: 't-row-text' }, h('strong', { text: r.name }), h('small', { text: meta.join(' · ') }))];
+      if (kind === 'late') kids.push(h('span', { class: 't-badge danger', text: T.late }));
+      if (run && run.status === 'open') { const p = runProgress(run); kids.push(h('t-progress', { class: 'row-progress', value: String(p.done), max: String(p.total) })); }
+      kids.push(h('button', { type: 'button', class: 't-button' + (kind === 'done' ? '' : ' primary'), text: kind === 'done' ? T.view : run ? T.continue : T.start, onClick: () => run ? openRun(run.id) : startRun(r) }));
+      return h('li', { class: 't-row' }, ...kids);
+    }
+    function drawToday() {
+      const body = $('today-body'), g = groupToday(routineList(), runList(), new Date(), ws());
+      const none = !routineStore.records.length;
+      $('empty').hidden = !none;
+      $('notify-off').hidden = !notifyDenied || !S.value.notifyLate;
+      tkit.clear(body);
+      if (none) return;
+      const sections = [['late', T.secLate, 'late'], ['open', T.secOpen, ''], ['today', T.secToday, '']];
+      sections.forEach(([k, title, cls]) => {
+        if (g[k].length) body.appendChild(h('section', {}, h('h2', { class: 'group-title ' + cls, text: title + ' (' + g[k].length + ')' }), h('ul', { class: 't-list' }, ...g[k].map(e => rowFor(e, k)))));
+      });
+      if (!g.late.length && !g.open.length && !g.today.length) {
+        body.appendChild(h('t-state', { kind: 'empty', title: T.nothingTitle, text: T.nothingText }, h('button', { type: 'button', class: 't-button', text: T.navRoutines, onClick: () => { app.view = 'routines'; } })));
+      }
+      if (g.done.length) {
+        const box = h('details', { class: 'done-group' }, h('summary', { class: 'group-title', text: T.secDone + ' (' + g.done.length + ')' }), h('ul', { class: 't-list' }, ...g.done.map(e => rowFor(e, 'done'))));
+        box.open = doneOpen;
+        box.addEventListener('toggle', () => { doneOpen = box.open; });
+        body.appendChild(box);
+      }
+    }
+    function setSummary() {
+      if (!isReady() || app.view !== 'today') return;
+      const g = groupToday(routineList(), runList(), new Date(), ws());
+      tkit.context({ summary: T.summary(g.late.length, g.today.length, g.open.length) });
+    }
+
+    // ---- run screen (#run/<id>) -----------------------------------------------------------------
+    // A tick is saved at once. On a conflict (another pane ticked meanwhile) the change is applied again to the newest copy.
+    async function saveItems(rec, mutate) {
+      let cur = rec;
+      for (let attempt = 0; ; attempt++) {
+        try { return await runsCol.update(cur.id, { items: mutate(cur.data.items.map(i => Object.assign({}, i))) }, { rev: cur.rev }); }
+        catch (error) { if (error.code === 'conflict' && attempt < 2) cur = error.current; else throw error; }
+      }
+    }
+    function drawRun() {
+      if (!runId || !isReady()) return;
+      const rec = runRec(runId);
+      if (!rec) { tkit.toast(T.notFound); app.view = lastView; return; }
+      const run = plain(rec), open = run.status === 'open', routine = routineList().find(r => r.id === run.routineId);
+      $('run-title').textContent = run.routineName;
+      const finished = open ? '' : ' · ' + T.finishedInfo(statusLabel(run.status), run.by, run.finishedAt ? tkit.date(run.finishedAt, 'time') : '');
+      $('run-sub').textContent = periodText(routine, run.period) + finished;
+      const check = $('run-check');
+      check.readonly = !open;
+      check.items = run.items.map(i => ({ id: i.stepId, label: i.label, done: i.done, required: i.required, note: [i.help, i.note].filter(Boolean).join(' · '), by: run.by, at: i.at }));
+      const note = $('run-note');
+      note.disabled = !open;
+      if (document.activeElement !== note) note.value = run.note || '';
+      $('run-note-btn').hidden = !open;
+      $('run-bar').hidden = !open;
+      const missing = missingRequired(run);
+      $('run-finish').disabled = missing.length > 0;
+      $('run-finish').title = missing.length ? T.missing(missing.map(i => i.label).join(', ')) : '';
+      $('run-hint').textContent = missing.length ? T.missing(missing.map(i => i.label).join(', ')) : '';
+      $('run-hint').hidden = !missing.length;
+      const p = runProgress(run);
+      setTimeout(() => tkit.context({ selection: T.runSel(run.routineName, routine && routine.frequency && routine.frequency.kind === 'daily' && run.period === clock().date ? T.todayWord : periodText(routine, run.period), p.done, p.total) }), 0);
+    }
+    $('run-check').addEventListener('t-toggle', async event => {
+      const rec = runRec(runId), { id, done } = event.detail;
+      if (!rec) return;
+      try { await saveItems(rec, items => items.map(i => i.stepId === id ? Object.assign(i, { done, at: done ? nowIso() : null }) : i)); } catch (error) { fail(error); drawRun(); }
+    });
+    $('run-note').addEventListener('change', event => { runsCol.update(runId, { note: event.target.value }).catch(fail); });
+    $('run-back').addEventListener('click', () => { app.view = lastView; });
+    // Leaves the run screen once `job` worked. runId is cleared first so the live update does not say "not found".
+    async function leaveAfter(job) {
+      const id = runId;
+      runId = null;
+      try { await job(id); app.view = lastView; return true; } catch (error) { runId = id; fail(error); drawRun(); return false; }
+    }
+    $('run-finish').addEventListener('click', () => {
+      const rec = runRec(runId);
+      if (!rec || missingRequired(plain(rec)).length) return;
+      leaveAfter(id => runsCol.update(id, { status: 'done', finishedAt: nowIso(), by: S.value.person || rec.data.by })).then(ok => { if (ok) tkit.toast(T.finishedToast, { tone: 'success' }); });
+    });
+    $('run-discard').addEventListener('click', async () => {
+      if (runRec(runId) && await tkit.confirm(T.discardQ, { confirm: T.discard, tone: 'danger' })) leaveAfter(id => runsCol.remove(id));
+    });
+    $('run-skip').addEventListener('click', () => { $('skip-reason').value = ''; $('skip-modal').open(); });
+    $('skip-cancel').addEventListener('click', () => $('skip-modal').close());
+    $('skip-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const rec = runRec(runId), note = $('skip-reason').value.trim();
+      if (!rec) return;
+      $('skip-modal').close();
+      leaveAfter(id => runsCol.update(id, { status: 'skipped', finishedAt: nowIso(), note, by: S.value.person || rec.data.by }));
+    });
+    function fillNote() {
+      const rec = runRec(runId), item = rec && rec.data.items.find(i => i.stepId === $('note-step').value);
+      $('note-text').value = item ? item.note || '' : '';
+    }
+    $('run-note-btn').addEventListener('click', () => {
+      const rec = runRec(runId);
+      if (!rec) return;
+      const select = $('note-step');
+      tkit.clear(select);
+      rec.data.items.forEach(i => select.appendChild(h('option', { value: i.stepId, text: i.label })));
+      fillNote();
+      $('note-modal').open();
+    });
+    $('note-step').addEventListener('change', fillNote);
+    $('note-cancel').addEventListener('click', () => $('note-modal').close());
+    $('note-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const rec = runRec(runId), stepId = $('note-step').value, text = $('note-text').value.trim();
+      if (!rec) return;
+      try { await saveItems(rec, items => items.map(i => i.stepId === stepId ? Object.assign(i, { note: text }) : i)); $('note-modal').close(); } catch (error) { fail(error); }
+    });
+    hold($('skip-modal')); hold($('note-modal'));
+    function syncRoute(route) {
+      if (route.view !== 'run') { lastView = route.view || 'today'; runId = null; return; }
+      if (!route.id) { app.view = lastView; return; }
+      runId = route.id;
+      drawRun();
+    }
+
+    // ---- routines: list and editor -----------------------------------------------------------------
+    function drawRoutines() {
+      const box = $('routine-list'), list = routineList(), runs = runList();
+      tkit.clear(box);
+      if (!list.length) { box.appendChild(h('t-state', { kind: 'empty', title: T.emptyTitle, text: T.emptyText })); return; }
+      const c = clock();
+      const rows = list.map(r => {
+        const next = nextDue(r, new Date(), runs, ws());
+        const nextText = r.active === false ? T.paused : next ? T.next(next === c.date ? T.todayWord : tkit.date(next)) : '';
+        const toggle = h('input', { type: 'checkbox', class: 't-switch', checked: r.active !== false, 'aria-label': T.active + ': ' + r.name });
+        toggle.addEventListener('change', () => { const rec = routineStore.records.find(x => x.id === r.id); routinesCol.update(r.id, { active: toggle.checked }, { rev: rec.rev }).catch(error => { fail(error); drawRoutines(); }); });
+        return h('li', { class: 't-row' }, toggle,
+          h('button', { type: 'button', class: 'row-link', onClick: () => openRoutine(routineStore.records.find(x => x.id === r.id)) },
+            h('strong', { text: r.name }), h('small', { text: [freqText(r), T.stepsN((r.steps || []).length), nextText, r.owner].filter(Boolean).join(' · ') })),
+          h('button', { type: 'button', class: 't-button', text: T.start, disabled: r.active === false, onClick: () => startRun(r) }));
+      });
+      box.appendChild(h('ul', { class: 't-list' }, ...rows));
+    }
+    const newStep = () => ({ id: 's_' + tkit.uid(), label: '', required: false });
+    function drawEditor() {
+      document.querySelectorAll('#r-kind button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === draft.kind)));
+      $('r-weekly').hidden = draft.kind !== 'weekly';
+      $('r-monthly').hidden = draft.kind !== 'monthly';
+      $('r-once').hidden = draft.kind !== 'once';
+      $('r-time-field').hidden = draft.kind === 'manual';
+      const days = $('r-days');
+      tkit.clear(days);
+      for (let i = 0; i < 7; i++) {
+        const d = (ws() + i) % 7;
+        days.appendChild(h('button', { type: 'button', class: 't-button small', text: T.dayShort[d], 'aria-pressed': String(draft.weekdays.indexOf(d) >= 0), onClick: () => {
+          draft.weekdays = draft.weekdays.indexOf(d) >= 0 ? draft.weekdays.filter(x => x !== d) : draft.weekdays.concat(d);
+          drawEditor();
+        } }));
+      }
+      const list = $('steps-list');
+      tkit.clear(list);
+      // KIT-CANDIDATE: <t-list-editor> with an extra "required" switch per row (steps are label + required); built here until the kit has it.
+      draft.steps.forEach((s, i) => {
+        const input = h('input', { type: 'text', class: 't-input', value: s.label, placeholder: T.stepPlaceholder, 'aria-label': T.stepN(i + 1) });
+        input.addEventListener('input', () => { s.label = input.value; });
+        const req = h('input', { type: 'checkbox', class: 't-switch', checked: !!s.required, 'aria-label': T.required + ': ' + T.stepN(i + 1) });
+        req.addEventListener('change', () => { s.required = req.checked; });
+        const move = (by, label) => h('button', { type: 'button', class: 't-icon-button', 'aria-label': label, disabled: i + by < 0 || i + by >= draft.steps.length, onClick: () => { draft.steps.splice(i + by, 0, draft.steps.splice(i, 1)[0]); drawEditor(); } }, h('span', { class: by < 0 ? 'flip' : '' }, tkit.icon('chevron-down', 16)));
+        const del = h('button', { type: 'button', class: 't-icon-button', 'aria-label': T.delete, onClick: () => { draft.steps.splice(i, 1); drawEditor(); } }, tkit.icon('trash', 16));
+        list.appendChild(h('div', { class: 'step-row' }, input, h('span', { class: 'step-tools' }, h('label', { class: 't-switch-line' }, req, h('span', { text: T.required })), move(-1, T.moveUp), move(1, T.moveDown), del)));
+      });
+    }
+    function openRoutine(rec) {
+      editing = rec || null;
+      const r = rec ? rec.data : {}, f = r.frequency || { kind: 'daily' };
+      draft = { kind: f.kind, weekdays: (f.weekdays || [1]).slice(), steps: (r.steps || []).map(s => Object.assign({}, s)) };
+      if (!draft.steps.length) draft.steps.push(newStep());
+      $('r-name').value = r.name || '';
+      $('r-description').value = r.description || '';
+      $('r-owner').value = r.owner || '';
+      $('r-day').value = f.day || 1;
+      $('r-date').value = f.date || clock().date;
+      $('r-time').value = r.dueTime || '';
+      $('r-delete').hidden = !rec;
+      $('routine-modal').title = rec ? T.editRoutine : T.newRoutineTitle;
+      drawEditor();
+      $('routine-modal').open();
+    }
+    document.querySelectorAll('.new-routine').forEach(b => b.addEventListener('click', () => openRoutine(null)));
+    $('r-kind').addEventListener('click', event => { const b = event.target.closest('button[data-kind]'); if (b) { draft.kind = b.dataset.kind; drawEditor(); } });
+    $('add-step').addEventListener('click', () => { draft.steps.push(newStep()); drawEditor(); const inputs = $('steps-list').querySelectorAll('input[type=text]'); inputs[inputs.length - 1].focus(); });
+    $('r-cancel').addEventListener('click', () => $('routine-modal').close());
+    hold($('routine-modal'));
+    $('routine-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const name = $('r-name').value.trim(), steps = draft.steps.map(s => Object.assign({}, s, { label: s.label.trim() })).filter(s => s.label);
+      if (!name) { $('r-name').focus(); return fail(new Error(T.needName)); }
+      if (!steps.length) return fail(new Error(T.needStep));
+      const frequency = { kind: draft.kind };
+      if (draft.kind === 'weekly') frequency.weekdays = draft.weekdays.length ? draft.weekdays.slice().sort() : [1];
+      if (draft.kind === 'monthly') frequency.day = Math.min(31, Math.max(1, parseInt($('r-day').value, 10) || 1));
+      if (draft.kind === 'once') { frequency.date = $('r-date').value; if (!frequency.date) return fail(new Error(T.needDate)); }
+      const data = { name, description: $('r-description').value.trim(), owner: $('r-owner').value.trim(), steps, frequency, dueTime: draft.kind !== 'manual' && $('r-time').value ? $('r-time').value : null };
+      $('r-save').disabled = true;
+      try {
+        if (editing) await routinesCol.update(editing.id, data, { rev: editing.rev });
+        else await routinesCol.insert(Object.assign(data, { active: true, order: Math.max(0, ...routineStore.records.map(r => r.data.order || 0)) + 1 }));
+        $('routine-modal').close();
+      } catch (error) {
+        if (error.code === 'conflict') { tkit.toast(T.conflict, { tone: 'error' }); openRoutine(error.current); } else fail(error);
+      } finally { $('r-save').disabled = false; }
+    });
+    $('r-delete').addEventListener('click', async () => {
+      if (!editing || !await tkit.confirm(T.deleteQ(editing.data.name), { confirm: T.delete, tone: 'danger' })) return;
+      try {
+        for (const r of runStore.records.filter(x => x.data.routineId === editing.id && x.data.status === 'open')) await runsCol.remove(r.id);
+        await routinesCol.remove(editing.id);
+        $('routine-modal').close();
+      } catch (error) { fail(error); }
+    });
+
+    // ---- history ------------------------------------------------------------------------------------
+    function drawHistory() {
+      const table = $('hist-table'), pills = $('hist-pills'), runs = runList().sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+      table.columns = [{ key: 'routine', label: T.cRoutine }, { key: 'period', label: T.cPeriod, type: 'date' }, { key: 'status', label: T.cStatus, type: 'badge', tones: { [T.sDone]: 'ok', [T.sSkipped]: 'warn', [T.sOpen]: 'accent' } },
+        { key: 'by', label: T.cBy }, { key: 'finished', label: T.cFinished }, { key: 'items', label: T.cItems }];
+      table.rows = runs.map(r => { const p = runProgress(r); return { id: r.id, routineId: r.routineId, routine: r.routineName, period: r.period, status: statusLabel(r.status), by: r.by || '', finished: r.finishedAt ? tkit.date(r.finishedAt, 'time') : '', items: p.done + ' / ' + p.total }; });
+      const names = {};
+      runs.forEach(r => { names[r.routineId] = r.routineName; });
+      pills.options = [{ value: '', label: T.all, count: runs.length }].concat(Object.keys(names).map(id => ({ value: id, label: names[id], count: runs.filter(r => r.routineId === id).length })));
+    }
+    $('hist-pills').value = '';
+    $('hist-pills').addEventListener('t-change', event => { const id = event.detail.value; $('hist-table').filter = id ? row => row.routineId === id : null; });
+    $('hist-table').addEventListener('t-open', event => openRun(event.detail.id));
+
+    // ---- settings -------------------------------------------------------------------------------------
+    const tools = $('tools');
+    $('person').addEventListener('change', event => { S.save({ person: event.target.value.trim() }).catch(fail); });
+    $('notify-late').addEventListener('change', event => { S.save({ notifyLate: event.target.checked }).catch(fail); });
+    $('week-start').addEventListener('click', event => { const b = event.target.closest('button[data-ws]'); if (b) S.save({ weekStart: +b.dataset.ws }).catch(fail); });
+    function applySettings() {
+      const v = S.value;
+      if (document.activeElement !== $('person')) $('person').value = v.person;
+      $('notify-late').checked = v.notifyLate;
+      document.querySelectorAll('#week-start button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.ws === v.weekStart)));
+      if (isReady()) render();
+    }
+    tools.noun = T.noun;
+    tools.filename = T.csvName;
+    tools.fields = [];
+    tools.exportRows = records => records.map(r => r.data).sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)));
+    tools.exportColumns = () => [
+      { key: 'routineName', label: T.cRoutine }, { key: 'period', label: T.cPeriod }, { key: 'status', label: T.cStatus, format: statusLabel }, { key: 'by', label: T.cBy },
+      { key: 'startedAt', label: T.cStarted }, { key: 'finishedAt', label: T.cFinished, format: v => v || '' },
+      { key: 'items', label: T.cDone, format: items => (items || []).filter(i => i.done).length }, { key: 'items', label: T.cTotal, format: items => (items || []).length }, { key: 'note', label: T.cNote }];
+
+    // ---- late notifications (at most once a day, only with the permission) ---------------------------------
+    async function checkLate() {
+      if (!S || !isReady() || notifying || notifyDenied) return;
+      const g = groupToday(routineList(), runList(), new Date(), ws()), today = clock().date;
+      if (!shouldNotify(S.value, g.late, today)) return;
+      notifying = true;
+      try {
+        await tendly.host.notify(T.notifyTitle, T.notifyBody(g.late.length, g.late.slice(0, 3).map(e => e.routine.name)));
+        await S.save({ lastNotified: today });
+      } catch (error) { if (error && error.code === 'permission') { notifyDenied = true; drawToday(); } }
+      finally { notifying = false; }
+    }
+
+    // ---- examples ---------------------------------------------------------------------------------------
+    const iso = (daysAgo, hour, minute) => { const d = new Date(); d.setDate(d.getDate() - daysAgo); d.setHours(hour, minute, 0, 0); return d.toISOString(); };
+    // Adds the example routines (marked _sample) and returns the example runs for the caller to insert.
+    async function buildExamples() {
+      const ex = T.examples, made = [];
+      for (const e of ex.routines) {
+        const rec = await routinesCol.insert({ name: e.name, description: e.description, owner: e.owner, frequency: e.frequency, dueTime: e.dueTime, active: true, order: made.length + 1, _sample: true,
+          steps: e.steps.map((label, i) => ({ id: 's' + (i + 1), label, required: e.required.indexOf(i) >= 0 })) });
+        made.push(plain(rec));
+      }
+      const run = (r, daysAgo, status, doneCount, extra) => {
+        const items = r.steps.map((s, i) => ({ stepId: s.id, label: s.label, required: s.required, done: i < doneCount, at: i < doneCount ? iso(daysAgo, 8 + Math.floor(i / 3), 35 + i) : null, note: '' }));
+        const base = { routineId: r.id, routineName: r.name, period: periodFor(r, clockOf(new Date(iso(daysAgo, 12, 0))).date, ws()), startedAt: iso(daysAgo, 8, 30), by: ex.people[daysAgo % ex.people.length], items, status, note: '', finishedAt: status === 'open' ? null : iso(daysAgo, 9, 5) };
+        return Object.assign(base, extra || {});
+      };
+      const [open, ext, close] = made;
+      return [run(open, 0, 'open', 3), run(open, 1, 'done', open.steps.length), run(open, 2, 'done', open.steps.length), run(open, 3, 'skipped', 0, { note: ex.skipReason }), run(open, 4, 'done', open.steps.length),
+        run(ext, 7, 'done', ext.steps.length), run(close, 9, 'done', close.steps.length)];
+    }
+    async function loadExamples() { try { await tkit.samples.load(runsCol, await buildExamples()); } catch (error) { fail(error); } }
+    async function clearExamples() { try { await tkit.samples.clear(runsCol); await tkit.samples.clear(routinesCol); } catch (error) { fail(error); } }
+    tools.examples = buildExamples;
+    tools.addEventListener('t-examples', event => { if (event.detail.action === 'cleared') tkit.samples.clear(routinesCol).catch(fail); });
+    $('empty').addEventListener('t-action', () => openRoutine(null));
+    $('empty').addEventListener('t-examples', loadExamples);
+    document.querySelectorAll('t-sample-banner').forEach(b => b.addEventListener('t-clear', clearExamples));
+
+    // ---- render and start-up ------------------------------------------------------------------------------
+    function render() {
+      if (!isReady()) return;
+      drawToday(); drawRoutines(); drawHistory(); drawRun(); setSummary();
+      const examples = tkit.samples.count(runStore.records) + tkit.samples.count(routineStore.records);
+      document.querySelectorAll('t-sample-banner').forEach(b => { b.count = examples; });
+      tools.records = runStore.records;
+    }
+    app.addEventListener('t-view', () => setTimeout(setSummary, 0));
+    tkit.route.on(syncRoute);
+    (async () => {
+      S = await tkit.settings('settings', DEFAULTS);
+      if (S.error) fail(S.error);
+      S.on(applySettings);
+      tools.collection = runsCol;
+      try { const p = await tendly.permissions.get(); if (p && Array.isArray(p.refused) && p.refused.indexOf('notify') >= 0) notifyDenied = true; } catch (_) { /* outside Tendly: no bell */ }
+      const onError = error => { $('today-body').replaceChildren(h('t-state', { kind: 'error', title: T.loadFail, text: error.message }, h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => { routineStore.reload(); runStore.reload(); } }))); };
+      routineStore = tkit.live(routinesCol, () => { ready.routines = true; render(); }, { limit: 5000, onError });
+      runStore = tkit.live(runsCol, () => { ready.runs = true; render(); }, { limit: 5000, onError });
+      applySettings();
+      await Promise.all([routineStore.ready, runStore.ready]);
+      syncRoute(tkit.route.get());
+      checkLate();
+      setInterval(checkLate, 600000);
+      setInterval(() => { if (isReady()) { drawToday(); drawRoutines(); setSummary(); } }, 60000);
+    })();
+  </script>
+</body>
+</html>

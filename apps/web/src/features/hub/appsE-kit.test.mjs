@@ -226,3 +226,16 @@ test('templates: every one the builder offers exists in both languages, plus doc
   }
   assert.ok(templates.document && templates.issues);
 });
+
+test('templates: every tkit.x.y a page calls exists in the kit (en and pt-BR)', () => {
+  const tkit = loadKit();
+  const missing = [];
+  for (const [name, html] of [...Object.entries(templates), ...Object.entries(templatesPt)]) {
+    for (const path of new Set(html.match(/tkit(?:\.[A-Za-z_]+)+/g) ?? [])) {
+      let value = tkit;
+      for (const key of path.split('.').slice(1)) value = value == null ? undefined : value[key];
+      if (value === undefined) missing.push(`${name}: ${path}`);
+    }
+  }
+  assert.deepEqual(missing, []);
+});

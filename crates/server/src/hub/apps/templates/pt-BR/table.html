@@ -9,9 +9,8 @@
   <script src="/api/hub/apps/kit.js"></script>
   <style>
     .table-body { display: grid; gap: var(--t-space-4); min-width: 0; }
-    .table-body[hidden] { display: none; }
-    .t-table tfoot td { border-top: 1px solid var(--t-line); background: var(--t-surface); font-weight: 600; font-variant-numeric: tabular-nums; }
     .chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--t-space-2); }
+    .settings-stack { display: grid; gap: var(--t-space-3); }
   </style>
 </head>
 <body>
@@ -30,6 +29,7 @@
           </header>
           <t-sample-banner id="banner"></t-sample-banner>
           <div id="status"><t-state kind="loading"></t-state></div>
+          <t-empty-start id="empty" hidden title="Nenhum registro ainda" text="Adicione o primeiro, ou veja como fica com alguns exemplos." action="Novo registro"></t-empty-start>
           <div class="table-body" id="body" hidden>
             <div class="t-grid" id="stats"></div>
             <t-pills id="category-filter"></t-pills>
@@ -41,40 +41,23 @@
       <t-view name="settings">
         <div class="t-page">
           <header class="t-page-head"><div><h1 class="t-title">Ajustes</h1><p class="t-muted">Tudo aqui pode ser mudado a qualquer momento. Seus registros são mantidos.</p></div></header>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Categorias</h2></div>
-            <p class="t-muted">A lista de onde você escolhe ao adicionar um registro. Ao renomear uma categoria, você pode atualizar os registros que a usam.</p>
-            <t-list-editor id="cat-editor" tones></t-list-editor>
-            <div id="orphans"></div>
-          </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Moeda</h2></div>
-            <label class="t-field"><span>Moeda dos valores</span><select id="currency"></select></label>
-          </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Nome da coluna de valor</h2></div>
-            <label class="t-field"><span>Valor, Custo, Horas...</span><input type="text" id="amount-label" maxlength="30"></label>
-          </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Dados</h2></div>
-            <div class="t-actions" style="justify-content: flex-start">
-              <button type="button" class="t-button" id="export-csv">Exportar CSV</button>
-              <button type="button" class="t-button" id="import-csv">Importar CSV</button>
-            </div>
-          </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Exemplos</h2></div>
-            <p class="t-muted" id="sample-text"></p>
-            <div class="t-actions" style="justify-content: flex-start">
-              <button type="button" class="t-button" id="sample-load">Ver com exemplos</button>
-              <button type="button" class="t-button" id="sample-clear">Apagar exemplos</button>
-            </div>
-          </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Zona de perigo</h2></div>
-            <p class="t-muted" id="danger-text"></p>
-            <div class="t-actions" style="justify-content: flex-start"><button type="button" class="t-button danger" id="delete-all">Apagar todos os registros</button></div>
-          </section>
+          <div class="settings-stack">
+            <section class="t-card">
+              <div class="t-card-head"><h2>Categorias</h2></div>
+              <p class="t-muted">A lista de onde você escolhe ao adicionar um registro. Ao renomear uma categoria, você pode atualizar os registros que a usam.</p>
+              <t-list-editor id="cat-editor" tones></t-list-editor>
+              <div id="orphans"></div>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Moeda</h2></div>
+              <label class="t-field"><span>Moeda dos valores</span><select id="currency"></select></label>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Nome da coluna de valor</h2></div>
+              <label class="t-field"><span>Valor, Custo, Horas...</span><input type="text" id="amount-label" maxlength="30"></label>
+            </section>
+            <t-data-tools id="tools"></t-data-tools>
+          </div>
         </div>
       </t-view>
     </main>
@@ -89,7 +72,6 @@
       </div>
     </form>
   </t-modal>
-  <t-import id="importer"></t-import>
   <t-detail id="detail" title-field="name">
     <button type="button" slot="actions" class="t-button" id="detail-edit">Editar</button>
     <button type="button" slot="actions" class="t-button danger" id="detail-delete">Apagar</button>
@@ -99,26 +81,22 @@
     // Records live in the collection `entries`: { name, category, amount, date, notes }. `category` holds the
     // category's LABEL (text), never an id, so entries made by older versions of this page keep working.
     // Settings (categories, currency, the amount column's name) are one value in tendly.data, key "settings".
+    // CSV, examples, delete-all and the empty state are kit elements (<t-data-tools>, <t-empty-start>).
 
     // ---- Text (the only strings in the script) -------------------------------------------------------------
     const TXT = {
       view: 'Tabela', entry: 'Registro', newEntry: 'Novo registro', editEntry: 'Editar registro', name: 'Nome', category: 'Categoria', date: 'Data', notes: 'Notas',
       categoryHelp: 'Gerencie a lista em Ajustes.', all: 'Todos', total: 'total', thisMonth: 'no mês', entries: 'Registros', sum: 'Total',
-      count: n => n + (n === 1 ? ' registro' : ' registros'), rows: n => n + (n === 1 ? ' linha' : ' linhas'),
+      count: n => n + (n === 1 ? ' registro' : ' registros'),
       summary: (n, total, filter) => 'Tabela: ' + n + (n === 1 ? ' registro' : ' registros') + ', total ' + total + (filter ? ' (filtro: ' + filter + ')' : ''),
       summaryEmpty: 'Tabela: nenhum registro ainda',
-      emptyTitle: 'Nenhum registro ainda', emptyText: 'Adicione o primeiro, ou veja como fica com alguns exemplos.', seeExamples: 'Ver com exemplos',
       loadError: 'Não deu para carregar os registros', retry: 'Tentar de novo', noCurrency: 'Sem moeda (número simples)',
       conflict: 'Alguém mudou este registro enquanto isso; recarreguei.',
       deleteAsk: name => 'Apagar "' + name + '"?', delete: 'Apagar',
       renameAsk: (n, from, to) => n + (n === 1 ? ' registro usa' : ' registros usam') + ' "' + from + '". Mudar para "' + to + '"?',
       renameYes: n => 'Atualizar ' + n + (n === 1 ? ' registro' : ' registros'), renameNo: 'Deixar como está',
       newCategory: 'Adicionar categoria', outside: 'Nos registros, mas fora da lista:', addToList: 'Adicionar à lista',
-      sampleNone: 'Nenhum exemplo carregado.', sampleSome: n => n + (n === 1 ? ' exemplo está' : ' exemplos estão') + ' na sua tabela.',
-      dangerText: n => n === 0 ? 'Não há nada para apagar.' : 'Isto remove ' + (n === 1 ? 'o único registro' : 'todos os ' + n + ' registros') + ', exemplos incluídos. Não dá para desfazer.',
-      deleteAllAsk: n => 'Apagar ' + (n === 1 ? 'o único registro' : 'todos os ' + n + ' registros') + '? Não dá para desfazer.', deleteAll: 'Apagar todos os registros',
-      exported: n => 'Exportado: ' + n + (n === 1 ? ' linha' : ' linhas'), importing: n => 'Importadas ' + n + ' até agora...', imported: n => n + (n === 1 ? ' linha importada' : ' linhas importadas'),
-      deleted: n => n + (n === 1 ? ' registro apagado' : ' registros apagados')
+      one: 'registro', many: 'registros'
     };
     // Example data: [name, category index, amount, days ago, notes]. Dates are relative to today.
     const EXAMPLE_CATEGORIES = [['Material', 'accent'], ['Software', 'info'], ['Viagem', 'warn'], ['Serviços', 'ok']];
@@ -136,10 +114,10 @@
     const entries = tendly.db.collection('entries');
     const $ = id => document.getElementById(id);
     const app = document.querySelector('t-app');
-    const [status, body, stats, pills, table, banner, editor, form, recordForm, importer, detail, catEditor] =
-      ['status', 'body', 'stats', 'category-filter', 'table', 'banner', 'editor', 'row-form', 'record-form', 'importer', 'detail', 'cat-editor'].map($);
+    const [status, empty, body, stats, pills, table, banner, editor, form, recordForm, detail, catEditor, tools] =
+      ['status', 'empty', 'body', 'stats', 'category-filter', 'table', 'banner', 'editor', 'row-form', 'record-form', 'detail', 'cat-editor', 'tools'].map($);
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    let S, settings, store, editing = null, filterCategory = '', pendingId = null, loaded = false, columnsKey = '';
+    let S, settings, store, editing = null, filterCategory = '', pendingId = null, loaded = false, columnsKey = '', added = {};
 
     // ---- Schema (rebuilt from settings: the amount's name and kind, the category options) ------------------------
     function categoryOptions() {
@@ -151,7 +129,7 @@
     function fields() {
       return [
         { id: 'name', label: TXT.name, type: 'text', required: true },
-        { id: 'category', label: TXT.category, type: 'choice', options: categoryOptions(), help: TXT.categoryHelp },
+        { id: 'category', label: TXT.category, type: 'choice', options: categoryOptions(), creatable: true, help: TXT.categoryHelp },
         { id: 'amount', label: settings.amountLabel, type: settings.currency ? 'money' : 'number' },
         { id: 'date', label: TXT.date, type: 'date' },
         { id: 'notes', label: TXT.notes, type: 'longtext' }
@@ -159,7 +137,7 @@
     }
     const fmt = value => settings.currency ? tkit.money(value, settings.currency) : tkit.number(value);
     const sum = list => list.reduce((total, r) => total + (Number(r.amount) || 0), 0);
-    const appName = () => document.querySelector('.t-nav-title span:last-child').textContent.trim();
+    const newestFirst = (a, b) => String(b.data.date || '').localeCompare(String(a.data.date || '')) || String(b.created_at).localeCompare(String(a.created_at));
 
     // ---- Render --------------------------------------------------------------------------------------------------
     function applyColumns() {
@@ -176,27 +154,24 @@
         { key: 'notes', label: TXT.notes }
       ];
     }
+    // The footer row sums what is shown (category filter and search box included).
+    table.footer = { name: rows => TXT.sum + ' · ' + TXT.count(rows.length), amount: 'sum' };
     function render(records) {
       if (!settings) return;
       loaded = true;
       applyColumns();
-      const sorted = records.slice().sort((a, b) => String(b.data.date || '').localeCompare(String(a.data.date || '')) || String(b.created_at).localeCompare(String(a.created_at)));
-      const rows = sorted.map(r => Object.assign({ id: r.id }, r.data));
+      const rows = records.slice().sort(newestFirst).map(r => Object.assign({ id: r.id }, r.data));
       banner.count = tkit.samples.count(records);
       tkit.clear(status);
+      empty.hidden = records.length > 0;
       body.hidden = !records.length;
-      if (!records.length) showEmpty();
-      else { drawStats(rows); drawPills(rows); table.rows = rows; }
-      updateFoot();
+      if (records.length) { drawStats(rows); drawPills(rows); table.rows = rows; }
+      tools.fields = fields();
+      tools.records = records;
       drawSettings(records);
       if (detail.opened) { const fresh = records.find(r => detail.record && r.id === detail.record.id); if (fresh) { detail.fields = fields(); detail.record = fresh; } else detail.close(); }
       openPending();
       summarize();
-    }
-    function showEmpty() {
-      status.appendChild(tkit.h('t-state', { kind: 'empty', title: TXT.emptyTitle, text: TXT.emptyText },
-        tkit.h('button', { type: 'button', class: 't-button primary', text: TXT.newEntry, onClick: () => openEditor(null) }),
-        tkit.h('button', { type: 'button', class: 't-button', text: TXT.seeExamples, onClick: loadExamples })));
     }
     function drawStats(rows) {
       const month = tkit.today().slice(0, 7);
@@ -214,22 +189,8 @@
       pills.value = filterCategory;
       table.filter = filterCategory ? row => row.category === filterCategory : null;
     }
-
-    // KIT-CANDIDATE: <t-table> footer row. The kit's table has no footer, so this adds a <tfoot> with the sum of the rows
-    // that are visible (category filter and search box included). Sorting redraws the table, hence the listeners below.
-    function updateFoot() {
-      const inner = table.querySelector('table');
-      if (!inner || !body || body.hidden) return;
-      const rows = table.visible();
-      let foot = inner.querySelector('tfoot');
-      if (!foot) { foot = tkit.h('tfoot'); inner.appendChild(foot); }
-      tkit.clear(foot);
-      foot.appendChild(tkit.h('tr', {}, tkit.h('td', { text: TXT.sum + ' · ' + TXT.count(rows.length) }), tkit.h('td'), tkit.h('td', { class: 'num', text: fmt(sum(rows)) }), tkit.h('td', { colspan: '2' })));
-      summarize();
-    }
-    table.addEventListener('input', updateFoot);
-    table.addEventListener('click', updateFoot);
-    pills.addEventListener('t-change', event => { filterCategory = event.detail.value || ''; table.filter = filterCategory ? row => row.category === filterCategory : null; updateFoot(); });
+    pills.addEventListener('t-change', event => { filterCategory = event.detail.value || ''; table.filter = filterCategory ? row => row.category === filterCategory : null; summarize(); });
+    table.addEventListener('input', summarize);   // the search box changes which rows are shown
 
     function summarize() {
       if (!loaded || app.view !== 'table') return;
@@ -237,11 +198,12 @@
       const rows = table.visible();
       tkit.context({ summary: TXT.summary(rows.length, fmt(sum(rows)), filterCategory) });
     }
-    app.addEventListener('t-view', () => { summarize(); });
+    app.addEventListener('t-view', summarize);
 
     // ---- Add and edit --------------------------------------------------------------------------------------------
     function openEditor(record) {
       editing = record || null;
+      added = {};
       recordForm.fields = fields();
       recordForm.settings = { currency: settings.currency || undefined };
       recordForm.value = record ? record.data : { date: tkit.today() };
@@ -249,10 +211,18 @@
       editor.open();
       setTimeout(() => recordForm.focus(), 0);
     }
+    // A category created from the form ("New option…") is saved into the settings. The form knows it by a slug id,
+    // but entries store the label, so the slug is swapped for the label on save.
+    recordForm.addEventListener('t-option-added', event => {
+      const label = event.detail.option.label;
+      added[event.detail.option.id] = label;
+      if (!settings.categories.some(c => c.label === label)) addToList(label);
+    });
     form.addEventListener('submit', async event => {
       event.preventDefault();
       let data;
       try { data = await recordForm.submit(); } catch (error) { if (error.code !== 'invalid') fail(error); return; }
+      if (added[data.category]) data.category = added[data.category];
       try {
         if (editing) await entries.update(editing.id, data, { rev: editing.rev });
         else await entries.insert(data);
@@ -264,6 +234,8 @@
     });
     $('cancel').addEventListener('click', () => editor.close());
     $('new-row').addEventListener('click', () => openEditor(null));
+    empty.addEventListener('t-action', () => openEditor(null));
+    empty.addEventListener('t-examples', () => loadExamples().catch(fail));
     recordForm.addEventListener('t-input', () => { tendly.host.holdReload(true); });
     editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
 
@@ -288,8 +260,9 @@
       if (route.view === 'table' && route.id) { pendingId = route.id; openPending(); }
       else if (detail.opened) detail.close();
     });
-    table.addEventListener('t-open', event => { const record = store.records.find(r => r.id === event.detail.id); if (record) showDetail(record); });
-    detail.addEventListener('t-nav', event => { const record = store.records.find(r => r.id === event.detail.id); if (record) showDetail(record); });
+    const recordOf = event => store.records.find(r => r.id === event.detail.id);
+    table.addEventListener('t-open', event => { const record = recordOf(event); if (record) showDetail(record); });
+    detail.addEventListener('t-nav', event => { const record = recordOf(event); if (record) showDetail(record); });
     $('detail-edit').addEventListener('click', () => { const record = detail.record; detail.close(); openEditor(record); });
     $('detail-delete').addEventListener('click', async () => {
       const record = detail.record;
@@ -317,11 +290,6 @@
       if (settings.currency && !CURRENCIES.includes(settings.currency) && !select.querySelector('option[value="' + settings.currency + '"]')) select.appendChild(tkit.h('option', { value: settings.currency, text: settings.currency }));
       select.value = settings.currency;
       if (document.activeElement !== $('amount-label')) $('amount-label').value = settings.amountLabel;
-      const samples = tkit.samples.count(records);
-      $('sample-text').textContent = samples ? TXT.sampleSome(samples) : TXT.sampleNone;
-      $('sample-clear').disabled = !samples;
-      $('danger-text').textContent = TXT.dangerText(records.length);
-      $('delete-all').disabled = !records.length;
     }
     function addToList(label, tone) {
       const taken = settings.categories.map(c => c.id);
@@ -350,47 +318,22 @@
       CURRENCIES.forEach(code => select.appendChild(tkit.h('option', { value: code, text: code + (names && names.of(code) !== code ? ' - ' + names.of(code) : '') })));
     })();
 
-    // ---- Data: CSV, examples, delete all --------------------------------------------------------------------------
-    function exportCsv() {
-      const list = store.records.slice().sort((a, b) => String(b.data.date || '').localeCompare(String(a.data.date || ''))).map(r => r.data);
-      const cols = [{ key: 'name', label: TXT.name }, { key: 'category', label: TXT.category }, { key: 'amount', label: settings.amountLabel, format: v => v === null || v === undefined || v === '' ? '' : String(v) },
-        { key: 'date', label: TXT.date }, { key: 'notes', label: TXT.notes }];
-      tkit.csv.download(tkit.csv.stringify(list, cols, { delimiter: tkit.csv.delimiter() }), (appName() + ' - ' + TXT.view + ' - ' + tkit.today()).replace(/[\\/:*?"<>|]/g, '-') + '.csv');
-      tkit.toast(TXT.exported(list.length));
+    // ---- Data tools: CSV, examples, delete all (the kit draws the three cards) -----------------------------------
+    // Examples need their categories in the list first, so they are seeded before the examples load.
+    async function seedCategories() {
+      if (settings.categories.length) return;
+      const taken = [];
+      await S.save({ categories: EXAMPLE_CATEGORIES.map(([label, tone]) => { const id = tkit.slug(label, taken); taken.push(id); return { id, label, tone }; }) });
     }
-    async function importCsv() {
-      importer.fields = fields();
-      const rows = await importer.open();
-      if (!rows || !rows.length) return;
-      let done = 0;
-      try {
-        for (const row of rows) {
-          await entries.insert(row);
-          if (++done % 50 === 0 && done < rows.length) tkit.toast(TXT.importing(done));
-        }
-        tkit.toast(TXT.imported(done));
-      } catch (error) { fail(error); }
-    }
-    async function loadExamples() {
-      try {
-        if (!settings.categories.length) {
-          const taken = [];
-          await S.save({ categories: EXAMPLE_CATEGORIES.map(([label, tone]) => { const id = tkit.slug(label, taken); taken.push(id); return { id, label, tone }; }) });
-        }
-        await tkit.samples.load(entries, EXAMPLES.map(([name, category, amount, ago, notes]) => ({ name, category: EXAMPLE_CATEGORIES[category][0], amount, date: tkit.daysFromToday(-ago), notes })));
-      } catch (error) { fail(error); }
-    }
-    async function deleteAll() {
-      const list = store.records.slice();
-      if (!list.length || !await tkit.confirm(TXT.deleteAllAsk(list.length), { confirm: TXT.deleteAll, tone: 'danger' })) return;
-      try { for (const r of list) await entries.remove(r.id); tkit.toast(TXT.deleted(list.length)); } catch (error) { fail(error); }
-    }
-    $('export-csv').addEventListener('click', exportCsv);
-    $('import-csv').addEventListener('click', importCsv);
-    $('sample-load').addEventListener('click', loadExamples);
-    $('sample-clear').addEventListener('click', () => { tkit.samples.clear(entries).catch(fail); });
+    const exampleDocs = () => EXAMPLES.map(([name, category, amount, ago, notes]) => ({ name, category: EXAMPLE_CATEGORIES[category][0], amount, date: tkit.daysFromToday(-ago), notes }));
+    const loadExamples = async () => { await seedCategories(); await tkit.samples.load(entries, exampleDocs()); };
+    tools.collection = entries;
+    tools.noun = { one: TXT.one, many: TXT.many };
+    tools.filename = TXT.view;
+    tools.examples = exampleDocs;
+    tools.beforeExamples = seedCategories;
+    tools.exportRows = records => records.slice().sort(newestFirst).map(r => r.data);
     banner.addEventListener('t-clear', () => { tkit.samples.clear(entries).catch(fail); });
-    $('delete-all').addEventListener('click', deleteAll);
 
     // ---- Start ---------------------------------------------------------------------------------------------------
     (async () => {

@@ -33,7 +33,7 @@
       <button data-view="settings" data-icon="settings" class="t-nav-end">Settings</button>
     </t-nav>
     <main class="t-app-main">
-      <!-- Shown until the settings are read and the views exist; the script then switches to the first view. -->
+      <!-- Shown until the settings are read and the views exist; the script then switches to the right view and removes it. -->
       <t-view name="loading"><div class="t-page"><t-state kind="loading"></t-state></div></t-view>
 
       <t-view name="settings">
@@ -50,12 +50,7 @@
           <section class="t-card">
             <div class="t-card-head"><h2>Views</h2><button type="button" class="t-button small" id="add-view">Add view</button></div>
             <p class="t-muted">The same records seen as a table, a board, a gallery or a calendar.</p>
-            <div class="t-actions base-left" id="add-menu" hidden>
-              <button type="button" class="t-button small" data-add="table">Table</button>
-              <button type="button" class="t-button small" data-add="board">Board</button>
-              <button type="button" class="t-button small" data-add="gallery">Gallery</button>
-              <button type="button" class="t-button small" data-add="calendar">Calendar</button>
-            </div>
+            <div class="t-actions base-left" id="add-menu" hidden></div>
             <div class="t-actions base-left" id="add-need" hidden>
               <span class="t-muted" id="add-need-text"></span>
               <button type="button" class="t-button small primary" id="add-need-create"></button>
@@ -70,29 +65,8 @@
             </label>
           </section>
 
-          <section class="t-card">
-            <div class="t-card-head"><h2>Data</h2></div>
-            <p class="t-muted">Export every record as a spreadsheet file, or add records from one. Image and PDF columns are not imported.</p>
-            <div class="t-actions base-left">
-              <button type="button" class="t-button" id="export-csv">Export CSV</button>
-              <button type="button" class="t-button" id="import-csv">Import CSV</button>
-            </div>
-          </section>
-
-          <section class="t-card">
-            <div class="t-card-head"><h2>Examples</h2></div>
-            <p class="t-muted" id="examples-text"></p>
-            <div class="t-actions base-left">
-              <button type="button" class="t-button" id="load-examples">See with examples</button>
-              <button type="button" class="t-button" id="clear-examples" hidden>Delete examples</button>
-            </div>
-          </section>
-
-          <section class="t-card">
-            <div class="t-card-head"><h2>Danger zone</h2></div>
-            <p class="t-muted" id="wipe-text"></p>
-            <div class="t-actions base-left"><button type="button" class="t-button danger" id="wipe">Delete all records</button></div>
-          </section>
+          <!-- Data (CSV), Examples and Danger zone cards. Its props are set in the script. -->
+          <t-data-tools id="data-tools"></t-data-tools>
         </div>
       </t-view>
     </main>
@@ -115,43 +89,33 @@
     <button type="button" slot="actions" class="t-button primary" id="detail-edit">Edit</button>
   </t-detail>
 
-  <t-import id="importer"></t-import>
-
   <script>
     // ==== 1. Words, defaults, examples ==========================================================
     // Every visible string of the dynamic parts lives in T (the static screens are the HTML above).
     const T = {
       newRecord: 'New record', untitled: 'Untitled', noValue: 'No value', all: 'All', search: 'Search',
-      count: n => n + (n === 1 ? ' record' : ' records'),
-      seeExamples: 'See with examples',
+      count: n => n + (n === 1 ? ' record' : ' records'), noun: { one: 'record', many: 'records' }, records: 'Records',
       emptyTitle: 'Nothing here yet', emptyText: 'Add your first record, or look at some examples to see how this base works.',
       clearFilter: 'Clear filter', loadError: 'Could not load the records', retry: 'Try again',
       needChoice: 'This view needs a choice field', needChoiceText: 'Pick one in Settings, or add a field of type Choice.',
       needDate: 'This view needs a date field', needDateText: 'Pick one in Settings, or add a field of type Date.',
       openSettings: 'Open Settings', dropHere: 'Drop a record here', showMore: n => 'Show more (' + n + ' left)',
-      editRecord: 'Edit record',
-      conflict: 'Someone changed this meanwhile; it was reloaded.',
+      editRecord: 'Edit record', conflict: 'Someone changed this meanwhile; it was reloaded.',
       deleteAsk: title => 'Delete "' + title + '"?', delete: 'Delete', selection: title => 'Record: ' + title,
       settingsError: 'Could not read the saved settings; showing the defaults.',
       addHere: 'Add here', nothingThisDay: 'Nothing on this day', undated: n => n + (n === 1 ? ' record has' : ' records have') + ' no date and is not shown here.',
-      records: 'Records',
       // summaries the agent reads
       tableSummary: (name, total, shown) => name + ': ' + T.count(total) + (shown !== total ? ' (' + shown + ' filtered)' : ''),
       boardSummary: (name, field, parts) => name + ' by ' + field + ': ' + parts.join(', '),
       calendarSummary: (name, month, n) => name + ' for ' + month + ': ' + T.count(n),
-      // settings
+      // views editor
       viewTypes: { table: 'Table', board: 'Board', gallery: 'Gallery', calendar: 'Calendar' },
       viewName: 'View name', moveUp: 'Move up', moveDown: 'Move down', removeView: 'Delete view', none: 'None',
       columns: 'Columns', sortBy: 'Sort by', ascending: 'Ascending', descending: 'Descending', groupBy: 'Group by',
       imageField: 'Image field', subtitleField: 'Subtitle field', badgeField: 'Badge field', dateField: 'Date field',
       needChoiceAdd: 'A board needs a choice field.', createChoice: 'Create a choice field',
       needDateAdd: 'A calendar needs a date field.', createDate: 'Create a date field',
-      stageLabel: 'Stage', stageOptions: ['To do', 'Doing', 'Done'], dateLabel: 'Date',
-      examplesNone: 'Load a few sample records to see how the views work. You can delete them with one click.',
-      examplesSome: n => n + (n === 1 ? ' example is' : ' examples are') + ' in this base. Delete them when you are done.',
-      wipeText: n => n ? 'Permanently deletes all ' + T.count(n) + '. This cannot be undone.' : 'There are no records to delete.',
-      wipeAsk: n => 'Delete all ' + T.count(n) + '? This cannot be undone.', wipeConfirm: 'Delete all', wiped: n => 'Deleted ' + T.count(n),
-      exported: n => 'Exported: ' + T.count(n), imported: n => 'Imported: ' + T.count(n), importing: (done, total) => 'Importing ' + done + ' of ' + total + '…'
+      stageLabel: 'Stage', stageOptions: ['To do', 'Doing', 'Done'], dateLabel: 'Date'
     };
 
     // The settings (tendly.data key "settings"). Field and view ids never change; labels and names can.
@@ -185,14 +149,14 @@
       { name: 'Prepare the monthly meeting', status: 'todo', days: 14, notes: 'Agenda, numbers and last month\'s decisions.' },
       { name: 'Replace the hallway light bulbs', status: 'doing', days: -1, notes: 'Eight bulbs, warm white.' }
     ];
+    const EXAMPLE_TYPES = { name: ['text'], status: ['choice'], date: ['date'], notes: ['text', 'longtext'] };
 
     // ==== 2. State ===============================================================================
     const coll = tendly.db.collection('records');
     const $ = id => document.getElementById(id);
-    const app = document.querySelector('t-app'), nav = document.querySelector('t-nav');
-    const main = document.querySelector('.t-app-main');
+    const app = document.querySelector('t-app'), nav = document.querySelector('t-nav'), main = document.querySelector('.t-app-main');
     const navEnd = nav.querySelector('.t-nav-end'), settingsView = main.querySelector('t-view[name="settings"]');
-    const editor = $('editor'), rform = $('record-form'), detail = $('detail'), importer = $('importer'), viewList = $('view-list');
+    const editor = $('editor'), rform = $('record-form'), detail = $('detail'), viewList = $('view-list'), tools = $('data-tools');
     const lang = document.documentElement.lang;
     const APP_NAME = document.title, APP_TEXT = $('app-description').textContent.trim();
     const NONE = '__none';                                // the board column for records with no value
@@ -202,7 +166,7 @@
     let S;                                                // settings from tkit.settings (S.value, S.save, S.on)
     let store, all = [], items = [], loaded = false, loadError = null;   // records: raw, prepared, state
     const viewUi = {};                                    // per view id: its DOM and its search/filter state
-    let editing = null, pendingAdd = null, lastJson = {};
+    let editing = null, lastJson = {};
 
     const cfg = () => S.value;
     const fieldsOf = () => cfg().fields;
@@ -215,38 +179,30 @@
     const isEmpty = v => v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
     const optionOf = (field, id) => (field.options || []).find(o => o.id === id) || null;
     const choiceLabel = (field, id) => { const o = optionOf(field, id); return o ? o.label : id + ' ' + tkit.t('removedOption'); };
+    const titleField = () => fieldById(cfg().titleField) || fieldsOfType('text')[0] || fieldsOf()[0] || null;
+    const titleOf = item => { const f = titleField(); return (f && tkit.fieldText(f, item.d[f.id], fmt())) || T.untitled; };
+    const reload = () => store.reload().catch(() => {});
+    const loadExamples = () => tkit.samples.load(coll, makeExamples()).catch(fail);
+    const clearExamples = () => tkit.samples.clear(coll).catch(fail);
 
-    function titleField() {
-      return fieldById(cfg().titleField) || fieldsOfType('text')[0] || fieldsOf()[0] || null;
-    }
-    function titleOf(item) {
-      const f = titleField();
-      return (f && tkit.fieldText(f, item.d[f.id], fmt())) || T.untitled;
-    }
     function dayOf(v) {                                   // 'YYYY-MM-DD' for a date or a date-time (local day)
       if (typeof v !== 'string' || !v) return '';
       if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
       const d = new Date(v);
       return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
-    function timeOf(v) {
-      const d = new Date(v);
-      return isNaN(d) ? '' : new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit' }).format(d);
-    }
+    const timeOf = v => { const d = new Date(v); return isNaN(d) ? '' : new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit' }).format(d); };
 
     // Records as the views use them: { id, rec, d (data with formulas computed), order }, in board order.
     function prepare() {
-      const fields = fieldsOf();
-      items = all.map(rec => ({ id: rec.id, rec, d: tkit.compute(fields, rec.data), order: Number(rec.data.order) || 0 }));
+      items = all.map(rec => ({ id: rec.id, rec, d: tkit.compute(fieldsOf(), rec.data), order: Number(rec.data.order) || 0 }));
       items.sort((a, b) => a.order - b.order || a.rec.created_at.localeCompare(b.rec.created_at));
     }
-    function haystack(item) {                             // all the text of a record, for the search box
-      return fieldsOf().filter(f => f.type !== 'image' && f.type !== 'file').map(f => tkit.fieldText(f, item.d[f.id], fmt())).join(' ');
-    }
-    const sortKey = (f, v) => ['choice', 'multi', 'checkbox', 'image', 'file'].includes(f.type) ? tkit.fieldText(f, v, fmt()) : v;
+    // All the text of a record, for the search box.
+    const haystack = item => fieldsOf().filter(f => f.type !== 'image' && f.type !== 'file').map(f => tkit.fieldText(f, item.d[f.id], fmt())).join(' ');
     function sortedBy(list, field, dir) {
       if (!field) return list;
-      const keyed = list.map(i => ({ i, k: sortKey(field, i.d[field.id]) }));
+      const keyed = list.map(i => ({ i, k: ['choice', 'multi', 'checkbox', 'image', 'file'].includes(field.type) ? tkit.fieldText(field, i.d[field.id], fmt()) : i.d[field.id] }));
       return tkit.sortRows(keyed, 'k', dir === 'desc' ? 'desc' : 'asc').map(x => x.i);
     }
     // The choice field that the pills filter by: the board's own, else the first one.
@@ -256,13 +212,12 @@
     }
     // What a view shows: records after the search and pill filters, in the view's order.
     function visible(view) {
-      const ui = viewUi[view.id] || { q: '', pill: '' };
+      const ui = viewUi[view.id] || { q: '', pill: '' }, pf = pillField(view);
       let list = items;
-      const pf = pillField(view);
       if (pf && ui.pill) list = list.filter(i => i.d[pf.id] === ui.pill);
-      if (ui.q) { list.forEach(i => { if (i.q === undefined) i.q = haystack(i); }); list = tkit.filterRows(list, ui.q, ['q']); }
+      if (ui.q.trim()) list = list.filter(i => tkit.search.match(i.q ??= haystack(i), ui.q));
       if (view.type === 'table' && view.sort) list = sortedBy(list, fieldById(view.sort.field), view.sort.dir);
-      if (view.type === 'calendar') { const f = fieldById(view.dateField); if (f) list = sortedBy(list, f, 'asc'); }
+      if (view.type === 'calendar') list = sortedBy(list, fieldById(view.dateField), 'asc');
       return list;
     }
     // What a view needs and lacks: null when fine, else 'choice' or 'date'.
@@ -274,7 +229,7 @@
 
     // ==== 3. Views (built at run time from settings.views) =======================================
     function createView(view) {
-      const ui = viewUi[view.id] = { id: view.id, type: view.type, view, q: '', pill: '', limit: 200, selected: tkit.today(), dirty: true, summary: '' };
+      const ui = viewUi[view.id] = { id: view.id, type: view.type, view, q: '', pill: '', limit: 200, selected: tkit.today() };
       ui.title = tkit.h('h1', { class: 't-title' });
       ui.sub = tkit.h('p', { class: 't-muted' });
       ui.banner = tkit.h('t-sample-banner');
@@ -291,21 +246,18 @@
           ui.banner, ui.tools, ui.body));
       ui.button = tkit.h('button', { dataset: { view: 'v-' + view.id, icon: ICONS[view.type], dyn: view.id }, text: view.name });
     }
-    function removeView(id) {
-      const ui = viewUi[id];
-      ui.el.remove(); ui.button.remove();
-      delete viewUi[id];
-    }
     // Makes the nav buttons and screens match settings.views (create, remove, rename, reorder), then tells <t-app>.
     function syncViews() {
       const views = cfg().views;
-      Object.keys(viewUi).forEach(id => { const v = views.find(x => x.id === id); if (!v || v.type !== viewUi[id].type) removeView(id); });
+      Object.keys(viewUi).forEach(id => {
+        const v = views.find(x => x.id === id);
+        if (!v || v.type !== viewUi[id].type) { viewUi[id].el.remove(); viewUi[id].button.remove(); delete viewUi[id]; }
+      });
       views.forEach((v, index) => {
         if (!viewUi[v.id]) createView(v);
         const ui = viewUi[v.id];
         ui.view = v;
-        const label = ui.button.querySelector('span') || ui.button;      // the kit wraps the label in a span once it decorates the button
-        label.textContent = v.name;
+        (ui.button.querySelector('span') || ui.button).textContent = v.name;   // the kit wraps the label in a span once it decorates the button
         ui.title.textContent = index === 0 ? APP_NAME : v.name;
         ui.sub.textContent = index === 0 ? APP_TEXT : '';
         ui.sub.hidden = !ui.sub.textContent;
@@ -318,7 +270,6 @@
     }
 
     // New-record presets: a board column's value, or the calendar's selected day.
-    function datePreset(field, day) { return { [field.id]: field.type === 'datetime' ? tkit.fieldValue(field, day + 'T09:00') : day }; }
     function newPreset(viewId, column) {
       const ui = viewUi[viewId], view = ui && ui.view;
       if (!view) return {};
@@ -328,16 +279,16 @@
         const value = column === undefined ? (g.options && g.options[0] && g.options[0].id) : column === NONE ? null : column;
         return value ? { [g.id]: value } : {};
       }
-      if (view.type === 'calendar' && !problemOf(view)) return datePreset(fieldById(view.dateField), ui.selected);
+      if (view.type === 'calendar' && !problemOf(view)) { const f = fieldById(view.dateField); return { [f.id]: f.type === 'datetime' ? tkit.fieldValue(f, ui.selected + 'T09:00') : ui.selected }; }
       return {};
     }
 
-    // ---- drawing one view ---------------------------------------------------------------------
+    // ---- drawing one view: the state (loading, error, empty, filtered to nothing), else DRAW[type], which returns the summary ----
     function drawView(id) {
       const ui = viewUi[id];
       if (!ui) return;
-      const view = ui.view, pf = pillField(view);
-      ui.dirty = false; ui.summary = '';
+      const view = ui.view, pf = pillField(view), need = problemOf(view);
+      let summary = '';
       ui.banner.count = tkit.samples.count(all);
       if (ui.pill && !(pf && optionOf(pf, ui.pill))) ui.pill = '';
       ui.tools.hidden = !(loaded && all.length);
@@ -347,37 +298,30 @@
         ui.pills.value = ui.pill;
       }
       tkit.clear(ui.body);
-      const need = problemOf(view);
-      if (loadError) {
-        ui.body.appendChild(tkit.h('t-state', { kind: 'error', title: T.loadError, text: loadError.message },
-          tkit.h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => store.reload().catch(() => {}) })));
-      } else if (!loaded) {
-        ui.body.appendChild(tkit.h('t-state', { kind: 'loading' }));
-      } else if (need) {
-        ui.body.appendChild(tkit.h('t-state', { kind: 'empty', title: need === 'choice' ? T.needChoice : T.needDate, text: need === 'choice' ? T.needChoiceText : T.needDateText },
-          tkit.h('button', { type: 'button', class: 't-button primary', text: T.openSettings, onClick: () => { app.view = 'settings'; } })));
-      } else if (!all.length) {
-        ui.body.appendChild(tkit.h('t-state', { kind: 'empty', title: T.emptyTitle, text: T.emptyText },
-          tkit.h('button', { type: 'button', class: 't-button primary', text: T.newRecord, onClick: () => openEditor(null, newPreset(ui.id)) }),
-          tkit.h('button', { type: 'button', class: 't-button', text: T.seeExamples, onClick: loadExamples })));
+      const state = (props, ...buttons) => ui.body.appendChild(tkit.h('t-state', props, ...buttons));
+      const button = (text, onClick, cls) => tkit.h('button', { type: 'button', class: 't-button' + (cls ? ' ' + cls : ''), text, onClick });
+      if (loadError) state({ kind: 'error', title: T.loadError, text: loadError.message }, button(T.retry, reload));
+      else if (!loaded) state({ kind: 'loading' });
+      else if (need) state({ kind: 'empty', title: need === 'choice' ? T.needChoice : T.needDate, text: need === 'choice' ? T.needChoiceText : T.needDateText }, button(T.openSettings, () => { app.view = 'settings'; }, 'primary'));
+      else if (!all.length) {
+        const empty = ui.body.appendChild(tkit.h('t-empty-start', { title: T.emptyTitle, text: T.emptyText, action: T.newRecord }));
+        empty.addEventListener('t-action', () => openEditor(null, newPreset(ui.id)));
+        empty.addEventListener('t-examples', loadExamples);
       } else {
         const list = visible(view);
-        if (!list.length) {
-          ui.body.appendChild(tkit.h('t-state', { kind: 'empty', title: tkit.t('noResults') },
-            tkit.h('button', { type: 'button', class: 't-button', text: T.clearFilter, onClick: () => { ui.q = ''; ui.pill = ''; ui.search.value = ''; drawView(ui.id); } })));
-        } else DRAW[view.type](view, ui, list);
+        if (!list.length) state({ kind: 'empty', title: tkit.t('noResults') }, button(T.clearFilter, () => { ui.q = ''; ui.pill = ''; ui.search.value = ''; drawView(ui.id); }));
+        else summary = DRAW[view.type](view, ui, list);
       }
-      if (idOf(app.view) === ui.id) tkit.context({ summary: ui.summary || null });
+      if (idOf(app.view) === ui.id) tkit.context({ summary: summary || null });
     }
 
     // ---- table ----
-    const toneMap = f => Object.fromEntries((f.options || []).map(o => [o.label, o.tone]));
     function columnFor(f) {
       const key = 'c_' + f.id, label = f.label;
       if (f.type === 'number') return { key, label, type: 'number' };
       if (f.type === 'money') return { key, label, type: 'money', currency: f.currency || cfg().currency };
       if (f.type === 'date') return { key, label, type: 'date' };
-      if (f.type === 'choice') return { key, label, type: 'badge', tones: toneMap(f) };
+      if (f.type === 'choice') return { key, label, type: 'badge', tones: Object.fromEntries((f.options || []).map(o => [o.label, o.tone])) };
       if (f.type === 'formula') return { key, label, type: 'number', format: v => tkit.fieldText(f, v, fmt()) };
       return { key, label };
     }
@@ -399,7 +343,7 @@
       if (ui.colsSig !== sig) { ui.colsSig = sig; ui.table.columns = cols.map(columnFor); }
       ui.table.rows = list.map(i => { const row = { id: i.id }; cols.forEach(f => { row['c_' + f.id] = cellFor(f, i.d[f.id]); }); return row; });
       ui.body.appendChild(ui.table);
-      ui.summary = T.tableSummary(view.name, items.length, list.length);
+      return T.tableSummary(view.name, items.length, list.length);
     }
 
     // ---- board ----
@@ -410,25 +354,24 @@
         ui.kanban = tkit.h('t-kanban', { addable: true, 'empty-text': T.dropHere });
         // Dropping places the card between its new neighbours (midpoint of their order) and sets the choice field.
         ui.kanban.addEventListener('t-move', async event => {
-          const v = ui.view, field = fieldById(v.groupBy), { id, to, index } = event.detail;
-          const others = visible(v).filter(i => i.id !== id && columnOf(field, i) === to);
+          const field = fieldById(ui.view.groupBy), { id, to, index } = event.detail;
+          const others = visible(ui.view).filter(i => i.id !== id && columnOf(field, i) === to);
           const before = others[index - 1], after = others[index];
           const order = before && after ? (before.order + after.order) / 2 : after ? after.order - 1 : before ? before.order + 1 : Date.now();
-          try { await coll.update(id, { [field.id]: to === NONE ? null : to, order }); } catch (error) { fail(error); store.reload().catch(() => {}); }
+          try { await coll.update(id, { [field.id]: to === NONE ? null : to, order }); } catch (error) { fail(error); reload(); }
         });
         ui.kanban.addEventListener('t-open', event => openRecord(event.detail.id, ui.id));
         ui.kanban.addEventListener('t-add', event => openEditor(null, newPreset(ui.id, event.detail.column)));
       }
       const dateF = fieldsOfType('date', 'datetime')[0], textF = fieldsOfType('longtext')[0];
-      const stray = list.some(i => columnOf(g, i) === NONE);
-      ui.kanban.columns = (stray ? [{ id: NONE, title: T.noValue }] : []).concat((g.options || []).map(o => ({ id: o.id, title: o.label })));
+      ui.kanban.columns = (list.some(i => columnOf(g, i) === NONE) ? [{ id: NONE, title: T.noValue }] : []).concat((g.options || []).map(o => ({ id: o.id, title: o.label })));
       ui.kanban.cards = list.map(i => {
         const raw = i.d[g.id], removed = !isEmpty(raw) && !optionOf(g, raw);
         const meta = [dateF && tkit.fieldText(dateF, i.d[dateF.id], fmt()), removed && choiceLabel(g, raw)].filter(Boolean).join(' · ');
         return { id: i.id, column: columnOf(g, i), title: titleOf(i), text: textF ? String(i.d[textF.id] || '').slice(0, 90) : '', meta };
       });
       ui.body.appendChild(ui.kanban);
-      ui.summary = T.boardSummary(view.name, g.label, (g.options || []).map(o => o.label + ' ' + list.filter(i => i.d[g.id] === o.id).length));
+      return T.boardSummary(view.name, g.label, (g.options || []).map(o => o.label + ' ' + list.filter(i => i.d[g.id] === o.id).length));
     }
 
     // ---- gallery ----
@@ -441,8 +384,7 @@
         ui.gallery = tkit.h('t-gallery');
         ui.gallery.addEventListener('t-open', event => openRecord(event.detail.id, ui.id));
       }
-      const img = fieldById(view.imageField), sub = fieldById(view.subtitleField), badge = fieldById(view.badgeField);
-      const shown = list.slice(0, ui.limit);
+      const img = fieldById(view.imageField), sub = fieldById(view.subtitleField), badge = fieldById(view.badgeField), shown = list.slice(0, ui.limit);
       ui.gallery.items = shown.map(i => {
         const option = badge && badge.type === 'choice' ? optionOf(badge, i.d[badge.id]) : null;
         return { id: i.id, title: titleOf(i), subtitle: sub ? tkit.fieldText(sub, i.d[sub.id], fmt()) : '', image: imageUrl(i, img), badge: option ? option.label : '', tone: option ? option.tone : '' };
@@ -451,7 +393,7 @@
       if (list.length > shown.length) {
         ui.body.appendChild(tkit.h('button', { type: 'button', class: 't-button base-more', text: T.showMore(list.length - shown.length), onClick: () => { ui.limit += 200; drawView(ui.id); } }));
       }
-      ui.summary = view.name + ': ' + T.count(list.length);
+      return view.name + ': ' + T.count(list.length);
     }
 
     // ---- calendar (the month grid, then the selected day's records under it) ----
@@ -464,53 +406,38 @@
         ui.calendar.addEventListener('t-month', () => { ui.selected = ui.calendar.selected || ui.selected; drawView(ui.id); });   // "Today" also selects today
         ui.calendar.addEventListener('t-day', event => {      // an empty day opens a new record for that day
           ui.selected = event.detail.date;
-          const v = ui.view, df = fieldById(v.dateField);
-          const busy = visible(v).some(i => dayOf(i.d[df.id]) === ui.selected);
+          const df = fieldById(ui.view.dateField), busy = visible(ui.view).some(i => dayOf(i.d[df.id]) === ui.selected);
           drawView(ui.id);
           if (!busy) openEditor(null, newPreset(ui.id));
         });
       }
-      const dated = list.filter(i => dayOf(i.d[f.id]));
-      ui.calendar.events = dated.map(i => { const o = colour ? optionOf(colour, i.d[colour.id]) : null; return { id: i.id, date: dayOf(i.d[f.id]), title: titleOf(i), tone: o ? o.tone : '' }; });
+      const dated = list.filter(i => dayOf(i.d[f.id])), colourOf = i => colour ? optionOf(colour, i.d[colour.id]) : null;
+      ui.calendar.events = dated.map(i => ({ id: i.id, date: dayOf(i.d[f.id]), title: titleOf(i), tone: (colourOf(i) || {}).tone || '' }));
       if (ui.calendar.selected !== ui.selected) ui.calendar.selected = ui.selected;
-      const mine = dated.filter(i => dayOf(i.d[f.id]) === ui.selected);
+      const mine = dated.filter(i => dayOf(i.d[f.id]) === ui.selected), missing = list.length - dated.length;
       tkit.clear(ui.agenda);
       ui.agenda.appendChild(tkit.h('div', { class: 'base-agenda-head' }, tkit.h('h2', { text: tkit.date(ui.selected, 'long') }),
         tkit.h('button', { type: 'button', class: 't-button small', text: T.addHere, onClick: () => openEditor(null, newPreset(ui.id)) })));
       if (!mine.length) ui.agenda.appendChild(tkit.h('p', { class: 't-muted', text: T.nothingThisDay }));
-      else {
-        const ul = tkit.h('ul', { class: 't-list' });
-        mine.forEach(i => {
-          const o = colour ? optionOf(colour, i.d[colour.id]) : null;
-          ul.appendChild(tkit.h('li', {}, tkit.h('button', { type: 'button', class: 't-row', onClick: () => openRecord(i.id, ui.id) },
-            f.type === 'datetime' ? tkit.h('span', { class: 't-badge', text: timeOf(i.d[f.id]) }) : null,
-            tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: titleOf(i) }), o ? tkit.h('small', { text: o.label }) : null))));
-        });
-        ui.agenda.appendChild(ul);
-      }
-      const missing = list.length - dated.length;
+      else ui.agenda.appendChild(tkit.h('ul', { class: 't-list' }, ...mine.map(i => tkit.h('li', {}, tkit.h('button', { type: 'button', class: 't-row', onClick: () => openRecord(i.id, ui.id) },
+        f.type === 'datetime' ? tkit.h('span', { class: 't-badge', text: timeOf(i.d[f.id]) }) : null,
+        tkit.h('div', { class: 't-row-text' }, tkit.h('span', { text: titleOf(i) }), colourOf(i) ? tkit.h('small', { text: colourOf(i).label }) : null))))));
       if (missing) ui.agenda.appendChild(tkit.h('p', { class: 't-muted', text: T.undated(missing) }));
       ui.body.appendChild(ui.calendar);
       ui.body.appendChild(ui.agenda);
-      const month = ui.calendar.month, y = +month.slice(0, 4), m = +month.slice(5, 7);
-      const monthName = new Intl.DateTimeFormat(lang, { month: 'long' }).format(new Date(y, m - 1, 1));
-      ui.summary = T.calendarSummary(view.name, monthName, dated.filter(i => dayOf(i.d[f.id]).slice(0, 7) === month).length);
+      const month = ui.calendar.month, monthName = new Intl.DateTimeFormat(lang, { month: 'long' }).format(new Date(+month.slice(0, 4), +month.slice(5, 7) - 1, 1));
+      return T.calendarSummary(view.name, monthName, dated.filter(i => dayOf(i.d[f.id]).slice(0, 7) === month).length);
     }
     const DRAW = { table: drawTable, board: drawBoard, gallery: drawGallery, calendar: drawCalendar };
 
     // Only the screen being looked at is drawn; the others are drawn when opened.
     function renderAll() {
       prepare();
-      Object.keys(viewUi).forEach(id => { viewUi[id].dirty = true; });
       drawView(idOf(app.view));
       renderSettings();
       syncRoute();
     }
-    app.addEventListener('t-view', event => {
-      const ui = viewUi[idOf(event.detail.view)];
-      if (!ui) return;
-      if (ui.dirty) drawView(ui.id); else tkit.context({ summary: ui.summary || null });   // <t-app> cleared it
-    });
+    app.addEventListener('t-view', event => drawView(idOf(event.detail.view)));
 
     // ==== 4. Records: detail, editor ============================================================
     // The detail opens on "#v-<view id>/<record id>"; a link, a reload or the Back button reopens it.
@@ -533,26 +460,26 @@
     }
     tkit.route.on(syncRoute);
     detail.addEventListener('t-nav', event => openRecord(event.detail.id, idOf(app.view)));
-    $('detail-edit').addEventListener('click', () => {
-      const item = detail.record && items.find(i => i.id === detail.record.id);
-      detail.close();
-      if (item) openEditor(item.rec);
-    });
-    $('detail-delete').addEventListener('click', () => { const item = detail.record && items.find(i => i.id === detail.record.id); if (item) removeRecord(item, () => detail.close()); });
+    const itemOf = rec => rec && items.find(i => i.id === rec.id);
+    $('detail-edit').addEventListener('click', () => { const item = itemOf(detail.record); detail.close(); if (item) openEditor(item.rec); });
+    $('detail-delete').addEventListener('click', () => { const item = itemOf(detail.record); if (item) removeRecord(item, () => detail.close()); });
 
     async function removeRecord(item, done) {
       if (!await tkit.confirm(T.deleteAsk(titleOf(item)), { confirm: T.delete, tone: 'danger' })) return;
-      try { await coll.remove(item.id); if (done) done(); } catch (error) { fail(error); }
+      try { await coll.remove(item.id); done(); } catch (error) { fail(error); }
     }
     function openEditor(record, preset) {
       editing = record || null;
-      rform.fields = fieldsOf();
+      rform.fields = fieldsOf().map(f => f.type === 'choice' || f.type === 'multi' ? { ...f, creatable: true } : f);   // "New option…" at the end of each list
       rform.settings = fmt();
       rform.value = record ? Object.assign({}, record.data) : Object.assign({}, preset || {});
       $('delete').hidden = !record;
       editor.title = record ? T.editRecord : T.newRecord;
       editor.open();
     }
+    // A "New option…" typed in the form is kept in the field (settings.fields), so every view and the fields editor see it.
+    rform.addEventListener('t-option-added', ({ detail: { fieldId, option } }) =>
+      save({ fields: fieldsOf().map(f => f.id === fieldId ? { ...f, options: (f.options || []).concat({ tone: '', ...option }) } : f) }));
     $('record-wrap').addEventListener('submit', async event => {
       event.preventDefault();
       const button = $('save');
@@ -572,7 +499,7 @@
       } finally { button.disabled = false; }
     });
     $('cancel').addEventListener('click', () => editor.close());
-    $('delete').addEventListener('click', () => { const item = editing && items.find(i => i.id === editing.id); if (item) removeRecord(item, () => editor.close()); });
+    $('delete').addEventListener('click', () => { const item = itemOf(editing); if (item) removeRecord(item, () => editor.close()); });
     rform.addEventListener('t-input', () => { tendly.host.holdReload(true); });
     editor.addEventListener('t-close', () => { tendly.host.holdReload(false); });
 
@@ -603,19 +530,30 @@
       detail.settings = fmt();
       $('card-currency').hidden = !fieldsOfType('money').length;
       $('currency').value = cfg().currency;
-      const samples = tkit.samples.count(all);
-      $('examples-text').textContent = samples ? T.examplesSome(samples) : T.examplesNone;
-      $('load-examples').hidden = samples > 0;
-      $('clear-examples').hidden = samples === 0;
-      $('wipe-text').textContent = T.wipeText(all.length);
-      $('wipe').disabled = !all.length;
+      tools.fields = fields;                              // the CSV columns (formulas computed, choices by label) and the import schema
+      tools.records = all;
     }
     $('fields-editor').addEventListener('t-change', event => save({ fields: event.detail.fields }));
     $('title-field').addEventListener('change', event => save({ titleField: event.target.value }));
     $('currency').addEventListener('change', event => save({ currency: event.target.value }));
 
+    // The Data, Examples and Danger zone cards: the examples use the default field ids and are built at click time (fresh dates).
+    function makeExamples() {
+      const now = Date.now();
+      return EXAMPLES.map((e, i) => {
+        const doc = { order: now + i };
+        Object.keys(EXAMPLE_TYPES).forEach(id => {
+          const f = fieldById(id), value = id === 'date' ? tkit.daysFromToday(e.days) : e[id];
+          if (f && EXAMPLE_TYPES[id].includes(f.type) && (f.type !== 'choice' || optionOf(f, value))) doc[id] = value;
+        });
+        return doc;
+      });
+    }
+    let importOrder = Date.now();
+    Object.assign(tools, { collection: coll, filename: T.records, noun: T.noun, examples: makeExamples, beforeInsert: doc => Object.assign({}, doc, { order: importOrder++ }) });
+
     // ---- the list of views ----
-    function select(options, current, data) {
+    function sel(options, current, data) {
       const el = tkit.h('select', { class: 't-input', dataset: data });
       options.forEach(([value, label]) => el.appendChild(tkit.h('option', { value, text: label })));
       el.value = current === null || current === undefined ? '' : current;
@@ -623,63 +561,59 @@
     }
     const withLabel = (text, control) => tkit.h('label', { class: 't-field' }, tkit.h('span', { text }), control);
     const fieldChoices = (fields, withNone) => (withNone ? [['', T.none]] : []).concat(fields.map(f => [f.id, f.label]));
+    const isType = (...types) => f => types.includes(f.type);
+    // The selects of each view type's row: [view key, label, which fields to offer, may be empty].
+    const PICKS = {
+      board: [['groupBy', T.groupBy, isType('choice'), false]],
+      gallery: [['imageField', T.imageField, isType('image'), true], ['subtitleField', T.subtitleField, f => f.type !== 'image' && f.type !== 'file', true], ['badgeField', T.badgeField, isType('choice'), true]],
+      calendar: [['dateField', T.dateField, isType('date', 'datetime'), false]]
+    };
     function viewRow(v, index, total) {
-      const k = act => ({ vid: v.id, act, k: v.id + ':' + act });
+      const k = act => ({ vid: v.id, act, k: v.id + ':' + act }), fields = fieldsOf();
       const iconButton = (act, icon, label, disabled) => tkit.h('button', { type: 'button', class: 't-icon-button', 'aria-label': label + ': ' + v.name, disabled, dataset: k(act) }, tkit.icon(icon, 14));
-      const head = tkit.h('div', { class: 'base-view-head' },
+      const row = tkit.h('div', { class: 'base-view' }, tkit.h('div', { class: 'base-view-head' },
         tkit.h('input', { class: 't-input', type: 'text', value: v.name, maxlength: '60', 'aria-label': T.viewName, dataset: k('name') }),
         tkit.h('span', { class: 't-badge', text: T.viewTypes[v.type] }),
         iconButton('up', 'arrowUp', T.moveUp, index === 0), iconButton('down', 'arrowDown', T.moveDown, index === total - 1),
-        iconButton('remove', 'trash', T.removeView, total <= 1));
-      const row = tkit.h('div', { class: 'base-view' }, head);
-      const fields = fieldsOf();
+        iconButton('remove', 'trash', T.removeView, total <= 1)));
       if (v.type === 'table') {
         const cols = tkit.h('div', { class: 'base-cols', role: 'group', 'aria-label': T.columns });
         fields.forEach(f => cols.appendChild(tkit.h('label', { class: 't-check' },
           tkit.h('input', { type: 'checkbox', checked: (v.columns || []).includes(f.id), dataset: Object.assign(k('col'), { field: f.id, k: v.id + ':col:' + f.id }) }), tkit.h('span', { text: f.label }))));
         row.appendChild(withLabel(T.columns, cols));
         row.appendChild(tkit.h('div', { class: 't-form-row' },
-          withLabel(T.sortBy, select(fieldChoices(fields, true), v.sort ? v.sort.field : '', k('sortField'))),
-          withLabel(T.ascending + ' / ' + T.descending, select([['asc', T.ascending], ['desc', T.descending]], v.sort ? v.sort.dir : 'asc', k('sortDir')))));
-      } else if (v.type === 'board') {
-        row.appendChild(withLabel(T.groupBy, select(fieldChoices(fieldsOfType('choice')), v.groupBy, k('groupBy'))));
-      } else if (v.type === 'gallery') {
-        row.appendChild(tkit.h('div', { class: 't-form-row' },
-          withLabel(T.imageField, select(fieldChoices(fieldsOfType('image'), true), v.imageField, k('imageField'))),
-          withLabel(T.subtitleField, select(fieldChoices(fields.filter(f => f.type !== 'image' && f.type !== 'file'), true), v.subtitleField, k('subtitleField'))),
-          withLabel(T.badgeField, select(fieldChoices(fieldsOfType('choice'), true), v.badgeField, k('badgeField')))));
-      } else if (v.type === 'calendar') {
-        row.appendChild(withLabel(T.dateField, select(fieldChoices(fieldsOfType('date', 'datetime')), v.dateField, k('dateField'))));
+          withLabel(T.sortBy, sel(fieldChoices(fields, true), v.sort ? v.sort.field : '', k('sortField'))),
+          withLabel(T.ascending + ' / ' + T.descending, sel([['asc', T.ascending], ['desc', T.descending]], v.sort ? v.sort.dir : 'asc', k('sortDir')))));
+      } else {
+        const picks = (PICKS[v.type] || []).map(([key, label, keep, none]) => withLabel(label, sel(fieldChoices(fields.filter(keep), none), v[key], k(key))));
+        if (picks.length) row.appendChild(picks.length > 1 ? tkit.h('div', { class: 't-form-row' }, ...picks) : picks[0]);
       }
       return row;
     }
     function renderViewList() {
       const focus = viewList.contains(document.activeElement) ? document.activeElement.dataset.k : null;
       tkit.clear(viewList);
-      const views = cfg().views;
-      views.forEach((v, i) => viewList.appendChild(viewRow(v, i, views.length)));
-      if (focus) { const el = [...viewList.querySelectorAll('[data-k]')].find(e => e.dataset.k === focus); if (el) el.focus(); }
+      cfg().views.forEach((v, i, views) => viewList.appendChild(viewRow(v, i, views.length)));
+      const el = focus && [...viewList.querySelectorAll('[data-k]')].find(e => e.dataset.k === focus);
+      if (el) el.focus();
     }
     const updateView = (vid, patch) => save({ views: cfg().views.map(v => v.id === vid ? Object.assign({}, v, patch) : v) });
     viewList.addEventListener('change', event => {
       const el = event.target, vid = el.dataset.vid, act = el.dataset.act, v = cfg().views.find(x => x.id === vid);
       if (!v) return;
       if (act === 'name') { const name = el.value.trim() || v.name; el.value = name; if (name !== v.name) updateView(vid, { name }); }
-      else if (act === 'groupBy' || act === 'dateField') updateView(vid, { [act]: el.value });
-      else if (act === 'imageField' || act === 'subtitleField' || act === 'badgeField') updateView(vid, { [act]: el.value || null });
       else if (act === 'sortField') updateView(vid, { sort: el.value ? { field: el.value, dir: v.sort ? v.sort.dir : 'asc' } : null });
       else if (act === 'sortDir') updateView(vid, { sort: v.sort ? { field: v.sort.field, dir: el.value } : null });
       else if (act === 'col') {
         const cols = (v.columns || []).filter(id => id !== el.dataset.field);
         updateView(vid, { columns: el.checked ? cols.concat(el.dataset.field) : cols });
-      }
+      } else if ((PICKS[v.type] || []).some(p => p[0] === act)) updateView(vid, { [act]: el.value || null });
     });
     viewList.addEventListener('click', event => {
       const button = event.target.closest('button[data-act]');
       if (!button) return;
-      const views = cfg().views, at = views.findIndex(v => v.id === button.dataset.vid), act = button.dataset.act;
+      const views = cfg().views, at = views.findIndex(v => v.id === button.dataset.vid), act = button.dataset.act, next = views.slice();
       if (at < 0) return;
-      const next = views.slice();
       if (act === 'remove' && views.length > 1) next.splice(at, 1);
       else if ((act === 'up' && at > 0) || (act === 'down' && at < views.length - 1)) { const to = at + (act === 'up' ? -1 : 1); [next[at], next[to]] = [next[to], next[at]]; }
       else return;
@@ -701,98 +635,43 @@
       let name = base, n = 2;
       while (views.some(v => v.name === name)) name = base + ' ' + n++;
       $('add-menu').hidden = $('add-need').hidden = true;
-      pendingAdd = null;
       return save({ views: views.concat(defaultView(type, tkit.slug(base, views.map(v => v.id)), name)) });
     }
     // A board needs a choice field and a calendar a date field: offer to create one, then add the view.
     function askForField(kind, type) {
-      pendingAdd = { kind, type };
+      Object.assign($('add-need-create').dataset, { kind, type });
       $('add-menu').hidden = true;
       $('add-need').hidden = false;
       $('add-need-text').textContent = kind === 'choice' ? T.needChoiceAdd : T.needDateAdd;
       $('add-need-create').textContent = kind === 'choice' ? T.createChoice : T.createDate;
     }
-    $('add-need-create').addEventListener('click', async () => {
-      if (!pendingAdd) return;
-      const { kind, type } = pendingAdd, fields = fieldsOf(), label = kind === 'choice' ? T.stageLabel : T.dateLabel;
+    $('add-need-create').addEventListener('click', async event => {
+      const { kind, type } = event.currentTarget.dataset, fields = fieldsOf(), label = kind === 'choice' ? T.stageLabel : T.dateLabel;
       const field = { id: tkit.slug(label, fields.map(f => f.id)), label, type: kind === 'choice' ? 'choice' : 'date' };
       if (kind === 'choice') field.options = STAGE_IDS.map(([id, tone], i) => ({ id, label: T.stageOptions[i], tone }));
       try { await S.save({ fields: fields.concat(field) }); } catch (error) { return fail(error); }
       addView(type);
     });
-    $('add-view').addEventListener('click', () => { const open = $('add-menu').hidden && $('add-need').hidden; $('add-menu').hidden = !open; $('add-need').hidden = true; pendingAdd = null; });
+    Object.entries(T.viewTypes).forEach(([type, text]) => $('add-menu').appendChild(tkit.h('button', { type: 'button', class: 't-button small', text, dataset: { add: type } })));
+    $('add-view').addEventListener('click', () => { const open = $('add-menu').hidden && $('add-need').hidden; $('add-menu').hidden = !open; $('add-need').hidden = true; });
     $('add-menu').addEventListener('click', event => { const b = event.target.closest('button[data-add]'); if (b) addView(b.dataset.add); });
 
-    // ==== 6. Data: CSV, examples, danger zone ===================================================
-    function csvValue(f, v) {                             // spreadsheet-friendly: labels for choices, plain numbers and dates
-      if (v === undefined || v === null) return '';
-      return ['choice', 'multi', 'checkbox', 'image', 'file'].includes(f.type) ? tkit.fieldText(f, v, fmt()) : v;
-    }
-    $('export-csv').addEventListener('click', () => {
-      const columns = fieldsOf().map(f => ({ key: f.id, label: f.label, format: v => csvValue(f, v) }));
-      const text = tkit.csv.stringify(items.map(i => i.d), columns, { delimiter: tkit.csv.delimiter() });
-      tkit.csv.download(text, (APP_NAME + ' - ' + T.records + ' - ' + tkit.today() + '.csv').replace(/[\\/:*?"<>|]/g, '-'));
-      tkit.toast(T.exported(items.length));
-    });
-    $('import-csv').addEventListener('click', async () => {
-      importer.fields = fieldsOf();
-      let rows;
-      try { rows = await importer.open(); } catch (error) { return fail(error); }
-      if (!rows || !rows.length) return;
-      const base = Date.now();
-      let done = 0;
-      try {
-        for (const row of rows) {
-          await coll.insert(Object.assign({}, row, { order: base + done }));
-          if (++done % 50 === 0) tkit.toast(T.importing(done, rows.length));
-        }
-      } catch (error) { fail(error); }
-      tkit.toast(T.imported(done), { tone: done ? 'success' : 'error' });
-    });
-
-    const EXAMPLE_TYPES = { name: ['text'], status: ['choice'], date: ['date'], notes: ['text', 'longtext'] };
-    async function loadExamples() {
-      const now = Date.now();
-      const docs = EXAMPLES.map((e, i) => {
-        const doc = { order: now + i };
-        Object.keys(EXAMPLE_TYPES).forEach(id => {
-          const f = fieldById(id), value = id === 'date' ? tkit.daysFromToday(e.days) : e[id];
-          if (f && EXAMPLE_TYPES[id].includes(f.type) && (f.type !== 'choice' || optionOf(f, value))) doc[id] = value;
-        });
-        return doc;
-      });
-      try { await tkit.samples.load(coll, docs); } catch (error) { fail(error); }
-    }
-    async function clearExamples() { try { await tkit.samples.clear(coll); } catch (error) { fail(error); } }
-    $('load-examples').addEventListener('click', loadExamples);
-    $('clear-examples').addEventListener('click', clearExamples);
-    $('wipe').addEventListener('click', async () => {
-      const n = all.length;
-      if (!n || !await tkit.confirm(T.wipeAsk(n), { confirm: T.wipeConfirm, tone: 'danger' })) return;
-      try { for (const r of all.slice()) await coll.remove(r.id); tkit.toast(T.wiped(n)); } catch (error) { fail(error); }
-    });
-
-    // ==== 7. Start-up ============================================================================
-    function render(records) {
-      all = records; loaded = true; loadError = null;
-      renderAll();
-    }
-    function onSettings() { syncViews(); renderViewList(); renderAll(); }
-
+    // ==== 6. Start-up ============================================================================
     (async () => {
       // <t-app> starts when the page is parsed; wait for it before touching its views.
       if (document.readyState === 'loading') await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true }));
       S = await tkit.settings('settings', DEFAULTS);
       if (S.error) tkit.toast(T.settingsError, { tone: 'error' });
-      syncViews(); renderViewList(); renderAll();
+      const onSettings = () => { syncViews(); renderViewList(); renderAll(); };
+      onSettings();
       S.on(onSettings);
-      // Go to the view in the address (a reopened link), else to the first one.
-      const wanted = tkit.route.get().view;
-      if ([...app.querySelectorAll('t-view')].some(v => v.getAttribute('name') === wanted)) window.dispatchEvent(new HashChangeEvent('hashchange'));
-      else app.view = 'v-' + cfg().views[0].id;
+      // Go to the view in the address (a reopened link, keeping its record id), else to the first one.
+      const { view, id } = tkit.route.get();
+      app.view = viewUi[idOf(view)] || view === 'settings' ? view : 'v-' + cfg().views[0].id;
+      if (id && app.view === view) tkit.route.open(id);
       main.querySelector('t-view[name="loading"]').remove();
       app.refresh();
-      store = tkit.live(coll, render, { limit: 5000, onError: error => { loadError = error; renderAll(); } });
+      store = tkit.live(coll, records => { all = records; loaded = true; loadError = null; renderAll(); }, { limit: 5000, onError: error => { loadError = error; renderAll(); } });
     })();
   </script>
 </body>

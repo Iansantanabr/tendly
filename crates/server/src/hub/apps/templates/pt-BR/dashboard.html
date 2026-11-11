@@ -28,7 +28,8 @@
             <div><h1 class="t-title">{{NAME}}</h1><p class="t-muted">{{DESCRIPTION}}</p></div>
             <button type="button" class="t-button primary" id="new-entry">Novo lançamento</button>
           </header>
-          <t-sample-banner id="banner-overview"></t-sample-banner>
+          <t-sample-banner></t-sample-banner>
+          <t-empty-start id="empty" hidden title="Nenhum lançamento ainda" text="Adicione o primeiro lançamento para ver totais e gráficos, ou dê uma olhada com exemplos antes." action="Novo lançamento"></t-empty-start>
           <div id="overview-state"><t-state kind="loading"></t-state></div>
           <div class="stack" id="overview-content" hidden>
             <div class="t-toolbar"><div class="t-segment" id="period" role="group" aria-label="Período"></div></div>
@@ -47,7 +48,7 @@
       <t-view name="entries">
         <div class="t-page wide">
           <header class="t-page-head"><h1 class="t-title">Lançamentos</h1><button type="button" class="t-button primary" id="new-entry-2">Novo lançamento</button></header>
-          <t-sample-banner id="banner-entries"></t-sample-banner>
+          <t-sample-banner></t-sample-banner>
           <t-table id="table" searchable empty-text="Nenhum lançamento ainda. Adicione o primeiro."></t-table>
         </div>
       </t-view>
@@ -70,26 +71,7 @@
             <t-list-editor id="categories" tones></t-list-editor>
             <div id="category-notes"></div>
           </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Dados</h2></div>
-            <div class="t-toolbar">
-              <button type="button" class="t-button" id="export-csv">Exportar CSV</button>
-              <button type="button" class="t-button" id="import-csv">Importar CSV</button>
-            </div>
-          </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Exemplos</h2></div>
-            <p class="t-muted" id="samples-text"></p>
-            <div class="t-toolbar">
-              <button type="button" class="t-button" id="samples-load">Ver com exemplos</button>
-              <button type="button" class="t-button" id="samples-clear">Apagar exemplos</button>
-            </div>
-          </section>
-          <section class="t-card">
-            <div class="t-card-head"><h2>Zona de perigo</h2></div>
-            <p class="t-muted">Apaga todos os lançamentos, exemplos inclusos. Não dá para desfazer.</p>
-            <div class="t-toolbar"><button type="button" class="t-button danger" id="delete-all">Apagar todos os lançamentos</button></div>
-          </section>
+          <t-data-tools id="tools"></t-data-tools>
         </div>
       </t-view>
     </main>
@@ -108,7 +90,6 @@
     <button type="button" slot="actions" class="t-button" id="detail-edit">Editar</button>
     <button type="button" slot="actions" class="t-button danger" id="detail-delete">Apagar</button>
   </t-detail>
-  <t-import id="importer"></t-import>
 
   <script>
     // ---- Constants and default settings ---------------------------------------------------------------
@@ -125,14 +106,8 @@
 
     const entries = tendly.db.collection('entries');
     const $ = id => document.getElementById(id);
-    const app = document.querySelector('t-app');
-    const appName = (document.querySelector('h1') || {}).textContent || 'App';
+    const app = document.querySelector('t-app'), tools = $('tools');
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    function stateEl(kind, title, text, ...actions) {   // tkit.h would turn `text` into a text node; <t-state> wants the attribute
-      const el = tkit.h('t-state', { kind, title }, ...actions);
-      if (text) el.setAttribute('text', text);
-      return el;
-    }
     const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
     const pad = n => String(n).padStart(2, '0');
     const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -178,7 +153,7 @@
       return [
         { id: 'date', label: 'Data', type: 'date', required: true },
         { id: 'amount', label: cfg().metricLabel, type: cfg().unit === 'money' ? 'money' : 'number', currency: cfg().currency, required: true },
-        options.length ? { id: 'category', label: 'Categoria', type: 'choice', options, required: true, help } : { id: 'category', label: 'Categoria', type: 'text', required: true, help },
+        options.length ? { id: 'category', label: 'Categoria', type: 'choice', options, required: true, help, creatable: true } : { id: 'category', label: 'Categoria', type: 'text', required: true, help },
         { id: 'notes', label: 'Notas', type: 'text' }
       ];
     }
@@ -195,18 +170,13 @@
       const all = rowsOf(records), state = $('overview-state'), content = $('overview-content');
       tkit.clear(state);
       content.hidden = true;
-      if (!all.length) {
-        state.appendChild(stateEl('empty', 'Nenhum lançamento ainda', 'Adicione o primeiro lançamento para ver totais e gráficos, ou dê uma olhada com exemplos antes.',
-          tkit.h('button', { type: 'button', class: 't-button primary', onClick: () => openEditor(null), text: 'Novo lançamento' }),
-          tkit.h('button', { type: 'button', class: 't-button', onClick: loadSamples, text: 'Ver com exemplos' })));
-        tkit.context({ summary: 'Painel: nenhum lançamento ainda' });
-        return;
-      }
+      $('empty').hidden = all.length > 0;
+      if (!all.length) { tkit.context({ summary: 'Painel: nenhum lançamento ainda' }); return; }
       const period = cfg().period, [from, to] = range(period);
       segment($('period'), PERIODS, period, id => settings.save({ period: id }).catch(fail));
       const rows = all.filter(r => r.date >= from && r.date <= to);
       if (!rows.length) {
-        state.appendChild(stateEl('empty', 'Nada encontrado', 'Nenhum lançamento neste período.',
+        state.appendChild(tkit.h('t-state', { kind: 'empty', title: 'Nada encontrado', text: 'Nenhum lançamento neste período.' },
           tkit.h('button', { type: 'button', class: 't-button', onClick: () => settings.save({ period: 'all' }).catch(fail), text: 'Limpar filtro' })));
         content.hidden = false;
         $('stats').hidden = $('latest').parentNode.hidden = true;
@@ -293,6 +263,8 @@
     async function saveEntry() {
       let data;
       try { data = await $('entry-form').submit(); } catch (error) { if (error.code !== 'invalid') fail(error); return; }
+      const made = cfg().categories.find(c => c.id === data.category);   // a category made in the form has a slug id; records store the label
+      if (made && !cfg().categories.some(c => c.label === data.category)) data.category = made.label;
       try {
         if (editing) await entries.update(editing.id, data, { rev: editing.rev });
         else await entries.insert(data);
@@ -328,22 +300,17 @@
 
       const notes = $('category-notes');
       tkit.clear(notes);
+      const note = (text, label, onClick) => notes.appendChild(tkit.h('div', { class: 'note' }, tkit.h('span', { class: 't-muted', text }), tkit.h('button', { type: 'button', class: 't-button small', text: label, onClick })));
       Object.keys(renames).forEach(id => {
         const { from, to } = renames[id], n = used[from] || 0;
-        if (!n) return;
-        notes.appendChild(tkit.h('div', { class: 'note' }, tkit.h('span', { class: 't-muted', text: '"' + from + '" agora é "' + to + '", mas ' + plural(n, 'lançamento ainda usa', 'lançamentos ainda usam') + ' o nome antigo.' }),
-          tkit.h('button', { type: 'button', class: 't-button small', text: 'Atualizar ' + plural(n, 'lançamento', 'lançamentos'), onClick: () => renameRecords(id, from, to) })));
+        if (n) note('"' + from + '" agora é "' + to + '", mas ' + plural(n, 'lançamento ainda usa', 'lançamentos ainda usam') + ' o nome antigo.', 'Atualizar ' + plural(n, 'lançamento', 'lançamentos'), () => renameRecords(id, from, to));
       });
       const renamedFrom = Object.keys(renames).map(id => renames[id].from);
       const unlisted = Object.keys(used).filter(l => l && !c.categories.some(cat => cat.label === l) && !renamedFrom.includes(l));
-      if (unlisted.length) notes.appendChild(tkit.h('div', { class: 'note' }, tkit.h('span', { class: 't-muted', text: 'Usadas em lançamentos, mas fora da lista: ' + unlisted.join(', ') + '.' }),
-        tkit.h('button', { type: 'button', class: 't-button small', text: 'Adicionar à lista', onClick: () => addToList(unlisted) })));
+      if (unlisted.length) note('Usadas em lançamentos, mas fora da lista: ' + unlisted.join(', ') + '.', 'Adicionar à lista', () => addToList(unlisted));
 
-      const examples = tkit.samples.count(records);
-      $('samples-text').textContent = examples ? 'Você tem ' + plural(examples, 'exemplo', 'exemplos') + ' misturados aos seus lançamentos.' : 'Preencha o app com lançamentos de mentira para ver como fica. Dá para apagar tudo com um clique.';
-      $('samples-load').hidden = examples > 0;
-      $('samples-clear').hidden = !examples;
-      $('delete-all').disabled = !records.length;
+      tools.fields = fieldsFor();
+      tools.records = records;
     }
     function saveCategories(items) {
       const before = cfg().categories;
@@ -368,7 +335,7 @@
       renderSettings(store.records);
     }
 
-    // ---- Examples, CSV, danger zone ---------------------------------------------------------------------
+    // ---- Examples (CSV and the danger zone are <t-data-tools>) -----------------------------------------
     function sampleDocs() {              // 30 entries over ~6 months, 4 categories, amounts trending up
       return Array.from({ length: 30 }, (_, i) => ({
         date: tkit.daysFromToday(-(179 - i * 6)),
@@ -377,54 +344,22 @@
         notes: SAMPLE_NOTES[i % 6]
       }));
     }
-    async function loadSamples() {
-      try {
-        await tkit.samples.load(entries, sampleDocs());
-        if (!cfg().categories.length) await settings.save({ categories: SAMPLE_CATEGORIES.map(c => ({ id: tkit.slug(c.label), label: c.label, tone: c.tone })) });
-      } catch (error) { fail(error); }
+    async function seedCategories() {    // examples come with their categories, unless the person already has some
+      if (!cfg().categories.length) await settings.save({ categories: SAMPLE_CATEGORIES.map(c => ({ id: tkit.slug(c.label), label: c.label, tone: c.tone })) });
     }
-    function exportCsv() {
-      const rows = store.records.map(r => r.data).sort(newestFirst);
-      const columns = [{ key: 'date', label: 'Data' }, { key: 'category', label: 'Categoria' }, { key: 'amount', label: cfg().metricLabel, format: v => v === null || v === undefined ? '' : String(v) }, { key: 'notes', label: 'Notas' }];
-      tkit.csv.download(tkit.csv.stringify(rows, columns, { delimiter: tkit.csv.delimiter() }), appName + ' - Lançamentos - ' + tkit.today() + '.csv');
-      tkit.toast('Exportado: ' + plural(rows.length, 'linha', 'linhas'));
-    }
-    async function importCsv() {
-      const importer = $('importer');
-      importer.fields = fieldsFor();
-      const docs = await importer.open();
-      if (!docs || !docs.length) return;
-      try {
-        for (let i = 0; i < docs.length; i++) {
-          await entries.insert(docs[i]);
-          if ((i + 1) % 50 === 0) tkit.toast('Importados ' + (i + 1) + ' de ' + docs.length + '…');
-        }
-        tkit.toast('Importado: ' + plural(docs.length, 'lançamento', 'lançamentos'));
-      } catch (error) { fail(error); }
-    }
-    async function deleteAll() {
-      const records = store.records.slice();
-      if (!records.length || !await tkit.confirm('Apagar ' + plural(records.length, 'lançamento', 'lançamentos') + '? Não dá para desfazer.', { confirm: 'Apagar tudo', tone: 'danger' })) return;
-      try {
-        for (let i = 0; i < records.length; i++) {
-          await entries.remove(records[i].id);
-          if ((i + 1) % 50 === 0) tkit.toast('Apagados ' + (i + 1) + ' de ' + records.length + '…');
-        }
-      } catch (error) { fail(error); }
-    }
+    const loadSamples = () => seedCategories().then(() => tkit.samples.load(entries, sampleDocs())).catch(fail);
 
     // ---- Render and events ---------------------------------------------------------------------------------
     function render() {
       const records = store ? store.records : [];
       const examples = tkit.samples.count(records);
-      $('banner-overview').count = $('banner-entries').count = examples;
+      document.querySelectorAll('t-sample-banner').forEach(b => { b.count = examples; });
       renderOverview(records);
       renderTable(records);
       renderSettings(records);
       if (store) applyRoute(tkit.route.get());   // a link may have been waiting for the records
     }
-    $('new-entry').addEventListener('click', () => openEditor(null));
-    $('new-entry-2').addEventListener('click', () => openEditor(null));
+    ['new-entry', 'new-entry-2'].forEach(id => $(id).addEventListener('click', () => openEditor(null)));
     $('see-all').addEventListener('click', () => { app.view = 'entries'; });
     $('save').addEventListener('click', saveEntry);
     $('cancel').addEventListener('click', () => $('editor').close());
@@ -440,13 +375,17 @@
     $('set-goal').addEventListener('change', event => { const goal = Number(event.target.value); settings.save({ goal: goal > 0 ? goal : null }).catch(fail); });
     $('set-currency').addEventListener('change', event => settings.save({ currency: event.target.value }).catch(fail));
     $('categories').addEventListener('t-change', event => saveCategories(event.detail.items));
-    $('export-csv').addEventListener('click', exportCsv);
-    $('import-csv').addEventListener('click', importCsv);
-    $('samples-load').addEventListener('click', loadSamples);
-    $('samples-clear').addEventListener('click', () => tkit.samples.clear(entries).catch(fail));
-    $('banner-overview').addEventListener('t-clear', () => tkit.samples.clear(entries).catch(fail));
-    $('banner-entries').addEventListener('t-clear', () => tkit.samples.clear(entries).catch(fail));
-    $('delete-all').addEventListener('click', deleteAll);
+    $('empty').addEventListener('t-action', () => openEditor(null));
+    $('empty').addEventListener('t-examples', loadSamples);
+    document.addEventListener('t-clear', () => tkit.samples.clear(entries).catch(fail));   // <t-sample-banner>
+    $('entry-form').addEventListener('t-option-added', event => {   // a category typed in the form joins the list
+      const { option } = event.detail;
+      settings.save({ categories: cfg().categories.concat({ id: option.id, label: option.label, tone: option.tone || '' }) }).catch(fail);
+    });
+    Object.assign(tools, {
+      collection: entries, examples: sampleDocs, beforeExamples: seedCategories, filename: 'Lançamentos', noun: { one: 'lançamento', many: 'lançamentos' },
+      exportRows: list => list.slice().sort((a, b) => newestFirst(a.data, b.data)).map(r => r.data),
+    });
     app.addEventListener('t-view', () => { if (store) render(); });   // the kit clears the summary on a view switch
 
     // ---- Start-up ----------------------------------------------------------------------------------------------
@@ -458,7 +397,8 @@
         const state = $('overview-state');
         tkit.clear(state);
         $('overview-content').hidden = true;
-        state.appendChild(stateEl('error', 'Não deu para carregar os lançamentos', error.message,
+        $('empty').hidden = true;
+        state.appendChild(tkit.h('t-state', { kind: 'error', title: 'Não deu para carregar os lançamentos', text: error.message },
           tkit.h('button', { type: 'button', class: 't-button', text: 'Tentar de novo', onClick: () => store.reload().catch(() => {}) })));
       } });
       tkit.route.on(applyRoute);

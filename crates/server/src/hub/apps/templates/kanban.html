@@ -10,11 +10,9 @@
   <style>
     .board-page { max-width: none; height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
     t-kanban { min-height: 0; height: 100%; }
-    .col-total { margin-left: auto; color: var(--t-muted); font-size: var(--t-text-sm); font-weight: 500; white-space: nowrap; }
     .settings-stack { display: grid; gap: var(--t-space-3); max-width: 720px; }
-    .settings-stack .t-card { display: grid; gap: var(--t-space-3); }
+    .settings-stack > .t-card { display: grid; gap: var(--t-space-3); }
     .settings-stack .t-card-head h2 { margin: 0; font-size: var(--t-text-lg); }
-    .t-actions.start { justify-content: flex-start; flex-wrap: wrap; }
   </style>
 </head>
 <body>
@@ -33,7 +31,11 @@
             <button type="button" class="t-button primary new-card">New card</button>
           </header>
           <t-sample-banner class="sample-banner"></t-sample-banner>
-          <div id="board"></div>
+          <div id="board">
+            <div id="status"><t-state kind="loading"></t-state></div>
+            <t-empty-start id="empty" hidden title="No cards yet" text="Add your first card, or load a few examples to see how the board works." action="New card"></t-empty-start>
+            <t-kanban id="kanban" addable hidden empty-text="Drop a card here"></t-kanban>
+          </div>
         </div>
       </t-view>
       <t-view name="list">
@@ -64,26 +66,7 @@
               <label class="t-switch-line"><input type="checkbox" class="t-switch" data-field="owner"><span>Owner</span></label>
               <label class="t-field" id="currency-field"><span>Currency</span><select id="currency"></select></label>
             </section>
-            <section class="t-card">
-              <div class="t-card-head"><h2>Data</h2></div>
-              <div class="t-actions start">
-                <button type="button" class="t-button" id="export-csv">Export CSV</button>
-                <button type="button" class="t-button" id="import-csv">Import CSV</button>
-              </div>
-            </section>
-            <section class="t-card">
-              <div class="t-card-head"><h2>Examples</h2></div>
-              <p class="t-muted" id="examples-text"></p>
-              <div class="t-actions start">
-                <button type="button" class="t-button" id="load-examples">See with examples</button>
-                <button type="button" class="t-button" id="clear-examples">Delete examples</button>
-              </div>
-            </section>
-            <section class="t-card">
-              <div class="t-card-head"><h2>Danger zone</h2></div>
-              <p class="t-muted">Deletes every card. It cannot be undone.</p>
-              <div class="t-actions start"><button type="button" class="t-button danger" id="delete-all">Delete all cards</button></div>
-            </section>
+            <t-data-tools id="tools"></t-data-tools>
           </div>
         </div>
       </t-view>
@@ -120,38 +103,26 @@
     </form>
   </t-modal>
 
-  <t-import id="importer"></t-import>
-
   <script>
-    // PAGE MAP: strings (T) -> defaults -> state -> helpers -> render (board, list) -> card editor and detail ->
-    // settings screen -> import/export/examples -> start-up.
-    // DATA: cards are records in the collection `cards` { title, column, text, order, value?, due?, owner? }, so two panes (or you
-    // and an agent) can move cards at once. Settings are one tendly.data key `settings`:
-    // { v, columns: [{ id, label, tone }], fields: ['value'|'due'|'owner'...], currency }. Old apps kept the columns in the
-    // key `columns` ([{ id, title }]): start-up copies them into `settings` once and leaves the old key alone.
+    // PAGE MAP: text (T) -> defaults -> state -> helpers -> render (board, list) -> card editor and detail ->
+    // column/field settings -> data tools -> start-up. CSV, examples, delete-all and the empty state are kit elements.
+    // DATA: cards are records in the collection `cards` { title, column, text, order, value?, due?, owner? }.
+    // Settings are one tendly.data key `settings`: { v, columns: [{ id, label, tone }], fields: ['value'|'due'|'owner'], currency }.
+    // Old apps kept the columns in the key `columns` ([{ id, title }]): start-up copies them into `settings` once.
 
-    // All visible text of the script lives here (the pt-BR twin of this file only changes this block, the markup and lang).
+    // All visible text of the script lives here (the pt-BR twin only changes this block, the markup and lang).
     const T = {
       cardWord: n => n === 1 ? 'card' : 'cards',
       all: 'All', addColumn: 'Add a column',
       todo: 'To do', doing: 'Doing', done: 'Done',
       fTitle: 'Title', fColumn: 'Column', fNotes: 'Notes', fValue: 'Value', fDue: 'Due date', fOwner: 'Owner',
-      newCard: 'New card', editCard: 'Edit card', cardType: 'Card',
-      dropHere: 'Drop a card here', moveTo: 'Move to…',
+      newCard: 'New card', editCard: 'Edit card', moveTo: 'Move to…',
       loadFail: 'Could not load the board', retry: 'Try again',
-      emptyTitle: 'No cards yet', emptyText: 'Add your first card, or load a few examples to see how the board works.', seeExamples: 'See with examples',
       conflict: 'Someone changed this card meanwhile; it was reloaded.', notFound: 'That card no longer exists.',
       deleteQ: title => 'Delete "' + title + '"?', del: 'Delete',
       keepOne: 'Keep at least one column.',
       moveAsk: (names, n) => n + ' ' + T.cardWord(n) + ' in ' + names + '. Where should they go?',
-      examplesNone: 'Fill the board with a small sales funnel to see how it works.',
-      examplesSome: n => 'The board has ' + n + ' example ' + T.cardWord(n) + '.',
-      imported: n => 'Imported ' + n + ' ' + T.cardWord(n),
-      importing: n => 'Importing… ' + n,
-      exported: n => 'Exported: ' + n + ' ' + T.cardWord(n),
-      nothingToDelete: 'There are no cards to delete.',
-      deleteAllQ: n => 'Delete all ' + n + ' ' + T.cardWord(n) + '? This cannot be undone.', deleteAllBtn: 'Delete all',
-      csvView: 'Cards',
+      csvName: 'Cards',
       summary: (n, parts) => 'Board: ' + n + ' ' + T.cardWord(n) + '. ' + parts,
       summaryEmpty: 'Board: no cards yet',
       sel: title => 'Card: ' + title,
@@ -183,13 +154,12 @@
 
     const cards = tendly.db.collection('cards');
     const $ = id => document.getElementById(id);
-    const board = $('board'), table = $('table'), pills = $('stage-filter');
+    const status = $('status'), empty = $('empty'), kanban = $('kanban'), table = $('table'), pills = $('stage-filter');
     const editor = $('editor'), cardForm = $('card-form'), recordForm = $('record-form');
-    const detail = $('detail'), importer = $('importer'), columnsEditor = $('columns-editor');
+    const detail = $('detail'), columnsEditor = $('columns-editor'), tools = $('tools');
     const moveModal = $('move-modal'), moveForm = $('move-form');
-    const APP_NAME = document.title;
     const fail = error => tkit.toast(error && error.message ? error.message : String(error), { tone: 'error' });
-    let S, store, kanban, boardMode = '', editing = null, loaded = false, moveResolve = null;
+    let S, store, editing = null, loaded = false, moveResolve = null, importOrder = 0;
 
     // ---- helpers -----------------------------------------------------------------------------
     const columns = () => S.value.columns;
@@ -198,29 +168,19 @@
     // A card whose column was deleted (or never existed) shows in the first column instead of vanishing.
     function columnOf(record) { return columns().some(c => c.id === record.data.column) ? record.data.column : columns()[0].id; }
     function columnLabel(id) { const c = columns().find(x => x.id === id); return c ? c.label : id; }
-    function sortedCards() {
-      return store.records.slice().sort((a, b) => orderOf(a) - orderOf(b) || a.created_at.localeCompare(b.created_at));
-    }
+    const byOrder = list => list.slice().sort((a, b) => orderOf(a) - orderOf(b) || a.created_at.localeCompare(b.created_at));
     function endOrder(columnId) {
       const mine = store.records.filter(r => columnOf(r) === columnId).map(orderOf);
       return mine.length ? Math.max.apply(null, mine) + 1 : 1;
     }
-    // The schema of a card, from the settings (same format the kit's form, detail and importer read).
+    // The schema of a card, from the settings (same format the kit's form, detail, importer and CSV read).
     function fieldsNow() {
-      const list = [
-        { id: 'title', label: T.fTitle, type: 'text', required: true },
-        { id: 'column', label: T.fColumn, type: 'choice', required: true, options: columns() }
-      ];
-      OPTIONAL.forEach(f => { if (hasField(f.id)) list.push(f); });
-      list.push({ id: 'text', label: T.fNotes, type: 'longtext' });
-      return list;
+      return [{ id: 'title', label: T.fTitle, type: 'text', required: true }, { id: 'column', label: T.fColumn, type: 'choice', required: true, options: columns() }]
+        .concat(OPTIONAL.filter(f => hasField(f.id)), [{ id: 'text', label: T.fNotes, type: 'longtext' }]);
     }
     function isOverdue(record) {
-      const last = columns()[columns().length - 1].id;
-      return !!record.data.due && record.data.due < tkit.today() && columnOf(record) !== last;
+      return !!record.data.due && record.data.due < tkit.today() && columnOf(record) !== columns()[columns().length - 1].id;
     }
-
-    // ---- render: board and list --------------------------------------------------------------
     function cardMeta(r) {
       const parts = [];
       if (hasField('value') && r.data.value !== undefined && r.data.value !== null) parts.push(tkit.money(r.data.value, S.value.currency));
@@ -228,48 +188,20 @@
       if (!parts.length) return { meta: tkit.ago(r.updated_at) };
       return { meta: parts.join(' · '), tone: hasField('due') && isOverdue(r) ? 'danger' : '' };
     }
-    // KIT-CANDIDATE: a per-column extra (a total) in <t-kanban>'s header. Until the kit has it, add it after each draw.
-    function addColumnTotals(sorted) {
-      if (!hasField('value')) return;
-      Array.prototype.forEach.call(kanban.querySelectorAll('.t-kanban-col'), col => {
-        const id = col.dataset.col;
-        const total = sorted.filter(r => columnOf(r) === id).reduce((sum, r) => sum + (Number(r.data.value) || 0), 0);
-        const head = col.querySelector('.t-kanban-head');
-        if (head) head.insertBefore(tkit.h('span', { class: 'col-total', text: tkit.money(total, S.value.currency) }), head.querySelector('[data-add]'));
-      });
-    }
-    function createKanban() {
-      kanban = tkit.h('t-kanban', { addable: true, 'empty-text': T.dropHere });
-      kanban.addEventListener('t-move', async event => {
-        const { id, to, index } = event.detail;
-        const others = store.records.filter(r => columnOf(r) === to && r.id !== id).sort((a, b) => orderOf(a) - orderOf(b));
-        const before = others[index - 1], after = others[index];
-        const order = before && after ? (orderOf(before) + orderOf(after)) / 2 : after ? orderOf(after) - 1 : before ? orderOf(before) + 1 : 1;
-        try { await cards.update(id, { column: to, order }); } catch (error) { fail(error); store.reload(); }
-      });
-      kanban.addEventListener('t-open', event => showDetail(store.records.find(r => r.id === event.detail.id)));
-      kanban.addEventListener('t-add', event => openEditor(null, event.detail.column));
-    }
-    function emptyState() {
-      return tkit.h('t-state', { kind: 'empty', title: T.emptyTitle, text: T.emptyText },
-        tkit.h('button', { type: 'button', class: 't-button primary', text: T.newCard, onClick: () => openEditor(null) }),
-        tkit.h('button', { type: 'button', class: 't-button', text: T.seeExamples, onClick: loadExamples }));
-    }
-    function drawBoard(sorted) {
-      if (!sorted.length) {
-        if (boardMode !== 'empty') { tkit.clear(board); board.appendChild(emptyState()); boardMode = 'empty'; }
-        return;
-      }
-      if (boardMode !== 'board') {
-        tkit.clear(board);
-        if (!kanban) createKanban();
-        board.appendChild(kanban);
-        boardMode = 'board';
-      }
-      kanban.columns = columns().map(c => ({ id: c.id, title: c.label }));
-      kanban.cards = sorted.map(r => Object.assign({ id: r.id, column: columnOf(r), title: r.data.title, text: r.data.text }, cardMeta(r)));
-      addColumnTotals(sorted);
-    }
+
+    // ---- render: board and list --------------------------------------------------------------
+    kanban.columnMeta = (id, list) => hasField('value') ? tkit.money(list.reduce((sum, c) => sum + (Number(c.value) || 0), 0), S.value.currency) : '';
+    kanban.addEventListener('t-move', async event => {
+      const { id, to, index } = event.detail;
+      const others = store.records.filter(r => columnOf(r) === to && r.id !== id).sort((a, b) => orderOf(a) - orderOf(b));
+      const before = others[index - 1], after = others[index];
+      const order = before && after ? (orderOf(before) + orderOf(after)) / 2 : after ? orderOf(after) - 1 : before ? orderOf(before) + 1 : 1;
+      try { await cards.update(id, { column: to, order }); } catch (error) { fail(error); store.reload(); }
+    });
+    kanban.addEventListener('t-open', event => showDetail(store.records.find(r => r.id === event.detail.id)));
+    kanban.addEventListener('t-add', event => openEditor(null, event.detail.column));
+    empty.addEventListener('t-action', () => openEditor(null));
+    empty.addEventListener('t-examples', () => seedFields().then(() => tkit.samples.load(cards, exampleDocs())).catch(fail));
     function drawList(sorted) {
       const tones = {};
       columns().forEach(c => { tones[c.label] = c.tone; });
@@ -290,14 +222,16 @@
     }
     function render() {
       loaded = true;
-      const sorted = sortedCards();
-      drawBoard(sorted);
+      const sorted = byOrder(store.records);
+      tkit.clear(status);
+      empty.hidden = sorted.length > 0;
+      kanban.hidden = !sorted.length;
+      kanban.columns = columns().map(c => ({ id: c.id, title: c.label }));
+      kanban.cards = sorted.map(r => Object.assign({ id: r.id, column: columnOf(r), title: r.data.title, text: r.data.text, value: r.data.value }, cardMeta(r)));
       drawList(sorted);
-      const examples = tkit.samples.count(store.records);
-      document.querySelectorAll('.sample-banner').forEach(b => { b.count = examples; });
-      $('examples-text').textContent = examples ? T.examplesSome(examples) : T.examplesNone;
-      $('load-examples').hidden = examples > 0;
-      $('clear-examples').hidden = examples === 0;
+      document.querySelectorAll('.sample-banner').forEach(b => { b.count = tkit.samples.count(store.records); });
+      tools.fields = fieldsNow();
+      tools.records = store.records;
       if (detail.opened) {
         const fresh = detail.record && store.records.find(r => r.id === detail.record.id);
         if (fresh) { detail.record = fresh; detail.siblings = sorted.map(r => r.id); } else detail.close();
@@ -353,7 +287,7 @@
       if (!record) return;
       detail.fields = fieldsNow();
       detail.settings = { currency: S.value.currency };
-      detail.siblings = sortedCards().map(r => r.id);
+      detail.siblings = byOrder(store.records).map(r => r.id);
       detail.record = record;
       const select = $('detail-move');
       tkit.clear(select);
@@ -382,11 +316,7 @@
       } else if (detail.opened) detail.close();
     }
 
-    // ---- settings screen ---------------------------------------------------------------------
-    function moveCards(list, target) {
-      let order = endOrder(target);
-      return list.reduce((chain, r) => chain.then(() => cards.update(r.id, { column: target, order: order++ })), Promise.resolve());
-    }
+    // ---- settings: columns and card fields ---------------------------------------------------
     function askMove(gone, remaining, n) {
       return new Promise(resolve => {
         moveResolve = resolve;
@@ -417,7 +347,8 @@
         if (stranded.length) {
           const target = await askMove(gone, items, stranded.length);
           if (!target) { columnsEditor.items = before; return; }
-          await moveCards(stranded, target);
+          let order = endOrder(target);
+          for (const r of stranded) await cards.update(r.id, { column: target, order: order++ });
         }
         await S.save({ columns: items });
       } catch (error) { fail(error); columnsEditor.items = columns(); }
@@ -439,48 +370,24 @@
       if (store && loaded) render();
     }
 
-    // ---- export, import, examples, delete all ------------------------------------------------
-    $('export-csv').addEventListener('click', () => {
-      const fields = fieldsNow();
-      const cols = fields.map(f => ({ key: f.id, label: f.label, format: f.id === 'column' ? (v, row) => columnLabel(columnOf({ data: row })) : undefined }));
-      const rows = sortedCards().map(r => r.data);
-      tkit.csv.download(tkit.csv.stringify(rows, cols, { delimiter: tkit.csv.delimiter() }), APP_NAME + ' - ' + T.csvView + ' - ' + tkit.today() + '.csv');
-      tkit.toast(T.exported(rows.length));
-    });
-    $('import-csv').addEventListener('click', async () => {
-      importer.fields = fieldsNow();
-      const rows = await importer.open();
-      if (!rows || !rows.length) return;
-      let order = Math.max(0, ...store.records.map(orderOf)) + 1, done = 0;
-      try {
-        for (const row of rows) {
-          await cards.insert(Object.assign({ column: columns()[0].id }, row, { order: order++ }));
-          if (++done % 50 === 0) tkit.toast(T.importing(done));
-        }
-        tkit.toast(T.imported(done), { tone: 'success' });
-      } catch (error) { fail(error); }
-    });
-    async function loadExamples() {
-      if (!hasField('value') && !hasField('due')) await S.save({ fields: hasField('owner') ? ['value', 'due', 'owner'] : ['value', 'due'] }).catch(fail);
-      const cols = columns(), stage = [cols[0].id, cols[Math.min(1, cols.length - 1)].id, cols[cols.length - 1].id];
-      const seen = {};
-      const docs = T.examples.map(e => {
+    // ---- data tools: CSV, examples, delete all (the kit draws the three cards) ----------------
+    // Examples show value and due date, so those fields are switched on first if neither is.
+    const seedFields = async () => { if (!hasField('value') && !hasField('due')) await S.save({ fields: hasField('owner') ? ['value', 'due', 'owner'] : ['value', 'due'] }); };
+    function exampleDocs() {
+      const cols = columns(), stage = [cols[0].id, cols[Math.min(1, cols.length - 1)].id, cols[cols.length - 1].id], seen = {};
+      return T.examples.map(e => {
         seen[e[1]] = (seen[e[1]] || 0) + 1;
         return { title: e[0], column: stage[e[1]], value: e[2], due: tkit.daysFromToday(e[3]), owner: e[4], text: e[5], order: seen[e[1]] };
       });
-      try { await tkit.samples.load(cards, docs); } catch (error) { fail(error); }
     }
-    $('load-examples').addEventListener('click', loadExamples);
-    const clearExamples = () => tkit.samples.clear(cards).catch(fail);
-    $('clear-examples').addEventListener('click', clearExamples);
-    document.querySelectorAll('.sample-banner').forEach(b => b.addEventListener('t-clear', clearExamples));
-    $('delete-all').addEventListener('click', async () => {
-      const all = await cards.list({ limit: 5000 }).catch(fail);
-      if (!all) return;
-      if (!all.length) { tkit.toast(T.nothingToDelete); return; }
-      if (!await tkit.confirm(T.deleteAllQ(all.length), { confirm: T.deleteAllBtn, tone: 'danger' })) return;
-      try { for (const r of all) await cards.remove(r.id); } catch (error) { fail(error); }
-    });
+    tools.collection = cards;
+    tools.noun = { one: T.cardWord(1), many: T.cardWord(2) };
+    tools.filename = T.csvName;
+    tools.examples = exampleDocs;
+    tools.beforeExamples = seedFields;
+    tools.exportRows = records => byOrder(records).map(r => Object.assign({}, r.data, { column: columnOf(r) }));
+    tools.beforeInsert = doc => { importOrder = Math.max(importOrder, ...store.records.map(orderOf)) + 1; return Object.assign({ column: columns()[0].id }, doc, { order: importOrder }); };
+    document.querySelectorAll('.sample-banner').forEach(b => b.addEventListener('t-clear', () => tkit.samples.clear(cards).catch(fail)));
 
     // ---- start-up ----------------------------------------------------------------------------
     async function migrateOldColumns() {
@@ -496,17 +403,16 @@
     document.querySelector('t-app').addEventListener('t-view', () => setTimeout(setSummary, 0));
     tkit.route.on(syncRoute);
     (async () => {
-      board.appendChild(tkit.h('t-state', { kind: 'loading' }));
       S = await tkit.settings('settings', DEFAULTS);
       if (S.error) fail(S.error);
       await migrateOldColumns();
       S.on(applySettings);
       applySettings();
       store = tkit.live(cards, render, { limit: 5000, onError: error => {
-        boardMode = 'error';
-        tkit.clear(board);
-        board.appendChild(tkit.h('t-state', { kind: 'error', title: T.loadFail, text: error.message },
-          tkit.h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => { boardMode = ''; store.reload(); } })));
+        tkit.clear(status);
+        empty.hidden = true; kanban.hidden = true;
+        status.appendChild(tkit.h('t-state', { kind: 'error', title: T.loadFail, text: error.message },
+          tkit.h('button', { type: 'button', class: 't-button', text: T.retry, onClick: () => store.reload() })));
       } });
     })();
   </script>
