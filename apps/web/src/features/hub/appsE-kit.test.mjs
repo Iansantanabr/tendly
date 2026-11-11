@@ -29,8 +29,10 @@ function loadKit(lang = 'en') {
 
 test('kit: loads without a DOM and exposes the helpers the templates use', () => {
   const tkit = loadKit();
-  assert.equal(tkit.version, 1);
-  for (const name of ['h', 'icon', 'clear', 'toast', 'confirm', 'live', 'form', 'fill', 'date', 'ago', 'money', 'number', 'uid', 'today', 'filterRows', 'sortRows', 'groupBy', 'monthGrid', 'matches', 't']) {
+  assert.equal(tkit.version, 2);
+  for (const name of ['h', 'icon', 'clear', 'toast', 'confirm', 'live', 'form', 'fill', 'date', 'ago', 'money', 'number', 'uid', 'today', 'filterRows', 'sortRows', 'groupBy', 'monthGrid', 'matches', 't',
+    // version 2 (kit-v2.test.mjs covers what they do)
+    'fold', 'download', 'daysFromToday', 'parseNumber', 'parseRoute', 'context', 'mergeContext', 'settings', 'mergeSettings', 'slug', 'fieldValue', 'fieldText', 'validate', 'compute', 'parseMarkdown', 'markdown', 'markdownOutline']) {
     assert.equal(typeof tkit[name], 'function', name);
   }
   assert.equal(tkit.elements.length, 0, 'no customElements here: nothing defined');
@@ -175,8 +177,13 @@ function inlineScripts(html) {
 }
 
 test('kit.js defines every element the stylesheet and the templates expect', () => {
-  assert.deepEqual(definedTags, ['t-app', 't-nav', 't-view', 't-state', 't-pills', 't-modal', 't-table', 't-kanban', 't-chart', 't-calendar']);
+  assert.deepEqual(definedTags, ['t-app', 't-nav', 't-view', 't-state', 't-pills', 't-modal', 't-table', 't-kanban', 't-chart', 't-calendar',
+    't-sample-banner', 't-progress', 't-steps', 't-gallery', 't-checklist', 't-record-form', 't-list-editor', 't-fields-editor', 't-detail', 't-import']);
   for (const tag of definedTags) assert.ok(KIT_CSS.includes(tag), `kit.css styles ${tag}`);
+  for (const tag of definedTags) if (tag !== 't-view') assert.ok(DEMO.includes(`<${tag}`) || DEMO.includes(`'${tag}'`), `kit-demo.html shows ${tag}`);
+  for (const cls of ['t-nav-end', 't-drawer', 't-switch', 't-card-head', 't-kv', 't-segment', 't-md', 't-badge', 't-wikilink']) assert.ok(cssClasses.has(cls), `.${cls} is styled`);
+  assert.match(KIT_CSS, /\.t-badge\.info/);
+  assert.match(KIT_CSS, /\.t-badge\.violet/);
 });
 
 for (const [name, html] of [...Object.entries(templates), ['kit-demo', DEMO]]) {

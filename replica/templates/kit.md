@@ -115,3 +115,17 @@ Test thoroughly in `kit-v2.test.mjs`: precedence, unary minus, `^` right-assoc, 
 3. Every new string exists in `en` and `pt`.
 4. No existing template changes behaviour (they still pass their test and still work: the `#view` hash form keeps working).
 5. Report: the final public API list (names + one line each) exactly as documented in the header comment.
+
+---
+
+## Notes for template authors (from the kit implementation, 2026-11-11)
+
+- `<t-app>` clears `selection` and `summary` on every view switch: set `summary` again in a `t-view` listener, not only when data renders.
+- `<t-fields-editor>` / `<t-list-editor>` don't redraw when you set `.fields`/`.items` to what they just emitted (focus survives save-and-echo). Their nested `t-change` events don't bubble to the page. `<t-fields-editor>` also has `.optionsInUse = { fieldId: { optionId: count } }` and `.types` (or attribute `types="text,number,…"`) to restrict the type menu (the Form template hides `formula`).
+- `<t-record-form>.submit()` resolves the whole `.value` merged with the form (so `_sample`, `order` survive an edit), formula ids removed; rejects with `err.code === 'invalid'` for validation (don't toast those; toast other errors).
+- `<t-detail>` opens itself as drawer/sheet; to reopen from a link, listen with `tkit.route.on(({ view, id }) => …)` and call `detail.open()`. Close from outside with `detail.close()` (it cleans the hash and context). Its default selection is "<title-field label>: <title>"; override with `tkit.context({ selection })` right after `open()` when the spec wants another text.
+- `<t-checklist>` flips the box at once: always set `.items` again after saving (also after a failed save, so it snaps back).
+- CSV: in pt-BR templates export with `tkit.csv.stringify(rows, cols, { delimiter: tkit.csv.delimiter() })` (`;` for pt, `,` for en). Formula-looking cells are escaped by the kit.
+- Markdown: `#` renders as `<h2>` (the page keeps its single `<h1>`); headings carry `data-anchor`. For an outline use `tkit.markdownOutline(text)` and `scrollIntoView` — never `#anchor` links (the hash belongs to the router).
+- `tkit.compute()` caches compiled formulas (cheap per row). `tkit.parseNumber` reads "1.234,5", "1,234.5", "R$ 12,50".
+- Ids from `tkit.slug` never start with a digit (`f_` prefix) and avoid `and/or/not/true/false` (they are formula names too).

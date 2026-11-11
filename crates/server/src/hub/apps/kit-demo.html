@@ -12,6 +12,8 @@
     .swatches { display: flex; flex-wrap: wrap; gap: var(--t-space-2); }
     .swatch { display: grid; gap: 2px; width: 92px; font-size: var(--t-text-xs); color: var(--t-muted); }
     .swatch > i { display: block; height: 28px; border-radius: var(--t-radius-sm); border: 1px solid var(--t-line); }
+    .demo-out { margin: 0; padding: var(--t-space-3); overflow: auto; max-height: 220px; border: 1px solid var(--t-line); border-radius: var(--t-radius-md); background: var(--t-surface); color: var(--t-ink-soft); font: 12px/1.5 var(--t-mono); white-space: pre-wrap; }
+    .demo-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--t-space-4); align-items: start; }
   </style>
 </head>
 <body>
@@ -23,6 +25,10 @@
       <button data-view="table" data-icon="table">Table</button>
       <button data-view="calendar" data-icon="calendar">Calendar</button>
       <button data-view="charts" data-icon="chart">Charts</button>
+      <button data-view="forms" data-icon="form">Forms</button>
+      <button data-view="records" data-icon="grid">Records</button>
+      <button data-view="more" data-icon="check-square">More</button>
+      <button data-view="settings" data-icon="settings" class="t-nav-end">Settings</button>
     </t-nav>
     <main class="t-app-main">
       <t-view name="pieces">
@@ -97,6 +103,95 @@
           </div>
         </div>
       </t-view>
+      <t-view name="forms">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Forms from a schema</h1><p class="t-muted">A field list drives the form, the details, the CSV and the editors below. Edit the fields in the third card and watch the first one follow.</p></div></header>
+          <section class="t-card">
+            <div class="t-card-head"><h2>&lt;t-record-form&gt;</h2><button type="button" class="t-button small" id="rf-fill">Fill an example</button></div>
+            <t-record-form id="rf"></t-record-form>
+            <div class="t-actions"><button type="button" class="t-button" id="rf-reset">Clear</button><button type="button" class="t-button primary" id="rf-save">Save</button></div>
+            <pre class="demo-out" id="rf-out" aria-live="polite">The saved values show here.</pre>
+          </section>
+          <div class="demo-two">
+            <section class="t-card">
+              <div class="t-card-head"><h2>&lt;t-list-editor tones&gt;</h2></div>
+              <p class="t-muted">Drag by the dots, or use the arrows. Deleting "Won" warns: 3 records use it.</p>
+              <t-list-editor id="le" tones></t-list-editor>
+              <pre class="demo-out" id="le-out"></pre>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>&lt;t-fields-editor&gt;</h2></div>
+              <p class="t-muted">Add a "Formula" field and write <code>price * qty</code>. "Name" has 12 records, so changing its type asks first.</p>
+              <t-fields-editor id="fe"></t-fields-editor>
+            </section>
+          </div>
+        </div>
+      </t-view>
+      <t-view name="records">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Records</h1><p class="t-muted">Open a card: a drawer slides in (full screen on a phone), the address becomes <code>#records/&lt;id&gt;</code> and reloading the page opens it again.</p></div><button type="button" class="t-button" id="import-open"><span id="import-label">Import CSV</span></button></header>
+          <t-sample-banner id="banner"></t-sample-banner>
+          <p class="t-muted" id="route-out" aria-live="polite"></p>
+          <t-gallery id="gallery" empty-text="No records yet"></t-gallery>
+          <div class="t-toolbar"><button type="button" class="t-button" id="csv-out">Download these as CSV</button><button type="button" class="t-button" id="banner-toggle">Toggle the examples banner</button><span class="t-muted" id="import-result"></span></div>
+          <t-import id="importer"></t-import>
+          <t-detail id="detail" title-field="name">
+            <button type="button" slot="actions" class="t-button" id="detail-edit">Edit</button>
+            <button type="button" slot="actions" class="t-button danger" id="detail-delete">Delete</button>
+          </t-detail>
+        </div>
+      </t-view>
+      <t-view name="more">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Checklists, steps, formulas, markdown</h1></div></header>
+          <div class="demo-two">
+            <section class="t-card">
+              <div class="t-card-head"><h2>&lt;t-checklist&gt;</h2><div class="t-segment" role="group" aria-label="Mode"><button type="button" aria-pressed="true" id="mode-edit">Edit</button><button type="button" aria-pressed="false" id="mode-read">Read only</button></div></div>
+              <t-checklist id="checklist"></t-checklist>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>&lt;t-steps&gt; and &lt;t-progress&gt;</h2></div>
+              <t-steps id="steps"></t-steps>
+              <div class="t-actions" style="justify-content: flex-start"><button type="button" class="t-button" id="steps-back">Back</button><button type="button" class="t-button primary" id="steps-next">Next</button></div>
+              <t-progress id="progress" value="3" max="10" label="Profile completeness"></t-progress>
+              <t-progress value="10" max="10" label="Done"></t-progress>
+              <label class="t-switch-line"><input type="checkbox" class="t-switch" id="switch"><span>A .t-switch checkbox</span></label>
+              <dl class="t-kv"><div><dt>A .t-kv list</dt><dd>label above the value on a phone, side by side wider</dd></div><div><dt>Status</dt><dd><span class="t-badge info">Info</span> <span class="t-badge violet">Violet</span></dd></div></dl>
+            </section>
+          </div>
+          <section class="t-card">
+            <div class="t-card-head"><h2>tkit.formula</h2></div>
+            <div class="t-form-row">
+              <label class="t-field"><span>Formula</span><input type="text" id="f-text" value="if(qty > 0, round(price * qty * 1.1, 2), &quot;no quantity&quot;)" spellcheck="false"></label>
+              <label class="t-field"><span>Values (JSON)</span><input type="text" id="f-values" value='{"price": 19.9, "qty": 3}' spellcheck="false"></label>
+            </div>
+            <p id="f-out" class="t-title" aria-live="polite"></p>
+          </section>
+          <div class="demo-two">
+            <section class="t-card">
+              <div class="t-card-head"><h2>tkit.markdown</h2></div>
+              <label class="t-field"><span>Markdown</span><textarea id="md-in" rows="12" spellcheck="false"></textarea></label>
+            </section>
+            <section class="t-card">
+              <div class="t-card-head"><h2>Rendered</h2></div>
+              <div class="t-md" id="md-out"></div>
+            </section>
+          </div>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Dynamic screens</h2><button type="button" class="t-button small" id="add-screen">Add a screen</button></div>
+            <p class="t-muted">Adds a screen and a nav button at run time, then calls <code>app.refresh()</code>. Settings stays last.</p>
+          </section>
+        </div>
+      </t-view>
+      <t-view name="settings">
+        <div class="t-page">
+          <header class="t-page-head"><div><h1 class="t-title">Settings</h1><p class="t-muted">tkit.settings merges the saved value over the defaults. Standalone it lives in memory; inside Tendly it is saved.</p></div></header>
+          <section class="t-card">
+            <div class="t-card-head"><h2>Currency</h2><div class="t-segment" role="group" aria-label="Currency" id="currency"></div></div>
+            <pre class="demo-out" id="settings-out"></pre>
+          </section>
+        </div>
+      </t-view>
     </main>
   </t-app>
 
@@ -163,6 +258,153 @@
 
     document.getElementById('bars').data = [{ label: 'Jun', value: 12 }, { label: 'Jul', value: 18 }, { label: 'Aug', value: 9 }, { label: 'Sep', value: 24 }, { label: 'Oct', value: 20 }, { label: 'Nov', value: 31 }];
     document.getElementById('line').data = [{ label: 'W1', value: 3200 }, { label: 'W2', value: 4100 }, { label: 'W3', value: 2800 }, { label: 'W4', value: 5600 }, { label: 'W5', value: 6100 }];
+
+    // ---- Version 2 ------------------------------------------------------------------------------
+    // Everything below works without the SDK: tkit guards its calls to tendly.*.
+    var FIELDS = [
+      { id: 'name', label: 'Name', type: 'text', required: true },
+      { id: 'stage', label: 'Stage', type: 'choice', options: [{ id: 'new', label: 'New', tone: 'accent' }, { id: 'talking', label: 'Talking', tone: 'warn' }, { id: 'won', label: 'Won', tone: 'ok' }, { id: 'lost', label: 'Lost', tone: 'danger' }] },
+      { id: 'tags', label: 'Tags', type: 'multi', options: [{ id: 'vip', label: 'VIP', tone: 'violet' }, { id: 'partner', label: 'Partner', tone: 'info' }, { id: 'press', label: 'Press' }] },
+      { id: 'price', label: 'Price', type: 'money', help: 'Per unit' },
+      { id: 'qty', label: 'Quantity', type: 'number' },
+      { id: 'total', label: 'Total', type: 'formula', formula: 'round(price * qty, 2)', currency: 'USD' },
+      { id: 'due', label: 'Due', type: 'date' },
+      { id: 'email', label: 'E-mail', type: 'email' },
+      { id: 'site', label: 'Website', type: 'url' },
+      { id: 'phone', label: 'Phone', type: 'phone' },
+      { id: 'notes', label: 'Notes', type: 'longtext' },
+      { id: 'paid', label: 'Paid', type: 'checkbox' },
+      { id: 'photo', label: 'Photo', type: 'image' },
+      { id: 'contract', label: 'Contract', type: 'file' }
+    ];
+    var SETTINGS = { currency: 'USD' };
+    var EXAMPLE = { name: 'Ana Lima', stage: 'talking', tags: ['vip'], price: 19.9, qty: 3, due: tkit.daysFromToday(7), email: 'ana@example.com', site: 'https://example.com', phone: '+1 555 0100', notes: 'Asked for a quote.\nCall back on Friday.', paid: false };
+    var rf = document.getElementById('rf'), rfOut = document.getElementById('rf-out');
+    rf.fields = FIELDS; rf.settings = SETTINGS; rf.value = {};
+    rf.addEventListener('t-input', function () { rfOut.textContent = 'Typing... (t-input fires on every change; hold reloads here)'; });
+    document.getElementById('rf-fill').addEventListener('click', function () { rf.value = EXAMPLE; });
+    document.getElementById('rf-reset').addEventListener('click', function () { rf.value = {}; rfOut.textContent = 'Cleared.'; });
+    document.getElementById('rf-save').addEventListener('click', function () {
+      rf.submit().then(function (data) { rfOut.textContent = JSON.stringify(data, null, 2); tkit.toast('Valid', { tone: 'success' }); }, function (error) { rfOut.textContent = error.code === 'invalid' ? JSON.stringify(error.errors, null, 2) : String(error.message); });
+    });
+
+    var le = document.getElementById('le'), leOut = document.getElementById('le-out');
+    le.items = [{ id: 'new', label: 'New', tone: 'accent' }, { id: 'won', label: 'Won', tone: 'ok' }, { id: 'lost', label: 'Lost', tone: 'danger' }];
+    le.inUse = { won: 3 };
+    le.addLabel = 'Add a stage';
+    le.addEventListener('t-change', function (event) { leOut.textContent = JSON.stringify(event.detail.items); });
+    leOut.textContent = JSON.stringify(le.items);
+
+    var fe = document.getElementById('fe');
+    fe.fields = FIELDS.slice(0, 8);
+    fe.inUse = { name: 12, price: 5 };
+    fe.optionsInUse = { stage: { won: 3 } };
+    fe.addEventListener('t-change', function (event) { rf.fields = event.detail.fields; });
+
+    // Records: the gallery opens a detail drawer, and the address says which.
+    var RECORDS = [
+      { id: 'a', created_at: new Date(Date.now() - 5 * 864e5).toISOString(), updated_at: new Date(Date.now() - 3600e3).toISOString(), data: EXAMPLE },
+      { id: 'b', created_at: new Date(Date.now() - 2 * 864e5).toISOString(), updated_at: new Date(Date.now() - 2 * 864e5).toISOString(), data: { name: 'Bruno Costa', stage: 'won', tags: ['partner', 'press'], price: 120, qty: 2, due: tkit.daysFromToday(-2), email: 'bruno@example.com', paid: true } },
+      { id: 'c', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), data: { name: 'Carla Souza', stage: 'new' } }
+    ];
+    function pic(color, letter) { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60"><rect width="80" height="60" fill="' + color + '"/><text x="40" y="38" font-size="24" text-anchor="middle" fill="white" font-family="sans-serif">' + letter + '</text></svg>'); }
+    var gallery = document.getElementById('gallery'), detail = document.getElementById('detail'), routeOut = document.getElementById('route-out');
+    var STAGES = {}; FIELDS[1].options.forEach(function (o) { STAGES[o.id] = o; });
+    gallery.items = RECORDS.map(function (r, i) {
+      var stage = STAGES[r.data.stage];
+      return { id: r.id, title: r.data.name, subtitle: r.data.email, image: i < 2 ? pic(i ? '#2566d4' : '#0f7f70', r.data.name.charAt(0)) : '', badge: stage.label, tone: stage.tone, meta: r.data.price ? tkit.money(r.data.price * (r.data.qty || 1), 'USD') : '' };
+    });
+    detail.fields = FIELDS.filter(function (f) { return f.type !== 'image' && f.type !== 'file'; });
+    detail.settings = SETTINGS;
+    detail.siblings = RECORDS.map(function (r) { return r.id; });
+    function show(id) { var record = RECORDS.filter(function (r) { return r.id === id; })[0]; if (!record) return; detail.record = record; detail.open(); }
+    gallery.addEventListener('t-open', function (event) { show(event.detail.id); });
+    detail.addEventListener('t-nav', function (event) { show(event.detail.id); });
+    document.getElementById('detail-edit').addEventListener('click', function () { tkit.toast('Edit ' + detail.record.data.name); });
+    document.getElementById('detail-delete').addEventListener('click', async function () { if (await tkit.confirm('Delete ' + detail.record.data.name + '?', { confirm: 'Delete', tone: 'danger' })) { detail.close(); tkit.toast('Deleted (not really)'); } });
+    tkit.route.on(function (route) {
+      routeOut.textContent = 'tkit.route: view "' + route.view + '", id ' + (route.id === null ? 'none' : '"' + route.id + '"');
+      if (route.view === 'records' && route.id) show(route.id); else detail.close();
+    });
+
+    var banner = document.getElementById('banner');
+    banner.count = 7;
+    banner.addEventListener('t-clear', function () { banner.count = 0; tkit.toast('Examples deleted (a page would call tkit.samples.clear)'); });
+    document.getElementById('banner-toggle').addEventListener('click', function () { banner.count = banner.count ? 0 : 7; });
+
+    var csvColumns = [{ key: 'name', label: 'Name' }, { key: 'stage', label: 'Stage', format: function (v) { return STAGES[v] ? STAGES[v].label : ''; } }, { key: 'price', label: 'Price' }, { key: 'due', label: 'Due' }, { key: 'paid', label: 'Paid' }];
+    document.getElementById('csv-out').addEventListener('click', function () {
+      var text = tkit.csv.stringify(RECORDS.map(function (r) { return r.data; }), csvColumns, { delimiter: tkit.csv.delimiter() });
+      tkit.csv.download(text, 'Kit demo - records - ' + tkit.today() + '.csv');
+    });
+    var importer = document.getElementById('importer'), importResult = document.getElementById('import-result');
+    importer.fields = FIELDS;
+    document.getElementById('import-open').addEventListener('click', function () {
+      importer.open().then(function (rows) { importResult.textContent = rows ? rows.length + ' rows ready; first: ' + JSON.stringify(rows[0] || {}) : 'Cancelled'; });
+    });
+
+    var items = [
+      { id: '1', label: 'Check the cash drawer', done: true, by: 'Ana', at: new Date().toISOString(), required: true },
+      { id: '2', label: 'Turn on the lights', done: true, by: 'Bruno', at: new Date(Date.now() - 864e5).toISOString() },
+      { id: '3', label: 'Clean the espresso machine', done: false, note: 'Backflush with the blue tablet.', required: true },
+      { id: '4', label: 'Put the sign outside', done: false }
+    ];
+    var checklist = document.getElementById('checklist');
+    checklist.items = items;
+    checklist.addEventListener('t-toggle', function (event) {
+      items = items.map(function (i) { return i.id === event.detail.id ? Object.assign({}, i, { done: event.detail.done, by: event.detail.done ? 'You' : undefined, at: event.detail.done ? new Date().toISOString() : undefined }) : i; });
+      checklist.items = items;
+    });
+    ['edit', 'read'].forEach(function (mode) {
+      document.getElementById('mode-' + mode).addEventListener('click', function () {
+        checklist.readonly = mode === 'read';
+        document.getElementById('mode-edit').setAttribute('aria-pressed', String(mode === 'edit'));
+        document.getElementById('mode-read').setAttribute('aria-pressed', String(mode === 'read'));
+      });
+    });
+    var steps = document.getElementById('steps');
+    steps.steps = ['File', 'Columns', 'Review', 'Done'];
+    document.getElementById('steps-back').addEventListener('click', function () { steps.current = Math.max(0, steps.current - 1); });
+    document.getElementById('steps-next').addEventListener('click', function () { steps.current = Math.min(3, steps.current + 1); document.getElementById('progress').value = (steps.current + 1) * 2 + 1; });
+
+    var fText = document.getElementById('f-text'), fValues = document.getElementById('f-values'), fOut = document.getElementById('f-out');
+    function formulaDemo() {
+      var values;
+      try { values = JSON.parse(fValues.value || '{}'); } catch (_) { fOut.textContent = 'Values must be JSON'; return; }
+      var compiled = tkit.formula.compile(fText.value, Object.keys(values));
+      fOut.textContent = compiled.ok ? '= ' + JSON.stringify(compiled.run(values)) : compiled.error + ' (at ' + compiled.at + ')';
+    }
+    fText.addEventListener('input', formulaDemo); fValues.addEventListener('input', formulaDemo); formulaDemo();
+
+    var mdIn = document.getElementById('md-in'), mdOut = document.getElementById('md-out');
+    mdIn.value = '# Opening checklist\n\nStart with the **cash drawer**, then the *machine*. See [[Closing routine]] and [[Refund policy]].\n\n- Lights\n- Music\n  - Low volume\n\n1. Count the change\n2. Write it down\n\n> A quote line\n\n`inline code` and a [link](https://example.com).\n\n```\nblock of code\n```\n\n<script>alert("this stays text")<\/script>';
+    function drawMarkdown() {
+      tkit.clear(mdOut);
+      mdOut.appendChild(tkit.markdown(mdIn.value, { linkArticle: function (title) { return tkit.fold(title) === 'closing routine' ? '#more' : null; } }));
+    }
+    mdIn.addEventListener('input', drawMarkdown); drawMarkdown();
+    mdOut.addEventListener('t-wikilink', function (event) { tkit.toast('Create "' + event.detail.title + '"?'); });
+
+    var appEl = document.querySelector('t-app'), extra = 0;
+    document.getElementById('add-screen').addEventListener('click', function () {
+      extra++;
+      var name = 'extra' + extra, nav = document.querySelector('t-nav'), settingsButton = nav.querySelector('.t-nav-end'), main = document.querySelector('.t-app-main');
+      nav.insertBefore(tkit.h('button', { dataset: { view: name, icon: 'star' }, text: 'Extra ' + extra }), settingsButton);
+      main.insertBefore(tkit.h('t-view', { name: name }, tkit.h('div', { class: 't-page' }, tkit.h('h1', { class: 't-title', text: 'Extra screen ' + extra }), tkit.h('p', { class: 't-muted', text: 'Built at run time.' }))), main.querySelector('t-view[name="settings"]'));
+      appEl.refresh();
+      appEl.view = name;
+    });
+
+    tkit.settings('kit-demo', { v: 1, currency: 'USD', nested: { a: 1 } }).then(function (S) {
+      var group = document.getElementById('currency'), out = document.getElementById('settings-out');
+      function draw(value) {
+        tkit.clear(group);
+        ['USD', 'BRL', 'EUR'].forEach(function (code) { group.appendChild(tkit.h('button', { type: 'button', 'aria-pressed': String(value.currency === code), text: code, onClick: function () { S.save({ currency: code }); } })); });
+        out.textContent = JSON.stringify(value, null, 2) + (S.error ? '\n(read failed: ' + S.error.message + ')' : '');
+      }
+      S.on(draw); draw(S.value);
+    });
+    tkit.context({ summary: 'Kit demo' }); // outside Tendly nothing is sent
   </script>
 </body>
 </html>
