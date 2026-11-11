@@ -48,20 +48,27 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKey));
 <style scoped>
 .page-shell:focus,.page-shell:focus-visible{outline:none}
 .page-shell{position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;min-height:0;background:var(--backdrop-glow) no-repeat,var(--bg);outline:0;animation:page-in var(--duration-normal) var(--ease-out)}
-.page-header{display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap;padding:var(--space-4) var(--space-6) var(--space-3);max-width:1180px;width:100%;margin:0 auto}
-.page-back{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px 0 6px;border:0;border-radius:var(--radius-md);background:none;color:var(--ink-soft);font-size:var(--text-sm);cursor:pointer}
+/* Every page shares one column: the same left edge and the same widest line, so
+   the title and the page's own buttons never jump when you switch pages. */
+.page-shell{--page-width:1120px}
+.page-header{display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap;padding:var(--space-5) var(--space-8) var(--space-4);max-width:calc(var(--page-width) + 2 * var(--space-8));width:100%}
+/* On a computer the icon rail is the way around (and Esc still goes back); the
+   arrow stays on a phone, where there is no rail. */
+.page-back{display:none;align-items:center;gap:6px;min-height:32px;padding:0 10px 0 6px;border:0;border-radius:var(--radius-md);background:none;color:var(--ink-soft);font-size:var(--text-sm);cursor:pointer}
 .page-back:hover{background:var(--fill);color:var(--ink)}
 .page-heading{flex:1;min-width:0}
 .page-heading h1{font-size:var(--text-2xl);font-weight:650;letter-spacing:-.3px;color:var(--ink)}
 .page-heading p{margin-top:2px;font-size:var(--text-sm);color:var(--muted)}
-.page-actions{display:flex;align-items:center;gap:var(--space-2)}
-.page-body{flex:1;min-height:0;overflow:auto;padding:var(--space-2) var(--space-6) var(--space-6)}
-.page-body>:deep(*){max-width:1180px;margin-inline:auto}
+.page-actions{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-2)}
+.page-actions:empty{display:none}
+.page-body{flex:1;min-height:0;overflow:auto;padding:0 var(--space-8) var(--space-8)}
+.page-body>:deep(*){max-width:var(--page-width);margin-inline:0}
 @keyframes page-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @media (max-width:760px){
   .page-header{padding:var(--space-3) var(--space-3) var(--space-2);gap:var(--space-2)}
+  .page-back{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0}
   .page-back span{display:none}
-  .page-heading{flex-basis:calc(100% - 48px)}
+  .page-heading{flex-basis:calc(100% - 44px - var(--space-2))}
   .page-heading h1{font-size:var(--text-xl)}
   .page-heading.named-above h1{display:none}
   .page-heading.named-above{flex-basis:0}

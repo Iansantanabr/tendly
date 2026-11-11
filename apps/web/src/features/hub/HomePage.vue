@@ -9,6 +9,7 @@ import { effortLabel } from "../reasoning-effort";
 import { PERMISSION_LABELS, PERMISSION_NOTES } from "../permission-modes";
 import { accountFor, loadAccountQuotas } from "../balance-store";
 import Icon from "../Icon.vue";
+import ChipMenu from "../ChipMenu.vue";
 import ProviderIcon from "../ProviderIcon.vue";
 import { useI18n } from "../../i18n";
 import { inbox, isUnread, loadConversationsWorkspace, shortAgo } from "./inbox";
@@ -58,6 +59,20 @@ const models = computed(() => modelOptions(profile.value));
 const efforts = computed(() => effortOptions(provider.value, profile.value, model.value, effort.value));
 const permissions = computed(() => permissionOptions(provider.value));
 const accountUsage = (p: EndpointProfile) => usageText(accountFor(p.id), t);
+/**
+ * Account, model, depth and approval live behind one "Options" chip, so the row
+ * keeps agent and project in full and still fits a phone. The chip says in one
+ * line what they are set to; a default account adds nothing to that line.
+ */
+const optionsSummary = computed(() => {
+  const parts: string[] = [];
+  if (endpoint.value === PROFILE_CHOICE_REQUIRED) parts.push(t("Choose a session configuration"));
+  else if (profile.value) parts.push(profile.value.name);
+  if (models.value.length && model.value) parts.push(models.value.find(m => m.id === model.value)?.name ?? model.value);
+  if (efforts.value.length) parts.push(effort.value ? effortLabel(effort.value) : t("Automatic"));
+  if (permissions.value.length) parts.push(permission.value ? t(PERMISSION_LABELS[permission.value] ?? permission.value) : t("Default approval"));
+  return parts.join(" · ");
+});
 
 /** Fills the four choices for the agent in use, from memory when still valid, else from Preferences. */
 function restoreChoices() {
@@ -199,31 +214,40 @@ const suggestions = computed(() => [
               <option v-for="w in projects" :key="w.id" :value="w.id">{{ w.name }}</option>
             </select>
           </label>
-          <label class="home-chip" :title="t('Used in each quota window')"><Icon name="account" :size="14" />
-            <select v-model="endpoint" :aria-label="t('Account')" :disabled="busy">
-              <option v-if="endpoint === PROFILE_CHOICE_REQUIRED" :value="PROFILE_CHOICE_REQUIRED" disabled>{{ t('Choose a session configuration') }}</option>
-              <option v-for="p in accounts" :key="p.id" :value="p.id">{{ p.name }}{{ accountUsage(p) ? ` · ${accountUsage(p)}` : '' }}</option>
-              <option value="">{{ t('Isolated configuration · separate sign-in may be required') }}</option>
-            </select>
-          </label>
-          <label v-if="models.length" class="home-chip"><Icon name="spark" :size="14" />
-            <select v-model="model" :aria-label="t('Model')" :disabled="busy">
-              <option value="">{{ profile?.model || t('Default model') }}</option>
-              <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
-            </select>
-          </label>
-          <label v-if="efforts.length" class="home-chip"><Icon name="gauge" :size="14" />
-            <select v-model="effort" :aria-label="t('Thinking depth')" :disabled="busy">
-              <option value="">{{ t('Automatic · provider default') }}</option>
-              <option v-for="level in efforts" :key="level" :value="level">{{ effortLabel(level) }}</option>
-            </select>
-          </label>
-          <label v-if="permissions.length" :class="['home-chip', { danger: permission === 'danger' }]"><Icon name="shield" :size="14" />
-            <select v-model="permission" :aria-label="t('How tools are approved')" :disabled="busy">
-              <option value="">{{ t('Default approval') }}</option>
-              <option v-for="mode in permissions" :key="mode" :value="mode">{{ t(PERMISSION_LABELS[mode] ?? mode) }}</option>
-            </select>
-          </label>
+          <ChipMenu class="home-options" popup="dialog" :label="optionsSummary" :tone="permission === 'danger' ? 'danger' : undefined" :title="optionsSummary ? `${t('Options')} · ${optionsSummary}` : t('Options')">
+            <template #mark><Icon name="settings" :size="14" /><span class="home-options-name">{{ t('Options') }}</span></template>
+            <div class="home-options-body" role="dialog" :aria-label="t('Options')">
+              <div class="home-option">
+                <label for="home-option-account"><Icon name="account" :size="13" />{{ t('Account') }}</label>
+                <select id="home-option-account" v-model="endpoint" :aria-label="t('Account')" :title="t('Used in each quota window')" :disabled="busy">
+                  <option v-if="endpoint === PROFILE_CHOICE_REQUIRED" :value="PROFILE_CHOICE_REQUIRED" disabled>{{ t('Choose a session configuration') }}</option>
+                  <option v-for="p in accounts" :key="p.id" :value="p.id">{{ p.name }}{{ accountUsage(p) ? ` · ${accountUsage(p)}` : '' }}</option>
+                  <option value="">{{ t('Isolated configuration · separate sign-in may be required') }}</option>
+                </select>
+              </div>
+              <div v-if="models.length" class="home-option">
+                <label for="home-option-model"><Icon name="spark" :size="13" />{{ t('Model') }}</label>
+                <select id="home-option-model" v-model="model" :aria-label="t('Model')" :disabled="busy">
+                  <option value="">{{ profile?.model || t('Default model') }}</option>
+                  <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+              </div>
+              <div v-if="efforts.length" class="home-option">
+                <label for="home-option-effort"><Icon name="gauge" :size="13" />{{ t('Thinking depth') }}</label>
+                <select id="home-option-effort" v-model="effort" :aria-label="t('Thinking depth')" :disabled="busy">
+                  <option value="">{{ t('Automatic · provider default') }}</option>
+                  <option v-for="level in efforts" :key="level" :value="level">{{ effortLabel(level) }}</option>
+                </select>
+              </div>
+              <div v-if="permissions.length" :class="['home-option', { danger: permission === 'danger' }]">
+                <label for="home-option-permission"><Icon name="shield" :size="13" />{{ t('How tools are approved') }}</label>
+                <select id="home-option-permission" v-model="permission" :aria-label="t('How tools are approved')" :disabled="busy">
+                  <option value="">{{ t('Default approval') }}</option>
+                  <option v-for="mode in permissions" :key="mode" :value="mode">{{ t(PERMISSION_LABELS[mode] ?? mode) }}</option>
+                </select>
+              </div>
+            </div>
+          </ChipMenu>
           <span class="flex-spacer" />
           <DictationButton :dictation="dictation" :disabled="busy" />
           <button class="home-send" type="submit" :disabled="busy || !prompt.trim() || !workspaceId" :aria-label="t('Send')"><Icon name="arrowUp" :size="16" /></button>
@@ -236,7 +260,7 @@ const suggestions = computed(() => [
       <InstallHint dismissible />
 
       <div class="home-suggestions">
-        <button v-for="s in suggestions" :key="s" type="button" class="home-suggestion" @click="prompt = s"><Icon name="chat" :size="14" />{{ s }}</button>
+        <button v-for="s in suggestions" :key="s" type="button" class="home-suggestion" @click="prompt = s"><Icon name="chat" :size="14" /><span>{{ s }}</span></button>
       </div>
 
       <div class="home-cards">
@@ -287,7 +311,10 @@ const suggestions = computed(() => [
 
 <style scoped>
 .home-page { position: absolute; inset: 0; overflow: auto; background: var(--bg); z-index: 5; outline: none; }
-.home-inner { max-width: 1080px; margin: 0 auto; padding: 48px 24px 64px; display: grid; gap: 20px; }
+.home-inner { max-width: calc(1120px + 2 * var(--space-8)); margin: 0; padding: var(--space-8) var(--space-8) 64px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+/* A grid item is as wide as its longest unbreakable line unless told otherwise:
+   one long title would push the whole page past a phone's edge. */
+.home-inner > * { min-width: 0; }
 .home-header h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; color: var(--ink); }
 .home-header p { margin: 4px 0 0; color: var(--muted); }
 .home-continue { margin-top: 12px; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--elevated); color: var(--ink); font: inherit; cursor: pointer; box-shadow: var(--shadow-sm); }
@@ -298,17 +325,33 @@ const suggestions = computed(() => [
 .home-composer:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .home-composer textarea { border: 0; background: transparent; resize: none; font: inherit; font-size: 1.05rem; color: var(--ink); outline: none; min-height: 52px; }
 .home-composer-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.home-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; color: var(--ink-soft, var(--ink)); }
+.home-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 4px 8px; border-radius: 999px; color: var(--ink-soft, var(--ink)); }
 .home-chip select { border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; }
 .home-chip:hover { background: var(--fill-hover); }
 .home-chip:has(select:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-.home-chip select { max-width: 220px; text-overflow: ellipsis; }
-.home-chip.danger { color: var(--danger-ink); background: var(--danger-soft); }
+.home-chip select { min-width: 0; max-width: min(220px, 100%); text-overflow: ellipsis; }
+/* Options: dressed like the chips beside it, its summary quieter than its name. */
+.home-options { max-width: min(360px, 100%); }
+.home-options.chip-menu:not(.is-danger) > :deep(summary) { background: transparent; }
+.home-options.chip-menu > :deep(summary) { min-height: 30px; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: inherit; color: var(--ink-soft, var(--ink)); }
+.home-options.chip-menu:not(.is-danger) > :deep(summary:hover), .home-options.chip-menu:not(.is-danger)[open] > :deep(summary) { background: var(--fill-hover); }
+.home-options.chip-menu > :deep(summary:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.home-options-name { flex: none; }
+.home-options:not(.is-danger) :deep(.chip-menu-label) { color: var(--muted); }
+.home-options :deep(.chip-menu-label) { min-width: 0; font-size: var(--text-sm); }
+.home-options :deep(.chip-menu-panel) { width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - var(--chip-bottom, 0px) - 12px); overflow-y: auto; overscroll-behavior: contain; padding: 12px; }
+.home-options-body { display: grid; gap: 10px; min-width: 0; }
+.home-option { display: grid; gap: 4px; min-width: 0; }
+.home-option label { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--muted); }
+.home-option select { width: 100%; min-width: 0; min-height: 34px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-md); background-color: var(--fill); color: var(--ink); font: inherit; font-size: var(--text-sm); text-overflow: ellipsis; }
+.home-option select:hover:not(:disabled) { background-color: var(--fill-hover); }
+.home-option.danger select { color: var(--danger-ink); background-color: var(--danger-soft); }
 .flex-spacer { flex: 1; }
 .home-send { width: 36px; height: 36px; border-radius: var(--radius-md); border: 0; background: var(--ink); color: var(--surface); display: grid; place-items: center; cursor: pointer; }
 .home-send:disabled { opacity: .35; cursor: default; }
 .home-suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
-.home-suggestion { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--elevated); color: var(--ink); font: inherit; cursor: pointer; }
+.home-suggestion { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--elevated); color: var(--ink); font: inherit; cursor: pointer; }
+.home-suggestion > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-suggestion:hover { border-color: var(--accent); }
 .home-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
 .home-card { background: var(--elevated); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 14px 16px; display: grid; align-content: start; gap: 2px; min-height: 160px; }
@@ -328,6 +371,9 @@ const suggestions = computed(() => [
 .home-app > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-app:hover { background: var(--fill-hover); }
 .home-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
-@media (pointer: coarse) { .home-chip, .home-continue { min-height: 44px; } }
+@media (pointer: coarse) {
+  .home-chip, .home-continue, .home-suggestion, .home-options.chip-menu > :deep(summary), .home-option select { min-height: 44px; }
+  .home-send { width: 44px; height: 44px; }
+}
 @media (max-width: 640px) { .home-inner { padding: 24px 16px 48px; } .home-header h1 { font-size: 1.6rem; } }
 </style>

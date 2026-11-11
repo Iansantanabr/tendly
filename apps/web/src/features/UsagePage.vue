@@ -11,6 +11,7 @@ import { useI18n } from '../i18n';
 import { formatDuration, levelFor } from './system-format';
 import { usageBackoffSeconds, usageRetryHint, type AccountView } from './account-ui';
 import { cacheHitRate, failureRate, formatCost, formatHours, formatTokens, outputSpeed, rangeStart, type Allowance, type Price, type UsageBucket, type UsageProvider, type UsageReport } from './usage-model';
+import { formatChange } from './usage-format';
 import { allowanceCards, changeLabel, dateLabel, dayParts, heatShade, SERIES, shade, stackedBar, usageInsights, usageTiles, windowLabel, type Metric, type SeriesKey } from './usage-chart';
 
 /**
@@ -63,7 +64,9 @@ const estimateHint = (row: Allowance) => row.estimated_remaining_tokens === null
 
 /** The ten figures: what it cost, what it was made of, and how much work it was. */
 const tiles = computed(() => report.value ? usageTiles(report.value, t) : []);
-const changeText = changeLabel;
+/** Compact under the figure; the exact change is in its tooltip. */
+const changeText = formatChange;
+const changeExact = changeLabel;
 
 /** Daily trend: stacked by kind, each kind switchable, in token, cost or time. */
 const METRICS = ['tokens', 'cost', 'time'] as const;
@@ -231,8 +234,9 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
       <template v-if="report">
         <div class="tiles">
           <article v-for="tile in tiles" :key="tile.key" :class="['tile', tile.tone]" :title="tile.hint">
-            <header><span>{{ t(tile.label) }}</span><small v-if="tile.change !== undefined">{{ changeText(tile.change) }}</small></header>
+            <span class="tile-label">{{ t(tile.label) }}</span>
             <strong>{{ tile.value }}</strong>
+            <small v-if="tile.change !== undefined" class="tile-change" :title="changeExact(tile.change)">{{ changeText(tile.change) }}</small>
           </article>
         </div>
 
@@ -244,7 +248,7 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
               <div :class="['segmented', { push: dayMetric !== 'tokens' }]"><button v-for="metric in METRICS" :key="metric" type="button" :class="{ selected: dayMetric === metric }" @click="dayMetric = metric">{{ t(metricLabel(metric)) }}</button></div>
             </header>
             <div ref="chartBox" class="day-chart" @mouseleave="hover = -1">
-              <svg :viewBox="`-52 -10 ${chart.width + 60} ${chart.height + 32}`" role="img" font-size="11" :aria-label="t('Daily trend')">
+              <svg :viewBox="`-52 -10 ${chart.width + 60} ${chart.height + 32}`" role="img" :aria-label="t('Daily trend')">
                 <text class="axis" x="-8" y="4" text-anchor="end">{{ formatMetric(dayMax, dayMetric) }}</text>
                 <text class="axis" x="-8" :y="chart.height + 4" text-anchor="end">0</text>
                 <line class="baseline" x1="0" :x2="chart.width" :y1="chart.height" :y2="chart.height" />
@@ -317,8 +321,7 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
 </template>
 
 <style scoped>
-.usage{display:flex;flex-direction:column;gap:var(--space-3);font-variant-numeric:tabular-nums}
-.usage :is(h2,strong,.chip,.tile header span,th,.segmented button,.quota-window,.quota-percent){font-family:var(--mono)}
+.usage{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;font-family:var(--font-ui);font-variant-numeric:tabular-nums}
 .quota-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--space-3)}
 .quota-card{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-card)}
 .quota-card header{display:flex;align-items:center;gap:8px;font-size:var(--text-sm)}
@@ -339,22 +342,19 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
 .quota-meta{grid-column:2 / 4}
 @media(prefers-reduced-motion:reduce){.quota-bar i{transition:none}}
 .filters{display:flex;flex-direction:column;gap:8px}
-.filter-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.filter-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
 .filter-label{display:inline-flex;align-items:center;gap:5px;width:64px;font-size:var(--text-xs);color:var(--muted)}
-.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border:0;border-radius:var(--radius-full);background:var(--fill);color:var(--ink-soft);font-size:var(--text-xs);cursor:pointer}
+.chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;min-width:0;height:28px;padding:0 11px;border:0;border-radius:var(--radius-full);background:var(--fill);color:var(--ink-soft);font:500 var(--text-xs)/1 var(--font-ui);white-space:nowrap;cursor:pointer}
 .chip:hover{background:var(--fill-hover)}
 .chip.selected{background:var(--ink);color:var(--surface)}
 .chip.select{padding-right:4px}
-.chip.select span{opacity:.75}
-.chip.select select{height:26px;max-width:180px;padding:0 24px 0 0 !important;border:0;background-color:transparent;color:inherit;font:inherit;font-weight:600;background-position:right 4px center !important}
+.chip.select span{flex:none;opacity:.75}
+.chip.select select{min-width:0;height:26px;max-width:180px;text-overflow:ellipsis;padding:0 24px 0 0 !important;border:0;background-color:transparent;color:inherit;font:inherit;font-weight:600;background-position:right 4px center !important}
 .tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-3)}
-.tile{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-card);min-width:0}
-.tile header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:var(--text-xs);color:var(--muted)}
-.tile header small{font-size:var(--text-xs);color:var(--muted);font-family:var(--mono)}
-.tile strong{font-size:var(--text-2xl);font-weight:650;letter-spacing:-.4px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tile.cost strong{color:var(--ok)}
-.tile.time strong{color:var(--info)}
-.tile.quiet strong{color:var(--muted)}
+.tile{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-card);min-width:0}
+.tile-label{font-size:var(--text-xs);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile strong{margin-top:4px;font-size:var(--text-2xl);font-weight:650;letter-spacing:-.02em;line-height:1.2;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile-change{font-size:var(--text-xs);color:var(--muted);white-space:nowrap}
 .charts{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:var(--space-3)}
 .panel{display:flex;flex-direction:column;gap:var(--space-3);padding:14px 16px;border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-card);min-width:0}
 .panel h2{display:flex;align-items:center;gap:6px;font-size:var(--text-sm);font-weight:600;color:var(--ink)}
@@ -370,7 +370,7 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
 .segmented button.selected{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
 .day-chart{position:relative}
 .day-chart svg{display:block;width:100%;height:auto;overflow:visible}
-.axis{fill:var(--muted);font-family:var(--mono)}
+.axis{fill:var(--muted);font-family:var(--font-ui);font-size:var(--text-xs)}
 .baseline{stroke:var(--border);stroke-width:1}
 .hit{fill:transparent}
 .day-chart rect.dim{opacity:.3}
@@ -378,10 +378,10 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
 .tip strong{color:var(--ink);font-size:var(--text-sm)}
 .tip span{display:flex;align-items:center;gap:6px}
 .tip i{width:8px;height:8px;border-radius:50%}
-.tip b{margin-left:auto;color:var(--ink);font-family:var(--mono)}
+.tip b{margin-left:auto;font-weight:600;color:var(--ink)}
 .tip .tip-more{color:var(--muted);border-top:1px solid var(--border);padding-top:3px}
 .heatmap{display:grid;grid-template-columns:30px repeat(24,minmax(0,1fr));gap:4px;align-items:center}
-.heat-label,.heat-hour{font-size:var(--text-xs);color:var(--muted);font-family:var(--mono)}
+.heat-label,.heat-hour{font-size:var(--text-xs);color:var(--muted)}
 .heat-cell{aspect-ratio:1;border-radius:var(--radius-xs)}
 .heat-key{display:flex;align-items:center;justify-content:flex-end;gap:4px;font-size:var(--text-xs);color:var(--muted)}
 .heat-key i{width:10px;height:10px;border-radius:var(--radius-xs)}
@@ -395,10 +395,10 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
 .table td:first-child{color:var(--ink)}
 .table tr.link{cursor:pointer}
 .table tr.link:hover td{background:var(--sunken)}
-.money{color:var(--ok) !important;font-family:var(--mono)}
-.name{display:flex;align-items:center;gap:8px;min-width:0;font-family:var(--mono)}
+.money{color:var(--ink) !important}
+.name{display:flex;align-items:center;gap:8px;min-width:0}
 .name>span{display:flex;flex-direction:column;min-width:0}
-.name small{font-size:var(--text-xs);color:var(--muted);font-family:var(--font-body)}
+.name small{font-size:var(--text-xs);color:var(--muted)}
 .share{display:block;height:4px;margin-top:6px;max-width:240px;border-radius:var(--radius-full);background:var(--fill);overflow:hidden}
 .share i{display:block;height:100%;border-radius:inherit;background:var(--ink-soft)}
 .muted{color:var(--muted)}
@@ -413,7 +413,7 @@ const insights = computed(() => report.value ? usageInsights(report.value, t, we
 .projects button:hover strong{color:var(--accent-ink)}
 .projects small{font-size:var(--text-xs);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .projects .share{margin-top:0;max-width:none}
-.projects b{text-align:right;font-weight:600;color:var(--ink);font-family:var(--mono)}
+.projects b{text-align:right;font-weight:600;color:var(--ink)}
 @media (max-width:1100px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}.charts,.lists{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:760px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.filter-label{width:auto}.table th:nth-child(n+5),.table td:nth-child(n+5){display:none}}
 </style>

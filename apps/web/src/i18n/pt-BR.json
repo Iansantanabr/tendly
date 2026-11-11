@@ -3009,5 +3009,7 @@
  "Shows the navigation as a narrow rail of icons on every page and gives the lists the whole panel.": "Mostra a navegação como uma barra estreita de ícones em todas as páginas e deixa o painel inteiro para as listas.",
  "Shows the full sidebar with names instead of the icons. Change it back in Settings → Addresses and time zone, or at the foot of the sidebar.": "Mostra a barra lateral completa, com os nomes, no lugar dos ícones. Para voltar, vá em Configurações → Endereços e fuso horário, ou use o botão no pé da barra lateral.",
  "The full sidebar with names, on every page.": "A barra lateral completa, com os nomes, em todas as páginas.",
- "Show the full sidebar": "Mostrar a barra lateral completa"
+ "Show the full sidebar": "Mostrar a barra lateral completa",
+ "Options": "Ajustes",
+ "Automatic": "Automático"
 }

@@ -170,7 +170,7 @@ function embedNote(shortcut: Shortcut): string {
 </template>
 
 <style scoped>
-.apps-page { max-width: 1080px; display: grid; gap: var(--space-4); }
+.apps-page { display: grid; gap: var(--space-4); }
 .apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-3); align-items: start; }
 .apps-card { background: var(--elevated); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); min-width: 0; }
 .apps-create { grid-column: 1 / -1; max-width: 760px; }

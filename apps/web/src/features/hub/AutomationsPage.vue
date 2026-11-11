@@ -256,7 +256,7 @@ async function save() {
 </template>
 
 <style scoped>
-.auto-page { max-width: 900px; display: grid; gap: var(--space-3); }
+.auto-page { display: grid; gap: var(--space-3); }
 .auto-form, .auto-card { background: var(--elevated); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
 .auto-form { padding: var(--space-4); display: grid; gap: var(--space-3); }
 .auto-form h2 { margin: 0; font-size: var(--text-md); color: var(--ink); }

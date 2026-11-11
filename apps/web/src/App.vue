@@ -120,6 +120,15 @@ const sidebarExpanded = ref(panels.sidebar), sidebarRail = ref(sidebarIsRail(win
 /** A drawer-width viewport ignores the stored collapse without overwriting it. */
 const sidebarCollapsed = computed(() => sidebarRail.value && !sidebarExpanded.value);
 const explorerWorkspace = computed(() => workspaces.value.find(workspace => workspace.id === explorerWorkspaceId.value));
+/**
+ * The file explorer belongs to the Mesa. On the other pages (Home, Skills,
+ * Settings…) it stays out of the way, unless asked for there; leaving that page
+ * puts it away again. The saved choice (`explorerOpen`) is the Mesa's.
+ */
+const explorerOnPage = ref(false);
+const explorerShown = computed(() => !!explorerWorkspace.value && (page.value ? explorerOnPage.value : explorerOpen.value));
+function setExplorer(open: boolean) { if (page.value) explorerOnPage.value = open; else explorerOpen.value = open; }
+function toggleExplorer() { setExplorer(!explorerShown.value); }
 const explorerPlace = computed(() => placeKey(explorerWorkspaceId.value, explorerCheckout.value));
 /** Points the file panel at a place, unless it is pinned to one. */
 function followWithExplorer(id: string, checkout: string | null) { if (!explorerPinned.value) { explorerWorkspaceId.value = id; explorerCheckout.value = checkout; } }
@@ -238,6 +247,9 @@ function openAppPage(app: HubApp) {
   void router.push({ name: "app", params: { workspace: app.workspace_id, slug: app.slug } });
 }
 /** The app of the full-screen view, as `<workspace id>/<slug>`. */
+/** What the top bar names: the page, away from the Mesa; on the Mesa, "Mesa › project". */
+const PAGE_CRUMBS: Record<string, string> = { home: "Home", inbox: "Notifications", automations: "Automations", integrations: "Integrations", skills: "Skills", apps: "Apps", app: "Apps", sessions: "All sessions", system: "System", usage: "Usage", settings: "Settings", design: "Design system" };
+const pageCrumb = computed(() => page.value ? PAGE_CRUMBS[page.value] : undefined);
 const routeApp = computed(() => page.value === "app" ? `${String(route.params.workspace ?? "")}/${String(route.params.slug ?? "")}` : undefined);
 /** "Chat" beside a full-screen app: a conversation started like any quick one, handed back instead of opened on the Mesa. */
 function appSideChat(workspaceId: string) {
@@ -559,7 +571,7 @@ function openChanges(id?: string, checkout: string | null = null) {
 }
 function openFiles(id = selectedWorkspaceId.value, checkout: string | null = null) {
   if (!workspaces.value.some(workspace => workspace.id === id)) return;
-  explorerWorkspaceId.value = id; explorerCheckout.value = checkout; explorerPinned.value = false; explorerOpen.value = true; sidebarOpen.value = false;
+  explorerWorkspaceId.value = id; explorerCheckout.value = checkout; explorerPinned.value = false; setExplorer(true); sidebarOpen.value = false;
 }
 /**
  * The configured way to start a session: a dialog over the canvas, not a tab
@@ -728,7 +740,7 @@ const commands: Record<string, () => void> = {
   help: () => { if (shortcutsOpen.value) closeOverlay(() => { shortcutsOpen.value = false; }); else shortcutsOpen.value = true; },
   settings: () => openSettings(),
   sidebar: toggleSidebar,
-  files: () => { explorerOpen.value = !explorerOpen.value; },
+  files: toggleExplorer,
   sessions: () => openPage("sessions"),
   system: () => openPage("system"),
   usage: () => openPage("usage"),
@@ -774,7 +786,7 @@ async function focusSidebar() {
 /** Into the file tree, shown if it was hidden: at the open file, else the first row, else the filter. */
 async function focusFiles() {
   if (!workspaces.value.length) return;
-  explorerOpen.value = true;
+  setExplorer(true);
   await nextTick();
   const panel = document.querySelector<HTMLElement>(".explorer-panel");
   (panel?.querySelector<HTMLElement>(".tree-row.is-selected") ?? panel?.querySelector<HTMLElement>(".tree-row") ?? panel?.querySelector<HTMLElement>("[data-explorer-filter]"))?.focus();
@@ -782,7 +794,7 @@ async function focusFiles() {
 /** The file panel's filter, opened if it was hidden; ↓ from there walks the tree. */
 async function findFile() {
   if (!workspaces.value.length) return;
-  explorerOpen.value = true;
+  setExplorer(true);
   await nextTick();
   document.querySelector<HTMLInputElement>(".explorer-panel [data-explorer-filter]")?.focus();
 }
@@ -799,7 +811,7 @@ const allPaletteItems = computed(() => buildPaletteItems({ sessions: sessions.va
   openCanvas: () => void router.push({ name: "canvas" }),
   openWorkspace: id => { void router.push({ name: "canvas" }); selectWorkspace(id); },
   addWorkspace: () => { showWorkspace.value = true; },
-  toggleFiles: () => { explorerOpen.value = !explorerOpen.value; },
+  toggleFiles: toggleExplorer,
   showShortcuts: () => { shortcutsOpen.value = true; },
 }).concat(page.value ? [] : PALETTE_COMMANDS.map(command => ({ id: command.id, title: t(command.label), group: t("Pane actions"), icon: "layout", hint: hint(command.id), run: () => runCommand(command.id) }))));
 const paletteItems = computed(() => paletteMode.value === "views" ? viewItems.value
@@ -962,6 +974,7 @@ function toggleSidebar() { if (sidebarRail.value) sidebarExpanded.value = !sideb
 // Persist wherever the panels change, including opening the explorer by
 // revealing a file, so the shell reopens the way the user left it.
 watch([sidebarExpanded, explorerOpen], ([sidebar, explorer]) => writePanelVisibility(storage, { sidebar, explorer }));
+watch(page, () => { explorerOnPage.value = false; });
 function beforeUnload(event: BeforeUnloadEvent) {
   if (hasUnsavedWork({ fileDrafts: hasDirtyDrafts(), gitDrafts: hasGitDrafts(), layoutPending: hasPendingLayout(), layoutStatus: layoutStatus.value })) { event.preventDefault(); event.returnValue = ""; }
 }
@@ -985,7 +998,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
 </script>
 
 <template>
-  <div :class="['app-shell', { 'explorer-hidden': !explorerOpen || !explorerWorkspace, 'sidebar-collapsed': sidebarCollapsed, 'is-mobile': mobile, 'hub-rail-on': railMode, 'hub-app-focus': appFocus }]">
+  <div :class="['app-shell', { 'explorer-hidden': !explorerShown, 'sidebar-collapsed': sidebarCollapsed, 'is-mobile': mobile, 'hub-rail-on': railMode, 'hub-app-focus': appFocus }]">
     <header class="topbar">
       <div class="brand"><button v-if="mobile && backTarget" class="icon-button mobile-menu mobile-back" :aria-label="t('Back')" @click="goBack"><Icon name="chevron" :size="22" /></button><button v-else class="icon-button mobile-menu" :aria-label="t('Toggle workspace navigation')" @click="sidebarOpen = !sidebarOpen"><Icon name="menu" /></button><button class="icon-button sidebar-toggle" :class="{selected:!sidebarCollapsed}" :aria-pressed="!sidebarCollapsed" :aria-label="t(sidebarCollapsed?'Expand workspace panel':'Collapse workspace panel')" :title="t(sidebarCollapsed?'Expand workspace panel':'Collapse workspace panel') + ' · ' + hint('sidebar')" @click="toggleSidebar"><Icon name="panelLeft"/></button><span class="brand-mark"><span /></span><strong :title="serverVersion?t('Tendly {version}',{version:serverVersion}):undefined">GCore<span v-if="instanceLabel" class="brand-version">{{ instanceLabel }}</span></strong></div>
       <span v-if="mobile && page" class="mobile-title mobile-page-title"><strong>{{ t(page === "settings" ? "Settings" : page === "sessions" ? "All sessions" : page === "usage" ? "Usage" : page === "home" ? "Home" : page === "inbox" ? "Notifications" : page === "automations" ? "Automations" : page === "integrations" ? "Integrations" : page === "skills" ? "Skills" : page === "apps" || page === "app" ? "Apps" : "System") }}</strong></span>
@@ -997,7 +1010,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
       <!-- Its own pointerdown stays here: the open card would otherwise take it as a tap outside, close, and be reopened by the click. -->
       <button v-if="mobile && focusedBranch" v-show="!page" type="button" :class="['mobile-branch', { worktree: focusedBranch.worktree }]" :disabled="focusedBranch.disabled" :aria-label="t('Branch for this session')" :title="focusedBranch.label" @pointerdown.stop @click="focusedBranch.toggle()"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M5 3v7M5 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0-7a2 2 0 1 0 0-.01M11 5a2 2 0 1 0 0-.01M11 7c0 2-2 3-6 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>{{ focusedBranch.label }}</span></button>
       <span v-if="mobile && focusedPane?.metadata?.session_id" v-show="!page" class="mobile-session-actions" :id="`session-actions-${focusedPane.id}`" />
-      <div class="top-crumb"><span>{{ t('Shared workspace canvas') }}</span><Icon name="chevron" :size="13"/><strong>{{ contextWorkspace?.name || t('Your next workspace') }}</strong></div>
+      <div class="top-crumb"><template v-if="pageCrumb"><strong>{{ t(pageCrumb) }}</strong></template><template v-else><span>{{ t('Workspace canvas') }}</span><Icon name="chevron" :size="13"/><strong>{{ contextWorkspace?.name || t('Your next workspace') }}</strong></template></div>
       <div class="top-actions">
         <span v-if="loading||!apiOnline" class="connection-badge"><i :class="['state-dot', apiOnline ? 'running' : 'stopped']"/>{{ t(loading ? 'Connecting' : apiOnline ? 'Host connected' : 'Offline') }}</span>
         <button type="button" class="topbar-search" :title="t('Search and commands') + ' · ' + hint('palette')" :aria-label="t('Search and commands')" @click="paletteOpen=true"><Icon name="search" :size="14"/><span>{{ t('Search…') }}</span><kbd>{{ hint('palette') }}</kbd></button>
@@ -1012,7 +1025,7 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
           </details>
         </div>
         <button class="icon-button" :aria-label="t('Settings')" :title="t('Settings') + ' · ' + hint('settings')" @click="openSettings()"><Icon name="settings"/></button>
-        <button v-if="workspaces.length" :class="['icon-button',{selected:explorerOpen}]" :aria-pressed="explorerOpen" :aria-label="t(explorerOpen?'Collapse file panel':'Expand file panel')" :title="t(explorerOpen?'Collapse file panel':'Expand file panel') + ' · ' + hint('files')" @click="explorerOpen = !explorerOpen"><Icon name="panelRight"/></button>
+        <button v-if="workspaces.length" :class="['icon-button',{selected:explorerShown}]" :aria-pressed="explorerShown" :aria-label="t(explorerShown?'Collapse file panel':'Expand file panel')" :title="t(explorerShown?'Collapse file panel':'Expand file panel') + ' · ' + hint('files')" @click="toggleExplorer"><Icon name="panelRight"/></button>
       </div>
     </header>
     <div class="app-body" :style="bodyStyle">
@@ -1054,11 +1067,11 @@ onUnmounted(() => { disposeCanvas(); disposed = true; clearInterval(pollTimer); 
         <SystemPage v-else-if="page==='system'" :sessions="sessions" @back="leavePage" @open-session="openSession"/>
         <UsagePage v-else-if="page==='usage'" :sessions="sessions" :workspaces="workspaces" @back="leavePage" @open-session="openSession"/>
       </main>
-      <button v-if="explorerOpen && explorerWorkspace" class="drawer-overlay explorer-overlay" :aria-label="t('Close file explorer')" @click="explorerOpen=false"/>
-      <aside v-if="explorerOpen && explorerWorkspace" class="explorer-panel">
+      <button v-if="explorerShown" class="drawer-overlay explorer-overlay" :aria-label="t('Close file explorer')" @click="setExplorer(false)"/>
+      <aside v-if="explorerShown && explorerWorkspace" class="explorer-panel">
         <div class="explorer-workspace-control"><label><span>{{ t('Explorer workspace') }}</span><select :value="explorerWorkspaceId" :aria-label="t('Explorer workspace')" @change="explorerWorkspaceId=($event.target as HTMLSelectElement).value;explorerCheckout=null;explorerPinned=true"><option v-for="workspace in workspaces" :key="workspace.id" :value="workspace.id">{{ workspace.name }}</option></select></label><button class="small-button" :class="{primary:explorerPinned}" :aria-pressed="explorerPinned" :title="t(explorerPinned?'Unpin explorer and follow the focused pane':'Pin explorer to this workspace')" @click="explorerPinned=!explorerPinned;!explorerPinned&&contextWorkspace&&followWithExplorer(contextWorkspace.id,contextCheckout)">{{ t(explorerPinned?'Pinned':'Follow focus') }}</button></div>
         <p v-if="explorerCheckout" class="explorer-checkout" :title="t('Works in worktree {path}', { path: explorerCheckout })"><svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M5 3v7M5 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0-7a2 2 0 1 0 0-.01M11 5a2 2 0 1 0 0-.01M11 7c0 2-2 3-6 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>{{ gitStatuses[explorerPlace]?.branch || explorerCheckout.split(/[\\/]/).pop() }}</span><small>{{ t('Own directory') }}</small></p>
-        <FileExplorer ref="explorer" :workspace-id="explorerWorkspace.id" :checkout="explorerCheckout" :refresh-token="fileRefresh[explorerPlace]??0" :selected-path="activeFilePath" @open="openFile(explorerWorkspace.id,$event,explorerCheckout)" @moved="(from,to)=>fileMoved(explorerWorkspace!.id,explorerCheckout,from,to)" @close="explorerOpen=false"/>
+        <FileExplorer ref="explorer" :workspace-id="explorerWorkspace.id" :checkout="explorerCheckout" :refresh-token="fileRefresh[explorerPlace]??0" :selected-path="activeFilePath" @open="openFile(explorerWorkspace.id,$event,explorerCheckout)" @moved="(from,to)=>fileMoved(explorerWorkspace!.id,explorerCheckout,from,to)" @close="setExplorer(false)"/>
       </aside>
     </div>
     <footer v-if="!mobile" class="statusbar"><span :title="contextCheckout ?? contextWorkspace?.root_path"><Icon name="git" :size="13"/>{{ contextWorkspace?.name || t('No workspace') }} · <span v-if="contextCheckout" class="status-worktree" :title="t('This session works in its own directory, {path}. The workspace directory\'s branch is in the sidebar.', { path: contextCheckout })"><svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M5 3v7M5 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm0-7a2 2 0 1 0 0-.01M11 5a2 2 0 1 0 0-.01M11 7c0 2-2 3-6 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>{{ currentGit.branch || (currentGitKnown ? t('Detached HEAD') : '') }}</span><WorkspaceBranchMenu v-else-if="contextWorkspace&&currentGitAvailable" :workspace-id="contextWorkspace.id" :branch="currentGit.branch" @switched="branchSwitched(contextWorkspace.id)" @changed="branchSwitched(contextWorkspace.id)" /><template v-else-if="currentGitKnown">{{ t('Git unavailable') }}</template></span><button v-if="contextWorkspace" @click="openChanges()">{{ currentGitAvailable?t(currentGit.files.length===1?'{count} change':'{count} changes',{count:currentGit.files.length}):t('Changes') }}</button><button v-if="contextWorkspace&&currentGit.ahead!==undefined" type="button" :class="['git-count',{due:currentGit.ahead}]" :title="t('{count} commits to push · open Changes',{count:currentGit.ahead})" @click="openChanges()">↑ {{ currentGit.ahead }}</button><button v-if="contextWorkspace&&currentGit.behind!==undefined" type="button" :class="['git-count',{due:currentGit.behind}]" :title="t('{count} commits to pull · open Changes',{count:currentGit.behind})" @click="openChanges()">↓ {{ currentGit.behind }}</button><span class="flex-spacer"/><SpaceMenu v-if="showSpaces" :spaces="spaces"/><span v-if="canvasReady" :class="{'danger-text':layoutTrouble}">{{ t('Layout {status}',{status:t(layoutStatus)}) }}</span><HostUsage v-if="signedIn&&!showAuth" :sessions="sessions" @open="openPage('system')" /><span class="status-agent-count"><i :class="['state-dot',activeSessions.length?'running':'stopped']"/>{{ t('{count} active sessions',{count:activeSessions.length}) }}</span></footer>

@@ -26,8 +26,8 @@ function open(item: InboxItem) {
 
 <template>
   <PageShell :title="t('Notifications')" :subtitle="inbox.unread ? t('{count} unread', { count: inbox.unread }) : t('All caught up')" @back="emit('back')">
+    <template #actions><button type="button" class="secondary-button" :disabled="!inbox.unread" @click="markInboxRead()"><Icon name="check" :size="14" />{{ t('Mark all as read') }}</button></template>
     <div class="inbox-page">
-      <div class="inbox-actions"><button type="button" class="secondary-button" :disabled="!inbox.unread" @click="markInboxRead()">{{ t('Mark all as read') }}</button></div>
       <p v-if="!inbox.available" class="inline-notice">{{ t('This backend does not keep notifications yet.') }}</p>
       <p v-else-if="!inbox.items.length" class="home-empty">{{ t('Nothing here yet. When an agent finishes or needs you, it shows up here.') }}</p>
       <ul class="inbox-list">
@@ -45,8 +45,7 @@ function open(item: InboxItem) {
 </template>
 
 <style scoped>
-.inbox-page { max-width: 760px; display: grid; gap: 12px; }
-.inbox-actions { display: flex; justify-content: flex-end; }
+.inbox-page { display: grid; gap: 12px; }
 .inbox-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .inbox-item { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: var(--radius-md); background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
 .inbox-item:hover { background: var(--fill-hover); }
@@ -59,6 +58,7 @@ function open(item: InboxItem) {
 .inbox-dot.turn_failed, .inbox-dot.automation_failed { background: var(--danger); }
 .inbox-dot.waiting { background: var(--warn); }
 .inbox-item small { color: var(--muted); white-space: nowrap; }
-.inbox-go { transform: rotate(-90deg); opacity: .5; }
+.inbox-go { opacity: .5; }
+@media (pointer: coarse) { .inbox-item { min-height: 56px; } }
 .home-empty { color: var(--muted); }
 </style>

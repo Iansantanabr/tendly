@@ -189,3 +189,18 @@ export function skillChatPrompt(skill: Pick<Skill, "name">, note: string, t: Tra
   if (!extra) return t("Use the skill {name}. Start by telling me in a few lines what it does and what you need from me.", { name: skill.name });
   return `${t("Use the skill {name} for this:", { name: skill.name })}\n\n${extra}`;
 }
+
+/**
+ * A path short enough to read in a list: the home folder as `~`, and a long one
+ * cut in the middle, keeping where it starts and the file it ends on
+ * (`~/.claude/skills/…/SKILL.md`). The full path stays in the tooltip.
+ */
+export function shortPath(path: string, max = 48): string {
+  const home = path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~").replace(/^[A-Za-z]:\\Users\\[^\\]+/, "~");
+  if (home.length <= max) return home;
+  const sep = home.includes("/") ? "/" : "\\";
+  const parts = home.split(sep);
+  if (parts.length <= 4) return home;
+  const head = parts.slice(0, 3).join(sep), tail = parts.slice(-2).join(sep);
+  return `${head}${sep}…${sep}${tail}`;
+}

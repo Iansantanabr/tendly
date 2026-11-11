@@ -9,7 +9,7 @@ import { MarkdownContent } from "../MarkdownContent";
 import { errorMessage } from "../api";
 import { useI18n } from "../../i18n";
 import {
-  filterSkills, groupBy, loadSkillContent, loadSkills, skillChatPrompt, skillOrigin, skillOrigins, sortSkills, stripFrontMatter,
+  filterSkills, groupBy, loadSkillContent, loadSkills, shortPath, skillChatPrompt, skillOrigin, skillOrigins, sortSkills, stripFrontMatter,
   type Skill, type SkillContent,
 } from "./catalog";
 import { AccountChoiceRequired, startConversation } from "./start";
@@ -128,14 +128,14 @@ async function useInChat(skill: Skill) {
                 <strong>{{ skill.name }}</strong>
                 <span v-if="skill.description" class="catalog-description" :title="skill.description">{{ skill.description }}</span>
                 <span v-if="skill.source !== 'workspace'" class="catalog-path">
-                  <span :title="skill.path">{{ skill.path }}</span>
+                  <span :title="skill.path">{{ shortPath(skill.path) }}</span>
                   <CopyButton :text="skill.path" label="Copy path" compact />
                 </span>
               </div>
               <div class="catalog-actions">
                 <button type="button" class="small-button" :aria-label="t('View {name}', { name: skill.name })" @click="view(skill)">{{ t('View') }}</button>
                 <button v-if="skill.source === 'workspace' && skill.rel_path" type="button" class="small-button" @click="open(skill)">{{ t('Open on the canvas') }}</button>
-                <button type="button" class="small-button primary" :aria-expanded="composing === skill.id" :aria-label="t('Use {name} in chat', { name: skill.name })" @click="composing === skill.id ? cancelCompose() : compose(skill)"><Icon name="chat" :size="13" />{{ t('Use in chat') }}</button>
+                <button type="button" class="small-button" :aria-expanded="composing === skill.id" :aria-label="t('Use {name} in chat', { name: skill.name })" @click="composing === skill.id ? cancelCompose() : compose(skill)"><Icon name="chat" :size="13" />{{ t('Use in chat') }}</button>
               </div>
             </div>
             <form v-if="composing === skill.id" class="catalog-compose" @submit.prevent="useInChat(skill)" @keydown.esc.prevent.stop="cancelCompose">
@@ -174,16 +174,16 @@ async function useInChat(skill: Skill) {
 </template>
 
 <style scoped>
-.catalog-page { max-width: 820px; display: grid; gap: 14px; }
+.catalog-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .catalog-page > .inline-error { margin: 0; }
 .catalog-muted { color: var(--muted); }
-.catalog-filters { display: flex; flex-wrap: wrap; gap: 10px; }
-.catalog-search { flex: 1 1 16rem; display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 36px; border: 1px solid var(--line-input); border-radius: var(--radius-md); background: var(--surface); color: var(--muted); }
+.catalog-filters { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.catalog-search { flex: 1 1 16rem; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; min-height: 36px; border: 1px solid var(--line-input); border-radius: var(--radius-md); background: var(--surface); color: var(--muted); }
 .catalog-search:focus-within { border-color: var(--accent); }
 .catalog-search:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .catalog-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: var(--input-text); color: var(--ink); }
 .catalog-folder { flex: 0 1 18rem; display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); font-size: var(--text-sm); }
-.catalog-folder select { flex: 1; min-width: 0; min-height: 36px; padding: 0 10px; border: 1px solid var(--line-input); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--input-text); }
+.catalog-folder select { flex: 1; width: 100%; min-width: 0; min-height: 36px; padding: 0 10px; border: 1px solid var(--line-input); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--input-text); }
 .catalog-count { margin: -6px 0 0; color: var(--muted); font-size: var(--text-xs); }
 .catalog-group { display: grid; gap: 6px; }
 .catalog-group h2 { margin: 6px 0 0; font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
@@ -195,8 +195,8 @@ async function useInChat(skill: Skill) {
 .catalog-icon { flex: none; margin-top: 2px; color: var(--muted); }
 .catalog-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .catalog-text strong { color: var(--ink); font-family: var(--mono); font-size: var(--text-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-description { color: var(--muted); font-size: var(--text-sm); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.catalog-path { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--muted); font-family: var(--mono); font-size: var(--text-xs); }
+.catalog-description { max-width: 72ch; color: var(--muted); font-size: var(--text-sm); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.catalog-path { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--faint); font-family: var(--mono); font-size: var(--text-xs); }
 .catalog-path > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .catalog-actions { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .catalog-compose { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 28px; }
@@ -213,7 +213,7 @@ async function useInChat(skill: Skill) {
 .skill-view-actions { display: flex; justify-content: flex-end; gap: 6px; }
 @media (max-width: 640px) {
   .catalog-line { flex-wrap: wrap; }
-  .catalog-actions { flex-basis: 100%; justify-content: flex-start; margin-left: 28px; }
+  .catalog-actions { flex-basis: calc(100% - 28px); justify-content: flex-start; margin-left: 28px; }
   .catalog-folder { flex-basis: 100%; }
 }
 </style>

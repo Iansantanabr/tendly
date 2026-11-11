@@ -67,13 +67,13 @@ const checkedAgo = computed(() => {
 
 <template>
   <PageShell :title="t('Integrations')" :subtitle="list ? t('{count} integrations', { count: byUse.inUse.length }) : undefined" @back="emit('back')">
+    <template #actions>
+      <small v-if="checkedAgo" class="catalog-muted">{{ checkedAgo }}</small>
+      <button type="button" class="secondary-button" :disabled="loading" @click="load(true)">
+        <Icon name="refresh" :size="14" :class="{ 'catalog-spin': loading }" />{{ loading ? t('Checking…') : t('Check again') }}
+      </button>
+    </template>
     <div class="catalog-page">
-      <div class="catalog-actions">
-        <small v-if="checkedAgo" class="catalog-muted">{{ checkedAgo }}</small>
-        <button type="button" class="secondary-button" :disabled="loading" @click="load(true)">
-          <Icon name="refresh" :size="14" :class="{ 'catalog-spin': loading }" />{{ loading ? t('Checking…') : t('Check again') }}
-        </button>
-      </div>
       <p v-if="failure" class="inline-error">{{ failure }}</p>
       <p v-for="(error, index) in list?.errors ?? []" :key="index" class="inline-notice">{{ t(error.message, { path: error.path ?? '' }) }}</p>
       <p v-if="!list && loading" class="catalog-muted">{{ t('Checking your integrations… This can take a few seconds.') }}</p>
@@ -109,9 +109,8 @@ const checkedAgo = computed(() => {
 </template>
 
 <style scoped>
-.catalog-page { max-width: 820px; display: grid; gap: 14px; }
-.catalog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
-.catalog-actions .inline-error, .catalog-page > .inline-notice, .catalog-page > .inline-error { margin: 0; }
+.catalog-page { display: grid; gap: 14px; }
+.catalog-page > .inline-notice, .catalog-page > .inline-error { margin: 0; }
 .catalog-muted { color: var(--muted); }
 .catalog-spin { animation: catalog-spin 1s linear infinite; }
 @keyframes catalog-spin { to { transform: rotate(360deg); } }

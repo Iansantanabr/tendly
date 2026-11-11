@@ -33,6 +33,8 @@ const props = defineProps<{
   caption?: string;
   /** Which way a phone's card opens: up from the composer, or down from the top bar. */
   placement?: 'up' | 'down';
+  /** Announces the chip as opening a popup of this kind (aria-haspopup), with aria-expanded kept in step. */
+  popup?: 'dialog' | 'menu';
 }>();
 /** Opened: a panel whose choices come from the host can fetch them fresh. */
 const emit = defineEmits<{ opened: [] }>();
@@ -45,6 +47,8 @@ const position = ref({ left: 0, bottom: 0 });
 /** A phone's card: the pane's width, and the room between the composer and the top bar. */
 const card = ref<Record<string, string>>();
 defineExpose({ close, toggle });
+/** Mirrors `details.open`, for aria-expanded on a chip that names its popup. */
+const expanded = ref(false);
 
 /** A label cut short slides sideways under the pointer to show the rest, then back. */
 const labelBox = ref<HTMLElement>(), labelScroll = ref(0);
@@ -130,8 +134,8 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', onOutside); 
 </script>
 
 <template>
-  <details ref="root" class="chip-menu" :class="{ 'is-active': active, 'is-disabled': disabled, 'is-danger': tone === 'danger' }" :data-locked="disabled ? 'true' : 'false'" @keydown.esc.stop.prevent="close(true)" @toggle="place(); if (root?.open) emit('opened')">
-    <summary :title="title ?? label" :aria-disabled="disabled ? 'true' : undefined" @click="guard" @mouseenter="revealLabel" @mouseleave="labelScroll = 0">
+  <details ref="root" class="chip-menu" :class="{ 'is-active': active, 'is-disabled': disabled, 'is-danger': tone === 'danger' }" :data-locked="disabled ? 'true' : 'false'" @keydown.esc.stop.prevent="close(true)" @toggle="expanded = !!root?.open; place(); if (root?.open) emit('opened')">
+    <summary :title="title ?? label" :aria-disabled="disabled ? 'true' : undefined" :aria-haspopup="popup" :aria-expanded="popup ? expanded : undefined" @click="guard" @mouseenter="revealLabel" @mouseleave="labelScroll = 0">
       <slot name="mark" />
       <span v-if="caption" class="chip-menu-caption">{{ caption }}</span>
       <span ref="labelBox" :class="['chip-menu-label', { scrolling: labelScroll > 0 }]" :style="labelScroll ? { '--chip-scroll': -labelScroll + 'px', '--chip-scroll-time': Math.max(1.6, labelScroll / 30) + 's' } : undefined" :data-repeats="label === caption ? 'true' : undefined"><span>{{ label }}</span></span>

@@ -110,6 +110,10 @@ function select(next: SettingsSection) { if (hubSection.value || next !== sectio
 @media(max-width:760px){
   .settings-layout{grid-template-columns:minmax(0,1fr);gap:var(--space-3)}
   .settings-nav{position:static;flex-direction:row;border-bottom:1px solid var(--border);padding:0 0 var(--space-2);overflow-x:auto}
+  /* The strip scrolls sideways: the right edge fades so the sections past it show they are there. */
+  .settings-nav{scrollbar-width:none;scroll-snap-type:x proximity;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 32px),transparent)}
+  .settings-nav::-webkit-scrollbar{display:none}
+  .settings-nav-item{scroll-snap-align:start}
   .settings-nav-item{width:auto;flex-shrink:0;min-height:44px}
 }
 </style>

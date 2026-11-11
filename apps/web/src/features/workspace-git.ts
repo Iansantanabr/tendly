@@ -50,10 +50,12 @@ export function useWorkspaceGit({ contextPlace, activeSessions, paused, report }
   const currentGitKnown = computed(() => (contextPlace.value ?? "") in gitAvailable.value);
   const workspaceBranches = computed(() => branchesByWorkspace(gitStatuses.value));
   const gitLoading = new Set<string>();
+  /** Places that answered "not a Git repository": the poll leaves them be until their files change (a `git init`). */
+  const notRepo = new Set<string>();
   function tick(counter: typeof fileRefresh, id: string) { counter.value = bumped(counter.value, id); }
   function gitChanged(id: string, status: GitStatus) { gitStatuses.value = { ...gitStatuses.value, [id]: status }; gitAvailable.value = { ...gitAvailable.value, [id]: true }; }
   async function refreshGit(id: string) {
-    if (!id || paused() || gitLoading.has(id)) return;
+    if (!id || paused() || gitLoading.has(id) || notRepo.has(id)) return;
     gitLoading.add(id);
     try {
       const result = await request<GitStatus>(placeUrl(id, "/git/status"));
@@ -61,11 +63,11 @@ export function useWorkspaceGit({ contextPlace, activeSessions, paused, report }
       gitChanged(id, result);
       // An agent at work may change a diff without changing the status line, so its views reload anyway.
       if (changed || activeSessions.value.some(session => placeKey(session.workspace_id, session.checkout_path) === id)) tick(gitRefresh, id);
-    } catch (cause) { gitAvailable.value = { ...gitAvailable.value, [id]: false }; if (gitFailureMatters(cause)) report(cause); }
+    } catch (cause) { gitAvailable.value = { ...gitAvailable.value, [id]: false }; if (cause instanceof ApiError && cause.status === 400) notRepo.add(id); if (gitFailureMatters(cause)) report(cause); }
     finally { gitLoading.delete(id); }
   }
   /** Files were written in a workspace: its tree, its Git views and its status all catch up. */
-  function filesSaved(id: string) { tick(fileRefresh, id); tick(gitRefresh, id); void refreshGit(id); }
+  function filesSaved(id: string) { notRepo.delete(id); tick(fileRefresh, id); tick(gitRefresh, id); void refreshGit(id); }
 
   return { gitStatuses, gitAvailable, fileRefresh, gitRefresh, currentGit, currentGitAvailable, currentGitKnown, workspaceBranches, tick, gitChanged, refreshGit, filesSaved };
 }
