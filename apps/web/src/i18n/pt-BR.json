@@ -3036,5 +3036,14 @@
  "Quiz / Assessment": "Quiz / Avaliação",
  "Questions in order, a score at the end and the history of attempts.": "Perguntas em sequência, nota no final e o histórico de tentativas.",
  "Map / Places": "Mapa / Locais",
- "Places on a map linked to a list, with categories and visits.": "Locais num mapa ligados a uma lista, com categorias e visitas."
+ "Places on a map linked to a list, with categories and visits.": "Locais num mapa ligados a uma lista, com categorias e visitas.",
+ "{account} needs to sign in again": "{account} precisa entrar de novo",
+ "This account needs to sign in again": "Esta conta precisa entrar de novo",
+ "The sign-in expired, so the agent could not answer. Sign in again and send your message once more; nothing you wrote is lost.": "O login expirou e o agente não conseguiu responder. Entre de novo e mande a mensagem outra vez; nada do que você escreveu se perde.",
+ "Sign in again": "Entrar de novo",
+ "I signed in, try again": "Já entrei, tentar de novo",
+ "Sign in to {account}": "Entrar em {account}",
+ "A terminal opened with the sign-in. Finish it in the browser, then come back here.": "Abri um terminal com o login. Termine no navegador e volte aqui.",
+ "The account still looks signed out. Finish the sign-in in the terminal first.": "A conta ainda aparece desconectada. Termine o login no terminal primeiro.",
+ "Signed in. Your message is back in the box: send it again.": "Pronto, você entrou. Sua mensagem voltou para a caixa: é só enviar de novo."
 }
